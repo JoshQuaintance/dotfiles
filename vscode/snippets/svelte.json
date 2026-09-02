@@ -1,0 +1,18 @@
+{
+	"Svelte Boilerplate": {
+		"prefix": "!",
+		"body": [
+			"<script>",
+			"",
+			"</script>",
+			"",
+			"<style type=\"text/scss\">",
+			" @import '${1:index.scss}';",
+			"",
+			"</style>",
+			"",
+			"$0"
+		],
+		"description": "Svelte Boilerplate"
+	}
+}

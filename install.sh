@@ -120,41 +120,28 @@ fi
 # ==========================================
 log "Custom / Selective Installation Mode..."
 
-DOTFILES_DIR="$DEFAULT_TARGET_DIR"
+DOTFILES_DIR="${DOTFILES_DIR:-$DEFAULT_TARGET_DIR}"
 if [ ! -d "$DOTFILES_DIR" ]; then
-    log "Initializing dotfiles repository..."
+    log "Cloning dotfiles repository to $DOTFILES_DIR..."
     mkdir -p "$(dirname "$DOTFILES_DIR")"
-    git clone --depth 1 --filter=blob:none --sparse "$DOTFILES_REPO" "$DOTFILES_DIR"
+    git clone "$DOTFILES_REPO" "$DOTFILES_DIR"
 fi
 
 git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
 cd "$DOTFILES_DIR"
 source "$DOTFILES_DIR/install/common.sh"
 
-SPARSE_PATHS=("install")
-
 read_input "Install Core CLI Utilities (ripgrep, fd, fzf, zoxide, genignore)? [y/N]: " a_cli
-[[ "$a_cli" =~ ^[Yy]$ ]] && SPARSE_PATHS+=("bin" "starship")
-
 read_input "Install & Configure Zsh Shell (.zshrc & Oh My Zsh)? [y/N]: " a_shell
 
 read_input "Install Neovim & Configuration? [y/N]: " a_nvim
 if [[ "$a_nvim" =~ ^[Yy]$ ]]; then
-    SPARSE_PATHS+=("nvim")
     read_input "  Use (f)ull plugins or (s)erver minimal? [f/s]: " n_ans
 fi
 
 read_input "Install VSCode settings & extensions? [y/N]: " a_vsc
-[[ "$a_vsc" =~ ^[Yy]$ ]] && SPARSE_PATHS+=("vscode")
-
 read_input "Install Mise & Node 24? [y/N]: " a_mise
-[[ "$a_mise" =~ ^[Yy]$ ]] && SPARSE_PATHS+=("mise")
-
 read_input "Install Astral Python Tools (uv & ruff)? [y/N]: " a_astral
-
-# Apply sparse-checkout for only the selected directories (cone mode only accepts directories)
-log "Configuring sparse-checkout for: ${SPARSE_PATHS[*]}..."
-git sparse-checkout set --skip-checks "${SPARSE_PATHS[@]}" 2>/dev/null || git sparse-checkout set "${SPARSE_PATHS[@]}"
 
 # Run selected module installers
 [[ "$a_cli" =~ ^[Yy]$ ]] && "$DOTFILES_DIR/install/install-cli.sh"

@@ -10,18 +10,18 @@ Follow the instructions in the prompt.
 
 ---
 
-## Bare Linux Install
+## Bare Linux Install / Containers
 
-On a fresh or minimal Linux install (Ubuntu, Debian, Fedora, or container), make sure `curl` is installed first:
+On a fresh or blank Linux install (Ubuntu, Debian, Fedora, or container), make sure `curl` and `sudo` are installed first:
 
 ### Ubuntu / Debian
 ```bash
-sudo apt update && sudo apt install -y curl
+apt-get update && apt-get install -y curl sudo
 curl -fsSL https://raw.githubusercontent.com/JoshQuaintance/dotfiles/main/install.sh | bash
 ```
 
 ### Fedora
 ```bash
-sudo dnf install -y curl
+dnf install -y curl sudo
 curl -fsSL https://raw.githubusercontent.com/JoshQuaintance/dotfiles/main/install.sh | bash
 ```

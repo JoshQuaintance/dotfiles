@@ -1,0 +1,57 @@
+{
+	"Block Comment": {
+		"prefix": "/**",
+		"body": [
+			"/*  =========================",
+			"    =                       =",
+			"    =  $1                     ",
+			"    =                       =",
+			"    =========================  */"
+		],
+		"description": "Block Comment"
+	},
+
+	"Sass If Statement": {
+		"prefix": "if",
+		"body": [ "@if \\$${1:val} == $2 {", " $3 ", "}$0" ],
+		"description": "Sass If Statement"
+	},
+
+	"Sass Else If Statement": {
+		"prefix": "eif",
+		"body": [ "@else if \\$${1:val} == $2 {", " $3 ", "}$0" ],
+		"description": "Sass Else If Statement"
+	},
+
+	"Sass Else Statement": {
+		"prefix": "else",
+		"body": [ "@else \\$${1:val} == $2 {", " $3 ", "}$0" ],
+		"description": "Sass Else If Statement"
+	},
+
+	"Sass compatibility @mixin": {
+		"prefix": "compatibility",
+		"body": [
+			"@mixin $1(\\$${2:val}) {",
+			"  -webkit-$1: \\$${2:val};",
+			"  -mox-$1: \\$${2:val};",
+			"  -ms-$1: \\$${2:val};",
+			"  $1: \\$${2:val};",
+			"}"
+		],
+		"description": "Sass compatibility @mixin"
+	},
+
+	"Start of description comment": {
+		"prefix": "/start-description-comment",
+		"body": [ "// ${1:Start of function}" ],
+		"description": "Start of description comment"
+	},
+
+	"End of description comment": {
+		"prefix": "/end-description-comment",
+		"body": [ "// ----------" ],
+		"description": "End of description comment"
+	}
+}
+
