@@ -13,7 +13,7 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-log() { echo -e "${BLUE}=>${NC} $1"; }
+log() { echo -e "${BLUE}==>${NC} $1"; }
 success() { echo -e "${GREEN}✔${NC} $1"; }
 warn() { echo -e "${YELLOW}⚠${NC} $1"; }
 error() { echo -e "${RED}✖${NC} $1"; }
@@ -67,9 +67,12 @@ ensure_base_deps() {
     fi
 }
 
-# Ensure git is available
+# Ensure git is available and mark directory safe for containers
 ensure_git() {
     if ! command -v git &>/dev/null; then
         ensure_base_deps
     fi
+    # Prevent Git dubious ownership errors when running in containers / mounted volumes
+    git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
+    git config --global --add safe.directory "$(pwd)" 2>/dev/null || true
 }

@@ -16,8 +16,10 @@ else
     eval "$(curl -fsSL "$RAW_BASE_URL/install/common.sh")"
 fi
 
-# Ensure Git is installed before attempting any clone or sparse-checkout
+# Ensure Git is installed and mark safe.directory
 ensure_git
+git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
+git config --global --add safe.directory "$(pwd)" 2>/dev/null || true
 
 # Helper to read from /dev/tty if stdin is piped (e.g. curl ... | bash)
 read_input() {
@@ -62,7 +64,10 @@ if [[ "$CHOICE" == "1" || "$CHOICE" == "--workstation" || "$CHOICE" == "--all" ]
         log "Cloning dotfiles to $DOTFILES_DIR..."
         mkdir -p "$(dirname "$DOTFILES_DIR")"
         git clone "$DOTFILES_REPO" "$DOTFILES_DIR"
-    elif [ -d "$DOTFILES_DIR/.git" ]; then
+    fi
+
+    git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
+    if [ -d "$DOTFILES_DIR/.git" ]; then
         (cd "$DOTFILES_DIR" && git sparse-checkout disable 2>/dev/null || true)
     fi
 
@@ -94,6 +99,7 @@ if [[ "$CHOICE" == "2" || "$CHOICE" == "--server" || "$CHOICE" == "--minimal" ]]
         git clone --depth 1 --filter=blob:none --sparse "$DOTFILES_REPO" "$DOTFILES_DIR"
     fi
 
+    git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
     cd "$DOTFILES_DIR"
     git sparse-checkout set nvim bin install .zshrc
     source "$DOTFILES_DIR/install/common.sh"
@@ -121,6 +127,7 @@ if [ ! -d "$DOTFILES_DIR" ]; then
     git clone --depth 1 --filter=blob:none --sparse "$DOTFILES_REPO" "$DOTFILES_DIR"
 fi
 
+git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
 cd "$DOTFILES_DIR"
 source "$DOTFILES_DIR/install/common.sh"
 
