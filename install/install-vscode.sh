@@ -6,9 +6,42 @@ source "$SCRIPT_DIR/common.sh"
 
 EXTENSIONS_JSON="$DOTFILES_DIR/vscode/extensions.json"
 
-log "Setting up VSCode Configuration & Modular Extensions..."
+log "Setting up Visual Studio Code & Modular Extensions..."
 
-# 1. Determine platform-specific VSCode User configuration directory
+# 1. Install VSCode application if missing
+if ! command -v code &>/dev/null; then
+    log "VSCode not found. Installing Visual Studio Code..."
+    if [ "$OS" = "Darwin" ]; then
+        ensure_homebrew
+        brew install --cask visual-studio-code
+    elif [ "$OS" = "Linux" ]; then
+        if command -v apt-get &>/dev/null; then
+            # Ubuntu / Debian official repository
+            sudo apt-get update -y
+            sudo apt-get install -y wget gpg apt-transport-https
+            wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /tmp/packages.microsoft.gpg
+            sudo install -D -o root -g root -m 644 /tmp/packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg
+            rm -f /tmp/packages.microsoft.gpg
+            echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | sudo tee /etc/apt/sources.list.d/vscode.list > /dev/null
+            sudo apt-get update -y
+            sudo apt-get install -y code
+        elif command -v dnf &>/dev/null; then
+            # Fedora official repository
+            sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+            sudo sh -c 'echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/vscode.repo'
+            sudo dnf check-update || true
+            sudo dnf install -y code
+        fi
+    fi
+fi
+
+if command -v code &>/dev/null; then
+    success "VSCode is installed ($(code --version 2>/dev/null | head -n 1 || echo 'ready'))"
+else
+    warn "Could not install VSCode binary automatically. Proceeding with configuration symlinks..."
+fi
+
+# 2. Determine platform-specific VSCode User configuration directory
 if [ "$OS" = "Darwin" ]; then
     VSCODE_USER_DIR="$HOME/Library/Application Support/Code/User"
 elif [ "$OS" = "Linux" ]; then
@@ -17,7 +50,7 @@ fi
 
 mkdir -p "$VSCODE_USER_DIR"
 
-# 2. Backup & Symlink settings.json
+# 3. Backup & Symlink settings.json
 if [ -f "$DOTFILES_DIR/vscode/settings.json" ]; then
     if [ -f "$VSCODE_USER_DIR/settings.json" ] && [ ! -L "$VSCODE_USER_DIR/settings.json" ]; then
         log "Backing up existing VSCode settings.json to settings.json.bak..."
@@ -27,7 +60,7 @@ if [ -f "$DOTFILES_DIR/vscode/settings.json" ]; then
     success "Linked VSCode settings.json"
 fi
 
-# 3. Backup & Symlink keybindings.json
+# 4. Backup & Symlink keybindings.json
 if [ -f "$DOTFILES_DIR/vscode/keybindings.json" ]; then
     if [ -f "$VSCODE_USER_DIR/keybindings.json" ] && [ ! -L "$VSCODE_USER_DIR/keybindings.json" ]; then
         cp "$VSCODE_USER_DIR/keybindings.json" "$VSCODE_USER_DIR/keybindings.json.bak"
@@ -36,7 +69,7 @@ if [ -f "$DOTFILES_DIR/vscode/keybindings.json" ]; then
     success "Linked VSCode keybindings.json"
 fi
 
-# 4. Backup & Symlink snippets directory
+# 5. Backup & Symlink snippets directory
 if [ -d "$DOTFILES_DIR/vscode/snippets" ]; then
     if [ -d "$VSCODE_USER_DIR/snippets" ] && [ ! -L "$VSCODE_USER_DIR/snippets" ]; then
         cp -r "$VSCODE_USER_DIR/snippets" "$VSCODE_USER_DIR/snippets.bak"
@@ -45,8 +78,14 @@ if [ -d "$DOTFILES_DIR/vscode/snippets" ]; then
     success "Linked VSCode snippets directory"
 fi
 
-# 5. Modular Extension Installation
+# 6. Modular Extension Installation
 if command -v code &>/dev/null && [ -f "$EXTENSIONS_JSON" ]; then
+    # Extra flags if running as root in containers
+    CODE_FLAGS=""
+    if [ "$(id -u)" -eq 0 ]; then
+        CODE_FLAGS="--no-sandbox --user-data-dir=$HOME/.config/Code"
+    fi
+
     # Helper to parse extension groups using python3 or node
     get_group_extensions() {
         local group="$1"
@@ -116,7 +155,7 @@ if ('$group' === 'all') {
 
     if [ "${#SELECTED_GROUPS[@]}" -gt 0 ]; then
         log "Syncing selected VSCode extension categories: ${SELECTED_GROUPS[*]}..."
-        INSTALLED_EXTS="$(code --list-extensions 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+        INSTALLED_EXTS="$(code $CODE_FLAGS --list-extensions 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
 
         for group in "${SELECTED_GROUPS[@]}"; do
             EXTS=$(get_group_extensions "$group")
@@ -126,7 +165,7 @@ if ('$group' === 'all') {
                     success "Extension already installed: $ext"
                 else
                     log "Installing extension: $ext..."
-                    code --install-extension "$ext" --force >/dev/null 2>&1 || warn "Could not install: $ext"
+                    code $CODE_FLAGS --install-extension "$ext" --force >/dev/null 2>&1 || warn "Could not install: $ext"
                 fi
             done
         done
@@ -134,8 +173,6 @@ if ('$group' === 'all') {
     else
         log "Skipped VSCode extensions install."
     fi
-else
-    warn "'code' CLI binary not found or extensions.json missing. Extensions installation skipped."
 fi
 
 success "VSCode setup complete!"

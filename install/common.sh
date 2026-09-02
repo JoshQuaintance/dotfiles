@@ -4,6 +4,7 @@ set -e
 # Base dotfiles directory
 export DOTFILES_DIR="${DOTFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd || echo "$HOME/Codes/dotfiles")}"
 export OS="$(uname -s)"
+export ARCH="$(uname -m)"
 
 # Color helpers
 BLUE='\033[0;34m'
@@ -24,14 +25,14 @@ case ":$PATH:" in
   *) export PATH="$HOME/.local/bin:$PATH" ;;
 esac
 
-# Ensure Homebrew is loaded if on macOS
+# Ensure Homebrew environment on macOS
 if [ "$OS" = "Darwin" ]; then
     if [ -f "/opt/homebrew/bin/brew" ]; then
         eval "$(/opt/homebrew/bin/brew shellenv)"
     fi
 fi
 
-# Function to check or install Homebrew on macOS
+# Function to ensure Homebrew on macOS
 ensure_homebrew() {
     if [ "$OS" = "Darwin" ]; then
         if ! command -v brew &>/dev/null; then
@@ -44,22 +45,31 @@ ensure_homebrew() {
     fi
 }
 
-# Function to ensure git is installed across all platforms
+# Function to ensure base system build & download dependencies
+ensure_base_deps() {
+    if [ "$OS" = "Darwin" ]; then
+        ensure_homebrew
+        if ! command -v git &>/dev/null; then
+            brew install git
+        fi
+    elif [ "$OS" = "Linux" ]; then
+        if command -v apt-get &>/dev/null; then
+            # Ubuntu / Debian
+            sudo apt-get update -y
+            sudo apt-get install -y curl wget git build-essential ca-certificates tar gzip unzip sudo
+        elif command -v dnf &>/dev/null; then
+            # Fedora
+            sudo dnf install -y curl wget git make gcc ca-certificates tar gzip unzip sudo
+        elif command -v pacman &>/dev/null; then
+            # Arch Linux
+            sudo pacman -S --noconfirm --needed curl wget git base-devel ca-certificates tar gzip unzip sudo
+        fi
+    fi
+}
+
+# Ensure git is available
 ensure_git() {
     if ! command -v git &>/dev/null; then
-        log "Git not found. Installing Git..."
-        if [ "$OS" = "Darwin" ]; then
-            ensure_homebrew
-            brew install git
-        elif [ "$OS" = "Linux" ]; then
-            if command -v apt-get &>/dev/null; then
-                sudo apt-get update -y && sudo apt-get install -y git
-            elif command -v pacman &>/dev/null; then
-                sudo pacman -S --noconfirm git
-            elif command -v dnf &>/dev/null; then
-                sudo dnf install -y git
-            fi
-        fi
-        success "Git is installed!"
+        ensure_base_deps
     fi
 }

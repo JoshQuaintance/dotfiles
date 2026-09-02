@@ -7,16 +7,19 @@ source "$SCRIPT_DIR/common.sh"
 log "Setting up Mise (Polyglot Runtime & Node 24 Manager)..."
 
 # 1. Install Mise
-if ! command -v mise &>/dev/null; then
+if ! command -v mise &>/dev/null && [ ! -f "$HOME/.local/bin/mise" ]; then
     if [ "$OS" = "Darwin" ]; then
         ensure_homebrew
         brew install mise
     elif [ "$OS" = "Linux" ]; then
+        ensure_base_deps
         log "Installing mise via official installer..."
-        curl https://mise.run | sh
-        export PATH="$HOME/.local/bin:$PATH"
+        curl -fsSL https://mise.run | sh
     fi
 fi
+
+# Ensure ~/.local/bin/mise is available in PATH
+export PATH="$HOME/.local/bin:$PATH"
 
 # 2. Symlink Mise Configuration
 mkdir -p "$HOME/.config/mise"
@@ -29,7 +32,7 @@ fi
 if command -v mise &>/dev/null; then
     log "Installing and setting Node 24 as global default..."
     mise use -g node@24
-    mise install
+    mise install -y
     success "Node 24 installed and set as default via mise!"
 fi
 

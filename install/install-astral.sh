@@ -11,10 +11,12 @@ if [ "$OS" = "Darwin" ]; then
     brew install uv ruff
 
 elif [ "$OS" = "Linux" ]; then
+    ensure_base_deps
     log "Installing uv..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
     log "Installing ruff..."
     curl -LsSf https://astral.sh/ruff/install.sh | sh
 fi
 
+export PATH="$HOME/.local/bin:$PATH"
 success "Astral Python tools (uv & ruff) installed successfully!"
