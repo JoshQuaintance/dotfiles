@@ -16,14 +16,14 @@ elif [ "$OS" = "Linux" ]; then
     ensure_base_deps
     
     if command -v apt-get &>/dev/null; then
-        sudo apt-get install -y neovim
+        run_sudo apt-get install -y neovim
     elif command -v dnf &>/dev/null; then
-        sudo dnf install -y neovim
+        run_sudo dnf install -y neovim
     elif command -v pacman &>/dev/null; then
-        sudo pacman -S --noconfirm neovim tree-sitter
+        run_sudo pacman -S --noconfirm neovim tree-sitter
     fi
 
-    # Check if Neovim is < 0.9 on older Ubuntu, or missing -> install official AppImage or static binary
+    # Check if Neovim is < 0.9 on older Ubuntu, or missing -> install official static binary
     NEED_MODERN_NVIM=false
     if ! command -v nvim &>/dev/null; then
         NEED_MODERN_NVIM=true
@@ -44,6 +44,7 @@ elif [ "$OS" = "Linux" ]; then
         fi
         curl -fsSL "https://github.com/neovim/neovim/releases/latest/download/${NVIM_TAR}" | tar -xz -C "$HOME/.local/"
         ln -sf "$HOME/.local/nvim-linux-${ARCH}/bin/nvim" "$HOME/.local/bin/nvim" 2>/dev/null || ln -sf "$HOME/.local/nvim-linux-x86_64/bin/nvim" "$HOME/.local/bin/nvim" 2>/dev/null || true
+        [ "$(id -u)" -eq 0 ] && ln -sf "$HOME/.local/bin/nvim" "/usr/local/bin/nvim" 2>/dev/null || true
     fi
 
     # Ensure tree-sitter-cli is available for Treesitter parsers
@@ -55,6 +56,7 @@ elif [ "$OS" = "Linux" ]; then
         fi
         curl -fsSL "https://github.com/tree-sitter/tree-sitter/releases/latest/download/${TS_ARCH}" | gzip -d > "$HOME/.local/bin/tree-sitter" 2>/dev/null || true
         chmod +x "$HOME/.local/bin/tree-sitter" 2>/dev/null || true
+        [ "$(id -u)" -eq 0 ] && ln -sf "$HOME/.local/bin/tree-sitter" "/usr/local/bin/tree-sitter" 2>/dev/null || true
     fi
 fi
 

@@ -24,23 +24,25 @@ elif [ "$OS" = "Linux" ]; then
     if command -v apt-get &>/dev/null; then
         # Ubuntu / Debian
         log "Installing base CLI packages via apt..."
-        sudo apt-get update -y
-        sudo apt-get install -y curl wget git build-essential ripgrep fd-find fzf tar gzip
+        run_sudo apt-get update -y
+        run_sudo apt-get install -y curl wget git build-essential ripgrep fd-find fzf tar gzip
         
         # Link fdfind -> fd if necessary on Debian/Ubuntu
         if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
             ln -sf "$(which fdfind)" "$HOME/.local/bin/fd"
+            [ "$(id -u)" -eq 0 ] && ln -sf "$(which fdfind)" "/usr/local/bin/fd" 2>/dev/null || true
         fi
     elif command -v dnf &>/dev/null; then
         # Fedora / RHEL
         log "Installing base CLI packages via dnf..."
-        sudo dnf install -y curl wget git make gcc ripgrep fd-find fzf eza tar gzip
+        run_sudo dnf install -y curl wget git make gcc ripgrep fd-find fzf eza tar gzip
         if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
             ln -sf "$(which fdfind)" "$HOME/.local/bin/fd"
+            [ "$(id -u)" -eq 0 ] && ln -sf "$(which fdfind)" "/usr/local/bin/fd" 2>/dev/null || true
         fi
     elif command -v pacman &>/dev/null; then
         # Arch Linux
-        sudo pacman -S --noconfirm --needed curl wget git base-devel ripgrep fd fzf eza atuin
+        run_sudo pacman -S --noconfirm --needed curl wget git base-devel ripgrep fd fzf eza atuin
     fi
 
     # 1. Install eza on Linux if not already installed
@@ -52,6 +54,7 @@ elif [ "$OS" = "Linux" ]; then
         fi
         curl -fsSL "https://github.com/eza-community/eza/releases/latest/download/eza_${EZA_ARCH}.tar.gz" | tar -xz -C "$HOME/.local/bin/"
         chmod +x "$HOME/.local/bin/eza" 2>/dev/null || true
+        [ "$(id -u)" -eq 0 ] && ln -sf "$HOME/.local/bin/eza" "/usr/local/bin/eza" 2>/dev/null || true
         success "eza installed to ~/.local/bin/eza"
     fi
 
@@ -64,7 +67,10 @@ elif [ "$OS" = "Linux" ]; then
     # 3. Install Starship prompt via official installer
     if ! command -v starship &>/dev/null; then
         log "Installing Starship prompt..."
-        curl -sS https://starship.rs/install.sh | sh -s -- -y
+        curl -sS https://starship.rs/install.sh | sh -s -- -y -b "$HOME/.local/bin"
+        chmod +x "$HOME/.local/bin/starship" 2>/dev/null || true
+        [ "$(id -u)" -eq 0 ] && ln -sf "$HOME/.local/bin/starship" "/usr/local/bin/starship" 2>/dev/null || true
+        success "Starship installed!"
     fi
 
     # 4. Install Atuin (shell history) via official installer
@@ -91,6 +97,7 @@ if [ -d "$DOTFILES_DIR/bin" ]; then
         if [ -f "$tool" ] && [ -x "$tool" ]; then
             tool_name="$(basename "$tool")"
             ln -sf "$tool" "$HOME/.local/bin/$tool_name"
+            [ "$(id -u)" -eq 0 ] && ln -sf "$tool" "/usr/local/bin/$tool_name" 2>/dev/null || true
             success "Installed tool: $tool_name -> ~/.local/bin/$tool_name"
         fi
     done

@@ -14,13 +14,11 @@ if ! command -v zsh &>/dev/null; then
         brew install zsh
     elif [ "$OS" = "Linux" ]; then
         if command -v apt-get &>/dev/null; then
-            # Ubuntu / Debian
-            sudo apt-get install -y zsh
+            run_sudo apt-get install -y zsh
         elif command -v dnf &>/dev/null; then
-            # Fedora
-            sudo dnf install -y zsh
+            run_sudo dnf install -y zsh
         elif command -v pacman &>/dev/null; then
-            sudo pacman -S --noconfirm zsh
+            run_sudo pacman -S --noconfirm zsh
         fi
     fi
 fi
@@ -29,8 +27,8 @@ fi
 CURRENT_SHELL="$(basename "$SHELL")"
 if [ "$CURRENT_SHELL" != "zsh" ] && command -v zsh &>/dev/null; then
     ZSH_PATH="$(which zsh)"
-    log "Setting Zsh ($ZSH_PATH) as your default shell..."
-    chsh -s "$ZSH_PATH" "$USER" 2>/dev/null || sudo chsh -s "$ZSH_PATH" "$USER" 2>/dev/null || true
+    log "Setting Zsh ($ZSH_PATH) as default shell..."
+    chsh -s "$ZSH_PATH" "$USER" 2>/dev/null || run_sudo chsh -s "$ZSH_PATH" "$USER" 2>/dev/null || true
 fi
 
 # 3. Install Oh My Zsh if missing

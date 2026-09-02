@@ -18,6 +18,17 @@ success() { echo -e "${GREEN}✔${NC} $1"; }
 warn() { echo -e "${YELLOW}⚠${NC} $1"; }
 error() { echo -e "${RED}✖${NC} $1"; }
 
+# Universal sudo wrapper (runs directly if root, uses sudo if available)
+run_sudo() {
+    if [ "$(id -u)" -eq 0 ]; then
+        "$@"
+    elif command -v sudo &>/dev/null; then
+        sudo "$@"
+    else
+        "$@"
+    fi
+}
+
 # Ensure local bin directory exists in PATH
 mkdir -p "$HOME/.local/bin"
 case ":$PATH:" in
@@ -55,14 +66,14 @@ ensure_base_deps() {
     elif [ "$OS" = "Linux" ]; then
         if command -v apt-get &>/dev/null; then
             # Ubuntu / Debian
-            sudo apt-get update -y
-            sudo apt-get install -y curl wget git build-essential ca-certificates tar gzip unzip sudo
+            run_sudo apt-get update -y
+            run_sudo apt-get install -y curl wget git build-essential ca-certificates tar gzip unzip
         elif command -v dnf &>/dev/null; then
             # Fedora
-            sudo dnf install -y curl wget git make gcc ca-certificates tar gzip unzip sudo
+            run_sudo dnf install -y curl wget git make gcc ca-certificates tar gzip unzip
         elif command -v pacman &>/dev/null; then
             # Arch Linux
-            sudo pacman -S --noconfirm --needed curl wget git base-devel ca-certificates tar gzip unzip sudo
+            run_sudo pacman -S --noconfirm --needed curl wget git base-devel ca-certificates tar gzip unzip
         fi
     fi
 }
@@ -72,7 +83,6 @@ ensure_git() {
     if ! command -v git &>/dev/null; then
         ensure_base_deps
     fi
-    # Prevent Git dubious ownership errors when running in containers / mounted volumes
     git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
     git config --global --add safe.directory "$(pwd)" 2>/dev/null || true
 }
