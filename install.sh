@@ -101,7 +101,7 @@ if [[ "$CHOICE" == "2" || "$CHOICE" == "--server" || "$CHOICE" == "--minimal" ]]
 
     git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
     cd "$DOTFILES_DIR"
-    git sparse-checkout set nvim bin install .zshrc
+    git sparse-checkout set nvim bin install starship
     source "$DOTFILES_DIR/install/common.sh"
 
     "$DOTFILES_DIR/install/install-cli.sh"
@@ -134,10 +134,9 @@ source "$DOTFILES_DIR/install/common.sh"
 SPARSE_PATHS=("install")
 
 read_input "Install Core CLI Utilities (ripgrep, fd, fzf, zoxide, genignore)? [y/N]: " a_cli
-[[ "$a_cli" =~ ^[Yy]$ ]] && SPARSE_PATHS+=("bin")
+[[ "$a_cli" =~ ^[Yy]$ ]] && SPARSE_PATHS+=("bin" "starship")
 
 read_input "Install & Configure Zsh Shell (.zshrc & Oh My Zsh)? [y/N]: " a_shell
-[[ "$a_shell" =~ ^[Yy]$ ]] && SPARSE_PATHS+=(".zshrc")
 
 read_input "Install Neovim & Configuration? [y/N]: " a_nvim
 if [[ "$a_nvim" =~ ^[Yy]$ ]]; then
@@ -153,9 +152,9 @@ read_input "Install Mise & Node 24? [y/N]: " a_mise
 
 read_input "Install Astral Python Tools (uv & ruff)? [y/N]: " a_astral
 
-# Apply sparse-checkout for only the selected directories
+# Apply sparse-checkout for only the selected directories (cone mode only accepts directories)
 log "Configuring sparse-checkout for: ${SPARSE_PATHS[*]}..."
-git sparse-checkout set "${SPARSE_PATHS[@]}"
+git sparse-checkout set --skip-checks "${SPARSE_PATHS[@]}" 2>/dev/null || git sparse-checkout set "${SPARSE_PATHS[@]}"
 
 # Run selected module installers
 [[ "$a_cli" =~ ^[Yy]$ ]] && "$DOTFILES_DIR/install/install-cli.sh"
