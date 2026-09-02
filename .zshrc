@@ -99,8 +99,10 @@ else
     PROMPT='%F{cyan}%~%F{yellow}${vcs_info_msg_0_}%F{reset} %# '
 fi
 
-# eval "$(starship init zsh)"
-# source "/opt/homebrew/opt/spaceship/spaceship.zsh"
+# Starship Prompt Initialization
+if command -v starship &>/dev/null; then
+    eval "$(starship init zsh)"
+fi
 
 # ==========================================
 # User Configuration & Tools

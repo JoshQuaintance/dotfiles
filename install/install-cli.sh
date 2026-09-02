@@ -4,12 +4,12 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-log "Installing Core CLI Utilities (ripgrep, fd, fzf, zoxide)..."
+log "Installing Core CLI Utilities (ripgrep, fd, fzf, zoxide, starship, eza)..."
 
 if [ "$OS" = "Darwin" ]; then
     ensure_homebrew
     log "Installing CLI tools via Homebrew..."
-    brew install ripgrep fd fzf zoxide
+    brew install ripgrep fd fzf zoxide starship eza
 
 elif [ "$OS" = "Linux" ]; then
     if command -v apt-get &>/dev/null; then
@@ -31,14 +31,30 @@ elif [ "$OS" = "Linux" ]; then
         fi
     elif command -v pacman &>/dev/null; then
         # Arch Linux fallback
-        sudo pacman -S --noconfirm --needed curl git base-devel ripgrep fd fzf
+        sudo pacman -S --noconfirm --needed curl git base-devel ripgrep fd fzf eza
     fi
 
-    # Install zoxide via official standalone installer
+    # Install zoxide via official installer
     if ! command -v zoxide &>/dev/null; then
-        log "Installing zoxide via official installer..."
+        log "Installing zoxide..."
         curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | sh
     fi
+
+    # Install Starship prompt via official installer
+    if ! command -v starship &>/dev/null; then
+        log "Installing Starship prompt..."
+        curl -sS https://starship.rs/install.sh | sh -s -- -y
+    fi
+fi
+
+# Symlink Starship prompt configuration
+mkdir -p "$HOME/.config"
+if [ -f "$DOTFILES_DIR/starship/starship.toml" ]; then
+    if [ -f "$HOME/.config/starship.toml" ] && [ ! -L "$HOME/.config/starship.toml" ]; then
+        cp "$HOME/.config/starship.toml" "$HOME/.config/starship.toml.bak"
+    fi
+    ln -sfn "$DOTFILES_DIR/starship/starship.toml" "$HOME/.config/starship.toml"
+    success "Linked ~/.config/starship.toml -> $DOTFILES_DIR/starship/starship.toml"
 fi
 
 # Symlink standalone bin utilities (like genignore)
@@ -54,4 +70,4 @@ if [ -d "$DOTFILES_DIR/bin" ]; then
     done
 fi
 
-success "Core CLI utilities installed successfully!"
+success "Core CLI utilities & Starship installed successfully!"
