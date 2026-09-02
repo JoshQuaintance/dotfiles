@@ -37,6 +37,17 @@ read_input() {
     fi
 }
 
+# Helper to launch into new shell automatically
+launch_shell() {
+    echo ""
+    success "$1"
+    if command -v zsh &>/dev/null; then
+        log "Launching your new Zsh environment..."
+        exec zsh -l
+    fi
+    exit 0
+}
+
 echo ""
 echo "================================================="
 echo "           Dotfiles Unified Installer            "
@@ -84,10 +95,7 @@ if [[ "$CHOICE" == "1" || "$CHOICE" == "--workstation" || "$CHOICE" == "--all" ]
     "$DOTFILES_DIR/install/install-mise.sh"
     "$DOTFILES_DIR/install/install-astral.sh"
 
-    echo ""
-    success "Full Workstation setup complete!"
-    echo "To start your new environment, run: zsh"
-    exit 0
+    launch_shell "Full Workstation setup complete!"
 fi
 
 # ==========================================
@@ -111,11 +119,7 @@ if [[ "$CHOICE" == "2" || "$CHOICE" == "--server" || "$CHOICE" == "--minimal" ]]
     "$DOTFILES_DIR/install/install-shell.sh"
     "$DOTFILES_DIR/install/install-nvim.sh" "--server"
 
-    echo ""
-    success "Server setup complete with Git sparse-checkout!"
-    echo "You can run 'git pull' in $DOTFILES_DIR anytime to sync updates."
-    echo "To start your environment, run: zsh"
-    exit 0
+    launch_shell "Server setup complete with Git sparse-checkout!"
 fi
 
 # ==========================================
@@ -156,5 +160,4 @@ fi
 [[ "$a_mise" =~ ^[Yy]$ ]] && "$DOTFILES_DIR/install/install-mise.sh"
 [[ "$a_astral" =~ ^[Yy]$ ]] && "$DOTFILES_DIR/install/install-astral.sh"
 
-echo ""
-success "Selected dotfiles components installed successfully!"
+launch_shell "Selected dotfiles components installed successfully!"
