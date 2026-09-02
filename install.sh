@@ -6,8 +6,13 @@ DOTFILES_REPO="https://github.com/JoshQuaintance/dotfiles.git"
 RAW_BASE_URL="https://raw.githubusercontent.com/JoshQuaintance/dotfiles/main"
 DEFAULT_TARGET_DIR="$HOME/Codes/dotfiles"
 
-# Determine dotfiles directory (local clone or default target)
-DOTFILES_DIR="${DOTFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "$DEFAULT_TARGET_DIR")}"
+# Determine if running from a local clone or remotely via curl
+CURRENT_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+if [ -f "$CURRENT_SCRIPT_DIR/install/common.sh" ]; then
+    DOTFILES_DIR="$CURRENT_SCRIPT_DIR"
+else
+    DOTFILES_DIR="$DEFAULT_TARGET_DIR"
+fi
 
 # Load shared helpers from common.sh (locally if present, or dynamically via eval)
 if [ -f "$DOTFILES_DIR/install/common.sh" ]; then
@@ -16,7 +21,7 @@ else
     eval "$(curl -fsSL "$RAW_BASE_URL/install/common.sh")"
 fi
 
-# Ensure Git is installed and mark safe.directory
+# Ensure Git is installed and configure safe.directory
 ensure_git
 git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
 git config --global --add safe.directory "$(pwd)" 2>/dev/null || true
@@ -60,16 +65,14 @@ if [[ "$CHOICE" == "1" || "$CHOICE" == "--workstation" || "$CHOICE" == "--all" ]
     log "Setting up Full Workstation..."
     
     DOTFILES_DIR="$DEFAULT_TARGET_DIR"
-    if [ ! -d "$DOTFILES_DIR" ]; then
+    if [ ! -d "$DOTFILES_DIR/.git" ]; then
         log "Cloning dotfiles to $DOTFILES_DIR..."
         mkdir -p "$(dirname "$DOTFILES_DIR")"
         git clone "$DOTFILES_REPO" "$DOTFILES_DIR"
     fi
 
     git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
-    if [ -d "$DOTFILES_DIR/.git" ]; then
-        (cd "$DOTFILES_DIR" && git sparse-checkout disable 2>/dev/null || true)
-    fi
+    (cd "$DOTFILES_DIR" && git sparse-checkout disable 2>/dev/null || true)
 
     cd "$DOTFILES_DIR"
     source "$DOTFILES_DIR/install/common.sh"
@@ -94,7 +97,7 @@ if [[ "$CHOICE" == "2" || "$CHOICE" == "--server" || "$CHOICE" == "--minimal" ]]
     log "Setting up Server / Minimal environment via Git Sparse-Checkout..."
     
     DOTFILES_DIR="${HOME}/.dotfiles"
-    if [ ! -d "$DOTFILES_DIR" ]; then
+    if [ ! -d "$DOTFILES_DIR/.git" ]; then
         log "Cloning sparse repository to $DOTFILES_DIR..."
         git clone --depth 1 --filter=blob:none --sparse "$DOTFILES_REPO" "$DOTFILES_DIR"
     fi
@@ -121,7 +124,7 @@ fi
 log "Custom / Selective Installation Mode..."
 
 DOTFILES_DIR="${DOTFILES_DIR:-$DEFAULT_TARGET_DIR}"
-if [ ! -d "$DOTFILES_DIR" ]; then
+if [ ! -d "$DOTFILES_DIR/.git" ]; then
     log "Cloning dotfiles repository to $DOTFILES_DIR..."
     mkdir -p "$(dirname "$DOTFILES_DIR")"
     git clone "$DOTFILES_REPO" "$DOTFILES_DIR"
