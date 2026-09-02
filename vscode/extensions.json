@@ -1,0 +1,104 @@
+{
+  "core": {
+    "description": "Essential UI themes, icons, Git tools, formatters, and utilities",
+    "extensions": [
+      "asvetliakov.vscode-neovim",
+      "catppuccin.catppuccin-vsc",
+      "catppuccin.catppuccin-vsc-icons",
+      "catppuccin.catppuccin-vsc-pack",
+      "beardedbear.beardedtheme",
+      "thang-nm.flow-icons",
+      "miguelsolorio.symbols",
+      "esbenp.prettier-vscode",
+      "dbaeumer.vscode-eslint",
+      "eamodio.gitlens",
+      "editorconfig.editorconfig",
+      "aaron-bond.better-comments",
+      "streetsidesoftware.code-spell-checker",
+      "oderwat.indent-rainbow",
+      "chouzz.vscode-better-align",
+      "mechatroner.rainbow-csv",
+      "mikestead.dotenv",
+      "jock.svg",
+      "tomoki1207.pdf",
+      "ms-vscode.hexeditor",
+      "sonarsource.sonarlint-vscode"
+    ]
+  },
+  "web": {
+    "description": "TypeScript, JavaScript, Bun, and TailwindCSS",
+    "extensions": [
+      "bradlc.vscode-tailwindcss",
+      "ms-vscode.vscode-typescript-next",
+      "oven.bun-vscode"
+    ]
+  },
+  "svelte": {
+    "description": "Svelte and SvelteKit language support",
+    "extensions": [
+      "svelte.svelte-vscode"
+    ]
+  },
+  "angular": {
+    "description": "Angular language service & templates",
+    "extensions": [
+      "angular.ng-template"
+    ]
+  },
+  "python": {
+    "description": "Python, Pylance, debugging, formatting & environments",
+    "extensions": [
+      "ms-python.python",
+      "ms-python.vscode-pylance",
+      "ms-python.debugpy",
+      "ms-python.black-formatter",
+      "ms-python.pylint",
+      "ms-python.vscode-python-envs"
+    ]
+  },
+  "java": {
+    "description": "Java language support, Debugger, Test Runner, and Gradle",
+    "extensions": [
+      "redhat.java",
+      "vscjava.vscode-java-pack",
+      "vscjava.vscode-java-debug",
+      "vscjava.vscode-java-dependency",
+      "vscjava.vscode-java-test",
+      "vscjava.vscode-gradle",
+      "richardwillis.vscode-spotless-gradle",
+      "oracle.oracle-java"
+    ]
+  },
+  "go": {
+    "description": "Go language tools and debugging",
+    "extensions": [
+      "golang.go"
+    ]
+  },
+  "markdown_docs": {
+    "description": "Markdown, Mermaid diagrams, Cucumber, and YAML",
+    "extensions": [
+      "yzhang.markdown-all-in-one",
+      "bierner.markdown-mermaid",
+      "bierner.markdown-emoji",
+      "bierner.markdown-checkbox",
+      "bierner.markdown-footnotes",
+      "bierner.markdown-preview-github-styles",
+      "bierner.github-markdown-preview",
+      "cucumberopen.cucumber-official",
+      "redhat.vscode-yaml"
+    ]
+  },
+  "remote_cloud": {
+    "description": "Remote SSH, WSL, Dev Containers, and GitHub Repositories",
+    "extensions": [
+      "ms-vscode-remote.remote-ssh",
+      "ms-vscode-remote.remote-ssh-edit",
+      "ms-vscode-remote.remote-wsl",
+      "ms-vscode.remote-explorer",
+      "ms-vscode.remote-repositories",
+      "ms-azuretools.vscode-containers",
+      "github.remotehub"
+    ]
+  }
+}

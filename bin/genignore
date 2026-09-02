@@ -1,0 +1,210 @@
+#!/usr/bin/env bash
+set -e
+
+# Color output helpers
+BLUE='\033[0;34m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+log() { echo -e "${BLUE}==>${NC} $1"; }
+success() { echo -e "${GREEN}✔${NC} $1"; }
+warn() { echo -e "${YELLOW}⚠${NC} $1"; }
+error() { echo -e "${RED}✖${NC} $1"; }
+
+# 1. Determine target directory (Git root or current directory)
+TARGET_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$TARGET_DIR"
+
+GITIGNORE_FILE="$TARGET_DIR/.gitignore"
+BACKUP_FILE="$TARGET_DIR/.gitignore.bak"
+
+log "Target directory: $TARGET_DIR"
+
+# 2. Detect technologies or use user arguments
+TARGETS=()
+
+if [ "$#" -gt 0 ]; then
+    # User passed manual targets (e.g. genignore svelte angular)
+    for arg in "$@"; do
+        TARGETS+=("$arg")
+    done
+else
+    # Auto-detection
+    log "Scanning project technologies..."
+
+    # Always include OS & Editor ignores
+    TARGETS+=("macos" "linux" "visualstudiocode" "vim")
+
+    # Svelte / SvelteKit
+    if [ -f "svelte.config.js" ] || [ -f "svelte.config.ts" ] || grep -q '"@sveltejs/kit"' package.json 2>/dev/null || grep -q '"svelte"' package.json 2>/dev/null; then
+        TARGETS+=("svelte" "sveltekit")
+    fi
+
+    # Angular
+    if [ -f "angular.json" ] || grep -q '"@angular/core"' package.json 2>/dev/null; then
+        TARGETS+=("angular")
+    fi
+
+    # Next.js
+    if [ -f "next.config.js" ] || [ -f "next.config.ts" ] || [ -f "next.config.mjs" ] || grep -q '"next"' package.json 2>/dev/null; then
+        TARGETS+=("nextjs")
+    fi
+
+    # Nuxt / Vue
+    if [ -f "nuxt.config.ts" ] || [ -f "nuxt.config.js" ] || grep -q '"nuxt"' package.json 2>/dev/null; then
+        TARGETS+=("nuxt")
+    fi
+
+    # Astro
+    if [ -f "astro.config.mjs" ] || [ -f "astro.config.ts" ]; then
+        TARGETS+=("astro")
+    fi
+
+    # Vite
+    if [ -f "vite.config.js" ] || [ -f "vite.config.ts" ] || [ -f "vite.config.mjs" ]; then
+        TARGETS+=("vite")
+    fi
+
+    # Node.js & TypeScript
+    if [ -f "package.json" ] || [ -f "pnpm-lock.yaml" ] || [ -f "yarn.lock" ] || [ -f "bun.lockb" ]; then
+        TARGETS+=("node")
+    fi
+    if [ -f "tsconfig.json" ]; then
+        TARGETS+=("typescript")
+    fi
+
+    # Python / Astral (uv & ruff)
+    if [ -f "pyproject.toml" ] || [ -f "requirements.txt" ] || [ -f "uv.lock" ] || [ -f "Pipfile" ] || [ -f "setup.py" ] || compgen -G "*.py" > /dev/null; then
+        TARGETS+=("python")
+    fi
+
+    # Rust
+    if [ -f "Cargo.toml" ]; then
+        TARGETS+=("rust")
+    fi
+
+    # Go
+    if [ -f "go.mod" ]; then
+        TARGETS+=("go")
+    fi
+
+    # Java / Gradle / Maven
+    if [ -f "pom.xml" ]; then
+        TARGETS+=("maven" "java")
+    fi
+    if [ -f "build.gradle" ] || [ -f "build.gradle.kts" ] || [ -f "gradlew" ]; then
+        TARGETS+=("gradle" "java")
+    fi
+fi
+
+# Remove duplicates from TARGETS array
+UNIQUE_TARGETS=($(echo "${TARGETS[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+
+if [ "${#UNIQUE_TARGETS[@]}" -eq 0 ]; then
+    warn "No specific technologies detected. Using default OS & Editor ignores."
+    UNIQUE_TARGETS=("macos" "linux" "visualstudiocode" "vim")
+fi
+
+QUERY_STRING=$(IFS=, ; echo "${UNIQUE_TARGETS[*]}")
+log "Detected components: ${UNIQUE_TARGETS[*]}"
+
+# 3. Backup existing .gitignore if present
+if [ -f "$GITIGNORE_FILE" ]; then
+    cp "$GITIGNORE_FILE" "$BACKUP_FILE"
+    log "Backed up existing .gitignore to .gitignore.bak"
+fi
+
+# 4. Fetch rules from gitignore.io / toptal API or use offline fallback
+log "Fetching latest gitignore rules..."
+FETCHED_CONTENT=""
+
+if command -v curl &>/dev/null; then
+    FETCHED_CONTENT=$(curl -sL --max-time 5 "https://www.toptal.com/developers/gitignore/api/${QUERY_STRING}" 2>/dev/null || true)
+fi
+
+# If API returned an error or is offline, generate essential fallback rules
+if [[ -z "$FETCHED_CONTENT" || "$FETCHED_CONTENT" == *"<!DOCTYPE html>"* || "$FETCHED_CONTENT" == *"#!! ERROR"* ]]; then
+    warn "Network unreachable or API unavailable. Using standard offline templates..."
+    FETCHED_CONTENT="# Auto-generated offline gitignore
+# OS & Editors
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node & Frontend
+node_modules/
+dist/
+build/
+out/
+.next/
+.nuxt/
+.output/
+.svelte-kit/
+.angular/
+.angular/cache/
+.vite/
+.astro/
+coverage/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+
+# Python & UV
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+"
+fi
+
+# 5. Merge / Write .gitignore cleanly
+TEMP_MERGED=$(mktemp)
+
+if [ -f "$GITIGNORE_FILE" ]; then
+    # Keep existing content at the top
+    cat "$GITIGNORE_FILE" > "$TEMP_MERGED"
+    echo "" >> "$TEMP_MERGED"
+    echo "# ==========================================" >> "$TEMP_MERGED"
+    echo "# Auto-generated by genignore ($(date '+%Y-%m-%d %H:%M:%S'))" >> "$TEMP_MERGED"
+    echo "# Components: ${UNIQUE_TARGETS[*]}" >> "$TEMP_MERGED"
+    echo "# ==========================================" >> "$TEMP_MERGED"
+    echo "$FETCHED_CONTENT" >> "$TEMP_MERGED"
+else
+    echo "# ==========================================" > "$TEMP_MERGED"
+    echo "# Auto-generated by genignore ($(date '+%Y-%m-%d %H:%M:%S'))" >> "$TEMP_MERGED"
+    echo "# Components: ${UNIQUE_TARGETS[*]}" >> "$TEMP_MERGED"
+    echo "# ==========================================" >> "$TEMP_MERGED"
+    echo "$FETCHED_CONTENT" >> "$TEMP_MERGED"
+fi
+
+# Move merged temp file into place
+mv "$TEMP_MERGED" "$GITIGNORE_FILE"
+
+success ".gitignore successfully generated and updated at: $GITIGNORE_FILE"
