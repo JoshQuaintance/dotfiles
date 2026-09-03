@@ -69,10 +69,37 @@ keymap("n", "<leader>sh", "<cmd>split<CR>", { desc = "Split window horizontally"
 keymap("n", "<leader>se", "<C-w>=", { desc = "Make splits equal size" })
 keymap("n", "<leader>sx", "<cmd>close<CR>", { desc = "Close current split" })
 
--- Buffer navigation (next/previous buffer)
+-- Safe buffer close function (preserves window layout and never quits Neovim)
+local function safe_close_buffer()
+  local bufnr = vim.api.nvim_get_current_buf()
+
+  -- If inside Neo-tree, close the sidebar
+  if vim.bo[bufnr].filetype == "neo-tree" then
+    vim.cmd("Neotree close")
+    return
+  end
+
+  local modified = vim.api.nvim_get_option_value("modified", { buf = bufnr })
+  if modified then
+    vim.notify("File has unsaved changes! Save first or use :bd! to discard.", vim.log.levels.WARN)
+    return
+  end
+
+  local buffers = vim.fn.getbufinfo({ buflisted = 1 })
+  if #buffers > 1 then
+    vim.cmd("bprevious")
+    vim.cmd("bdelete " .. bufnr)
+  else
+    vim.cmd("enew")
+    vim.cmd("bdelete " .. bufnr)
+  end
+end
+
+-- Buffer navigation & safe close
 keymap("n", "<S-h>", "<cmd>bprevious<CR>", { desc = "Previous buffer" })
 keymap("n", "<S-l>", "<cmd>bnext<CR>", { desc = "Next buffer" })
-keymap("n", "<leader>bd", "<cmd>bdelete<CR>", { desc = "Close buffer" })
+keymap("n", "<leader>bd", safe_close_buffer, { desc = "Close buffer safely" })
+keymap({ "n", "v", "i" }, "<D-w>", safe_close_buffer, { desc = "Close buffer (Cmd+W)" })
 
 -- Move lines up and down in visual mode
 keymap("v", "J", ":m '>+1<CR>gv=gv", { desc = "Move line down" })
