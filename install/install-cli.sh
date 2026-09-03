@@ -15,15 +15,24 @@ esac
 
 if [ "$OS" = "Darwin" ]; then
     ensure_homebrew
-    log "Installing CLI tools via Homebrew..."
-    brew install ripgrep fd fzf zoxide starship eza atuin
+    log "Installing / Updating CLI tools via Homebrew..."
+    for pkg in ripgrep fd fzf zoxide starship eza atuin; do
+        if brew list "$pkg" &>/dev/null; then
+            ask_update_tool "$pkg" "$(brew info "$pkg" 2>/dev/null | head -n 1 | awk '{print $3}')" DO_UPD
+            if [ "$DO_UPD" = true ]; then
+                brew upgrade "$pkg" 2>/dev/null || true
+            fi
+        else
+            brew install "$pkg"
+        fi
+    done
 
 elif [ "$OS" = "Linux" ]; then
     ARCH="$(uname -m)"
 
     if command -v apt-get &>/dev/null; then
         # Ubuntu / Debian
-        log "Installing base CLI packages via apt..."
+        log "Ensuring base CLI packages via apt..."
         run_sudo apt-get update -y
         run_sudo apt-get install -y curl wget git build-essential ripgrep fd-find fzf tar gzip
         
@@ -34,7 +43,7 @@ elif [ "$OS" = "Linux" ]; then
         fi
     elif command -v dnf &>/dev/null; then
         # Fedora / RHEL
-        log "Installing base CLI packages via dnf..."
+        log "Ensuring base CLI packages via dnf..."
         run_sudo dnf install -y curl wget git make gcc ripgrep fd-find fzf eza tar gzip
         if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
             ln -sf "$(which fdfind)" "$HOME/.local/bin/fd"
@@ -45,9 +54,13 @@ elif [ "$OS" = "Linux" ]; then
         run_sudo pacman -S --noconfirm --needed curl wget git base-devel ripgrep fd fzf eza atuin
     fi
 
-    # 1. Install eza on Linux if not already installed
-    if ! command -v eza &>/dev/null; then
-        log "Installing eza (standalone binary)..."
+    # 1. eza
+    DO_EZA=true
+    if command -v eza &>/dev/null; then
+        ask_update_tool "eza" "$(eza --version 2>/dev/null | head -n 1 | awk '{print $1,$2}')" DO_EZA
+    fi
+    if [ "$DO_EZA" = true ]; then
+        log "Installing / Updating eza (standalone binary)..."
         EZA_ARCH="x86_64-unknown-linux-gnu"
         if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
             EZA_ARCH="aarch64-unknown-linux-gnu"
@@ -55,36 +68,51 @@ elif [ "$OS" = "Linux" ]; then
         curl -fsSL "https://github.com/eza-community/eza/releases/latest/download/eza_${EZA_ARCH}.tar.gz" | tar -xz -C "$HOME/.local/bin/"
         chmod +x "$HOME/.local/bin/eza" 2>/dev/null || true
         [ "$(id -u)" -eq 0 ] && ln -sf "$HOME/.local/bin/eza" "/usr/local/bin/eza" 2>/dev/null || true
-        success "eza installed to ~/.local/bin/eza"
+        success "eza ready!"
     fi
 
-    # 2. Install zoxide via official installer
-    if ! command -v zoxide &>/dev/null; then
-        log "Installing zoxide..."
+    # 2. zoxide
+    DO_ZOXIDE=true
+    if command -v zoxide &>/dev/null; then
+        ask_update_tool "zoxide" "$(zoxide --version 2>/dev/null | head -n 1)" DO_ZOXIDE
+    fi
+    if [ "$DO_ZOXIDE" = true ]; then
+        log "Installing / Updating zoxide..."
         curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | sh
+        [ "$(id -u)" -eq 0 ] && ln -sf "$HOME/.local/bin/zoxide" "/usr/local/bin/zoxide" 2>/dev/null || true
     fi
 
-    # 3. Install Starship prompt via official installer
-    if ! command -v starship &>/dev/null; then
-        log "Installing Starship prompt..."
+    # 3. Starship prompt
+    DO_STARSHIP=true
+    if command -v starship &>/dev/null; then
+        ask_update_tool "Starship" "$(starship --version 2>/dev/null | head -n 1 | awk '{print $1,$2}')" DO_STARSHIP
+    fi
+    if [ "$DO_STARSHIP" = true ]; then
+        log "Installing / Updating Starship prompt..."
         curl -sS https://starship.rs/install.sh | sh -s -- -y -b "$HOME/.local/bin"
         chmod +x "$HOME/.local/bin/starship" 2>/dev/null || true
         [ "$(id -u)" -eq 0 ] && ln -sf "$HOME/.local/bin/starship" "/usr/local/bin/starship" 2>/dev/null || true
-        success "Starship installed!"
+        success "Starship ready!"
     fi
 
-    # 4. Install Atuin (shell history) via official installer
-    if ! command -v atuin &>/dev/null && [ ! -f "$HOME/.atuin/bin/atuin" ]; then
-        log "Installing Atuin (shell history)..."
+    # 4. Atuin
+    DO_ATUIN=true
+    if command -v atuin &>/dev/null || [ -f "$HOME/.atuin/bin/atuin" ]; then
+        ask_update_tool "Atuin" "$(atuin --version 2>/dev/null | head -n 1)" DO_ATUIN
+    fi
+    if [ "$DO_ATUIN" = true ]; then
+        log "Installing / Updating Atuin (shell history)..."
         curl --proto '=https' --tlsv1.2 -sSf https://setup.atuin.sh | sh -s -- --no-modify-path 2>/dev/null || true
     fi
 fi
 
-# Symlink Starship prompt configuration
+# Symlink Starship prompt configuration with backup
 mkdir -p "$HOME/.config"
 if [ -f "$DOTFILES_DIR/starship/starship.toml" ]; then
     if [ -f "$HOME/.config/starship.toml" ] && [ ! -L "$HOME/.config/starship.toml" ]; then
-        cp "$HOME/.config/starship.toml" "$HOME/.config/starship.toml.bak"
+        BACKUP_STARSHIP="$HOME/.config/starship.toml.bak"
+        [ -e "$BACKUP_STARSHIP" ] && BACKUP_STARSHIP="$HOME/.config/starship.toml.bak.$(date +%Y%m%d%H%M%S)"
+        cp "$HOME/.config/starship.toml" "$BACKUP_STARSHIP"
     fi
     ln -sfn "$DOTFILES_DIR/starship/starship.toml" "$HOME/.config/starship.toml"
     success "Linked ~/.config/starship.toml -> $DOTFILES_DIR/starship/starship.toml"
@@ -103,4 +131,4 @@ if [ -d "$DOTFILES_DIR/bin" ]; then
     done
 fi
 
-success "All Core CLI utilities & shell tools installed successfully!"
+success "All Core CLI utilities & shell tools configured successfully!"

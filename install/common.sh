@@ -29,6 +29,40 @@ run_sudo() {
     fi
 }
 
+# Helper to read from /dev/tty if stdin is piped (e.g. curl ... | bash), with fallback
+read_input() {
+    local prompt="$1"
+    local var_name="$2"
+    if [ -t 0 ]; then
+        read -rp "$prompt" "$var_name"
+    elif [ -e /dev/tty ] && [ -r /dev/tty ] && (true < /dev/tty) 2>/dev/null; then
+        read -rp "$prompt" "$var_name" < /dev/tty
+    else
+        read -rp "$prompt" "$var_name" 2>/dev/null || true
+    fi
+}
+
+# Helper to ask whether to update an already installed tool (defaults to Yes/Update)
+ask_update_tool() {
+    local tool_name="$1"
+    local version_info="$2"
+    local ans_var="$3"
+    
+    local prompt_msg="  [?] $tool_name"
+    if [ -n "$version_info" ]; then
+        prompt_msg="$prompt_msg ($version_info)"
+    fi
+    prompt_msg="$prompt_msg is already installed. Update to latest? [Y/n]: "
+    
+    local user_ans=""
+    read_input "$prompt_msg" user_ans
+    if [[ "$user_ans" =~ ^[Nn]$ ]]; then
+        eval "$ans_var=false"
+    else
+        eval "$ans_var=true"
+    fi
+}
+
 # Ensure local bin directory exists in PATH
 mkdir -p "$HOME/.local/bin"
 case ":$PATH:" in

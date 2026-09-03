@@ -26,14 +26,16 @@ ensure_git
 git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
 git config --global --add safe.directory "$(pwd)" 2>/dev/null || true
 
-# Helper to read from /dev/tty if stdin is piped (e.g. curl ... | bash)
+# Helper to read from /dev/tty if stdin is piped (e.g. curl ... | bash), with fallback
 read_input() {
     local prompt="$1"
     local var_name="$2"
     if [ -t 0 ]; then
         read -rp "$prompt" "$var_name"
-    else
+    elif [ -e /dev/tty ] && [ -r /dev/tty ] && (true < /dev/tty) 2>/dev/null; then
         read -rp "$prompt" "$var_name" < /dev/tty
+    else
+        read -rp "$prompt" "$var_name" 2>/dev/null || true
     fi
 }
 

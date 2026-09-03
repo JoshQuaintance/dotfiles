@@ -4,19 +4,30 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-log "Installing Astral Python Development Tools (uv & ruff)..."
+log "Setting up Astral Python Development Tools (uv & ruff)..."
 
-if [ "$OS" = "Darwin" ]; then
-    ensure_homebrew
-    brew install uv ruff
+# Ensure ~/.local/bin is in PATH
+export PATH="$HOME/.local/bin:$PATH"
 
-elif [ "$OS" = "Linux" ]; then
-    ensure_base_deps
-    log "Installing uv..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    log "Installing ruff..."
-    curl -LsSf https://astral.sh/ruff/install.sh | sh
+DO_ASTRAL=true
+if command -v uv &>/dev/null; then
+    UV_VER="$(uv --version 2>/dev/null | head -n 1 || true)"
+    ask_update_tool "Astral tools (uv & ruff)" "$UV_VER" DO_ASTRAL
 fi
 
-export PATH="$HOME/.local/bin:$PATH"
-success "Astral Python tools (uv & ruff) installed successfully!"
+if [ "$DO_ASTRAL" = true ]; then
+    if [ "$OS" = "Darwin" ]; then
+        ensure_homebrew
+        brew upgrade uv 2>/dev/null || brew install uv
+        brew upgrade ruff 2>/dev/null || brew install ruff
+
+    elif [ "$OS" = "Linux" ]; then
+        ensure_base_deps
+        log "Installing / Updating uv..."
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        log "Installing / Updating ruff..."
+        curl -LsSf https://astral.sh/ruff/install.sh | sh
+    fi
+fi
+
+success "Astral Python tools (uv & ruff) ready!"
