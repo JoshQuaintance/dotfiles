@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -e
 
+# Disable Zsh builtin log command if running under Zsh
+disable -r log 2>/dev/null || true
+
 # Base dotfiles directory
 export DOTFILES_DIR="${DOTFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd || echo "$HOME/Codes/dotfiles")}"
 export OS="$(uname -s)"
@@ -13,10 +16,10 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-log() { echo -e "${BLUE}==>${NC} $1"; }
-success() { echo -e "${GREEN}✔${NC} $1"; }
-warn() { echo -e "${YELLOW}⚠${NC} $1"; }
-error() { echo -e "${RED}✖${NC} $1"; }
+log() { echo -e "${BLUE}==>${NC} $*"; }
+success() { echo -e "${GREEN}✔${NC} $*"; }
+warn() { echo -e "${YELLOW}⚠${NC} $*"; }
+error() { echo -e "${RED}✖${NC} $*"; }
 
 # Universal sudo wrapper (runs directly if root, uses sudo if available)
 run_sudo() {
@@ -29,16 +32,15 @@ run_sudo() {
     fi
 }
 
-# Helper to read from /dev/tty if stdin is piped (e.g. curl ... | bash), with fallback
+# Portable read_input compatible with both Bash and Zsh
 read_input() {
     local prompt="$1"
     local var_name="$2"
-    if [ -t 0 ]; then
-        read -rp "$prompt" "$var_name"
-    elif [ -e /dev/tty ] && [ -r /dev/tty ] && (true < /dev/tty) 2>/dev/null; then
-        read -rp "$prompt" "$var_name" < /dev/tty
+    printf "%s" "$prompt"
+    if [ -e /dev/tty ] && [ -r /dev/tty ] && (true < /dev/tty) 2>/dev/null; then
+        read -r "$var_name" < /dev/tty
     else
-        read -rp "$prompt" "$var_name" 2>/dev/null || true
+        read -r "$var_name"
     fi
 }
 

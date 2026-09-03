@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -e
 
+# Disable Zsh builtin log command if running under Zsh
+disable -r log 2>/dev/null || true
+
 # Repository configuration
 DOTFILES_REPO="https://github.com/JoshQuaintance/dotfiles.git"
 RAW_BASE_URL="https://raw.githubusercontent.com/JoshQuaintance/dotfiles/main"
@@ -26,16 +29,15 @@ ensure_git
 git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
 git config --global --add safe.directory "$(pwd)" 2>/dev/null || true
 
-# Helper to read from /dev/tty if stdin is piped (e.g. curl ... | bash), with fallback
+# Helper to read from /dev/tty if stdin is piped (e.g. curl ... | bash), portable for both Bash and Zsh
 read_input() {
     local prompt="$1"
     local var_name="$2"
-    if [ -t 0 ]; then
-        read -rp "$prompt" "$var_name"
-    elif [ -e /dev/tty ] && [ -r /dev/tty ] && (true < /dev/tty) 2>/dev/null; then
-        read -rp "$prompt" "$var_name" < /dev/tty
+    printf "%s" "$prompt"
+    if [ -e /dev/tty ] && [ -r /dev/tty ] && (true < /dev/tty) 2>/dev/null; then
+        read -r "$var_name" < /dev/tty
     else
-        read -rp "$prompt" "$var_name" 2>/dev/null || true
+        read -r "$var_name"
     fi
 }
 
@@ -45,7 +47,11 @@ launch_shell() {
     success "$1"
     if command -v zsh &>/dev/null; then
         log "Launching your new Zsh environment..."
-        exec zsh -l
+        if [ -e /dev/tty ] && [ -r /dev/tty ] && (true < /dev/tty) 2>/dev/null; then
+            exec zsh -l < /dev/tty
+        else
+            exec zsh -l
+        fi
     fi
     exit 0
 }
@@ -127,39 +133,41 @@ fi
 # ==========================================
 # Option 3: Custom / Selective
 # ==========================================
-log "Custom / Selective Installation Mode..."
+if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
+    log "Custom / Selective Installation Mode..."
 
-DOTFILES_DIR="${DOTFILES_DIR:-$DEFAULT_TARGET_DIR}"
-if [ ! -d "$DOTFILES_DIR/.git" ]; then
-    log "Cloning dotfiles repository to $DOTFILES_DIR..."
-    mkdir -p "$(dirname "$DOTFILES_DIR")"
-    git clone "$DOTFILES_REPO" "$DOTFILES_DIR"
+    DOTFILES_DIR="${DOTFILES_DIR:-$DEFAULT_TARGET_DIR}"
+    if [ ! -d "$DOTFILES_DIR/.git" ]; then
+        log "Cloning dotfiles repository to $DOTFILES_DIR..."
+        mkdir -p "$(dirname "$DOTFILES_DIR")"
+        git clone "$DOTFILES_REPO" "$DOTFILES_DIR"
+    fi
+
+    git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
+    cd "$DOTFILES_DIR"
+    source "$DOTFILES_DIR/install/common.sh"
+
+    read_input "Install Core CLI Utilities (ripgrep, fd, fzf, zoxide, genignore)? [y/N]: " a_cli
+    read_input "Install & Configure Zsh Shell (.zshrc & Oh My Zsh)? [y/N]: " a_shell
+
+    read_input "Install Neovim & Configuration? [y/N]: " a_nvim
+    if [[ "$a_nvim" =~ ^[Yy]$ ]]; then
+        read_input "  Use (f)ull plugins or (s)erver minimal? [f/s]: " n_ans
+    fi
+
+    read_input "Install VSCode settings & extensions? [y/N]: " a_vsc
+    read_input "Install Mise & Node 24? [y/N]: " a_mise
+    read_input "Install Astral Python Tools (uv & ruff)? [y/N]: " a_astral
+
+    # Run selected module installers
+    [[ "$a_cli" =~ ^[Yy]$ ]] && "$DOTFILES_DIR/install/install-cli.sh"
+    [[ "$a_shell" =~ ^[Yy]$ ]] && "$DOTFILES_DIR/install/install-shell.sh"
+    if [[ "$a_nvim" =~ ^[Yy]$ ]]; then
+        [[ "$n_ans" =~ ^[Ss]$ ]] && "$DOTFILES_DIR/install/install-nvim.sh" "--server" || "$DOTFILES_DIR/install/install-nvim.sh" "--full"
+    fi
+    [[ "$a_vsc" =~ ^[Yy]$ ]] && "$DOTFILES_DIR/install/install-vscode.sh"
+    [[ "$a_mise" =~ ^[Yy]$ ]] && "$DOTFILES_DIR/install/install-mise.sh"
+    [[ "$a_astral" =~ ^[Yy]$ ]] && "$DOTFILES_DIR/install/install-astral.sh"
+
+    launch_shell "Selected dotfiles components installed successfully!"
 fi
-
-git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
-cd "$DOTFILES_DIR"
-source "$DOTFILES_DIR/install/common.sh"
-
-read_input "Install Core CLI Utilities (ripgrep, fd, fzf, zoxide, genignore)? [y/N]: " a_cli
-read_input "Install & Configure Zsh Shell (.zshrc & Oh My Zsh)? [y/N]: " a_shell
-
-read_input "Install Neovim & Configuration? [y/N]: " a_nvim
-if [[ "$a_nvim" =~ ^[Yy]$ ]]; then
-    read_input "  Use (f)ull plugins or (s)erver minimal? [f/s]: " n_ans
-fi
-
-read_input "Install VSCode settings & extensions? [y/N]: " a_vsc
-read_input "Install Mise & Node 24? [y/N]: " a_mise
-read_input "Install Astral Python Tools (uv & ruff)? [y/N]: " a_astral
-
-# Run selected module installers
-[[ "$a_cli" =~ ^[Yy]$ ]] && "$DOTFILES_DIR/install/install-cli.sh"
-[[ "$a_shell" =~ ^[Yy]$ ]] && "$DOTFILES_DIR/install/install-shell.sh"
-if [[ "$a_nvim" =~ ^[Yy]$ ]]; then
-    [[ "$n_ans" =~ ^[Ss]$ ]] && "$DOTFILES_DIR/install/install-nvim.sh" "--server" || "$DOTFILES_DIR/install/install-nvim.sh" "--full"
-fi
-[[ "$a_vsc" =~ ^[Yy]$ ]] && "$DOTFILES_DIR/install/install-vscode.sh"
-[[ "$a_mise" =~ ^[Yy]$ ]] && "$DOTFILES_DIR/install/install-mise.sh"
-[[ "$a_astral" =~ ^[Yy]$ ]] && "$DOTFILES_DIR/install/install-astral.sh"
-
-launch_shell "Selected dotfiles components installed successfully!"
