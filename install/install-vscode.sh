@@ -125,38 +125,26 @@ if ('$group' === 'all') {
         done
     else
         echo ""
-        echo "=========================================="
-        echo "    VSCode Extension Category Selection  "
-        echo "=========================================="
-        echo "  1) Install ALL extensions"
-        echo "  2) Core only (Themes, Git, Prettier, ESLint, Neovim)"
-        echo "  3) Interactive / Select by category"
-        echo "  4) Skip extensions install"
-        echo "=========================================="
-        read -rp "Select option [1-4]: " ext_choice
+        vsc_cat_labels=(
+            "Core Tools          - Themes, GitLens, Prettier, ESLint, Neovim"
+            "Web / TypeScript    - Tailwind CSS, Bun runtime support"
+            "Svelte & SvelteKit  - Official language support & snippets"
+            "Angular             - Language Service & schematic console"
+            "Python              - Pylance, ruff, debugpy"
+            "Java & Gradle       - Red Hat Java, debugger, Gradle"
+            "Go                  - Go language tools & LSP"
+            "Markdown & Docs     - Mermaid diagrams, Markdown All-in-One"
+            "Remote & Cloud      - Remote SSH, WSL & Dev Containers"
+        )
+        vsc_cat_keys=(core web svelte angular python java go markdown_docs remote_cloud)
+        vsc_cat_defs=(1 1 1 1 1 0 0 1 1)
+        chosen_vsc_indices=()
 
-        case "$ext_choice" in
-            1|"")
-                SELECTED_GROUPS=("all")
-                ;;
-            2)
-                SELECTED_GROUPS=("core")
-                ;;
-            3)
-                read -rp "  [+] Core tools (Themes, Git, ESLint, Prettier, Neovim)? [Y/n]: " a; [[ ! "$a" =~ ^[Nn]$ ]] && SELECTED_GROUPS+=("core")
-                read -rp "  [+] Web / TypeScript (Tailwind, Bun)? [Y/n]: " a; [[ ! "$a" =~ ^[Nn]$ ]] && SELECTED_GROUPS+=("web")
-                read -rp "  [+] Svelte / SvelteKit? [Y/n]: " a; [[ ! "$a" =~ ^[Nn]$ ]] && SELECTED_GROUPS+=("svelte")
-                read -rp "  [+] Angular? [Y/n]: " a; [[ ! "$a" =~ ^[Nn]$ ]] && SELECTED_GROUPS+=("angular")
-                read -rp "  [+] Python (Pylance, Black, Pylint)? [Y/n]: " a; [[ ! "$a" =~ ^[Nn]$ ]] && SELECTED_GROUPS+=("python")
-                read -rp "  [+] Java & Gradle? [Y/n]: " a; [[ ! "$a" =~ ^[Nn]$ ]] && SELECTED_GROUPS+=("java")
-                read -rp "  [+] Go? [Y/n]: " a; [[ ! "$a" =~ ^[Nn]$ ]] && SELECTED_GROUPS+=("go")
-                read -rp "  [+] Markdown, Mermaid & YAML? [Y/n]: " a; [[ ! "$a" =~ ^[Nn]$ ]] && SELECTED_GROUPS+=("markdown_docs")
-                read -rp "  [+] Remote SSH, WSL & Containers? [Y/n]: " a; [[ ! "$a" =~ ^[Nn]$ ]] && SELECTED_GROUPS+=("remote_cloud")
-                ;;
-            4)
-                SELECTED_GROUPS=()
-                ;;
-        esac
+        multiselect "Select VSCode Extension Categories to install" vsc_cat_labels vsc_cat_defs chosen_vsc_indices
+
+        for idx in "${chosen_vsc_indices[@]}"; do
+            SELECTED_GROUPS+=("${vsc_cat_keys[$idx]}")
+        done
     fi
 
     if [ "${#SELECTED_GROUPS[@]}" -gt 0 ]; then
