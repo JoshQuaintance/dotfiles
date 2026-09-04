@@ -6,7 +6,8 @@ disable -r log 2>/dev/null || true
 
 # Repository configuration
 DOTFILES_REPO="https://github.com/JoshQuaintance/dotfiles.git"
-RAW_BASE_URL="https://raw.githubusercontent.com/JoshQuaintance/dotfiles/main"
+DOTFILES_BRANCH="${DOTFILES_BRANCH:-interactive}"
+RAW_BASE_URL="https://raw.githubusercontent.com/JoshQuaintance/dotfiles/${DOTFILES_BRANCH}"
 DEFAULT_TARGET_DIR="$HOME/Codes/dotfiles"
 
 # Determine if running from a local clone or remotely via curl
@@ -87,7 +88,7 @@ if [[ "$CHOICE" == "1" || "$CHOICE" == "--workstation" || "$CHOICE" == "--all" ]
     if [ ! -d "$DOTFILES_DIR/.git" ]; then
         log "Cloning dotfiles to $DOTFILES_DIR..."
         mkdir -p "$(dirname "$DOTFILES_DIR")"
-        git clone "$DOTFILES_REPO" "$DOTFILES_DIR"
+        git clone -b "$DOTFILES_BRANCH" "$DOTFILES_REPO" "$DOTFILES_DIR"
     fi
 
     git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
@@ -115,7 +116,7 @@ if [[ "$CHOICE" == "2" || "$CHOICE" == "--server" || "$CHOICE" == "--minimal" ]]
     DOTFILES_DIR="${HOME}/.dotfiles"
     if [ ! -d "$DOTFILES_DIR/.git" ]; then
         log "Cloning sparse repository to $DOTFILES_DIR..."
-        git clone --depth 1 --filter=blob:none --sparse "$DOTFILES_REPO" "$DOTFILES_DIR"
+        git clone -b "$DOTFILES_BRANCH" --depth 1 --filter=blob:none --sparse "$DOTFILES_REPO" "$DOTFILES_DIR"
     fi
 
     git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
@@ -140,7 +141,7 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
     if [ ! -d "$DOTFILES_DIR/.git" ]; then
         log "Cloning dotfiles repository to $DOTFILES_DIR..."
         mkdir -p "$(dirname "$DOTFILES_DIR")"
-        git clone "$DOTFILES_REPO" "$DOTFILES_DIR"
+        git clone -b "$DOTFILES_BRANCH" "$DOTFILES_REPO" "$DOTFILES_DIR"
     fi
 
     git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
