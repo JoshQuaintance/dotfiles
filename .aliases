@@ -1,7 +1,6 @@
 # ==========================================
 # General & Editor Aliases
 # ==========================================
-alias v="nvim"
 alias vi="nvim"
 alias vim="nvim"
 
@@ -13,8 +12,6 @@ alias codes="cd ~/Codes/"
 
 # Environment & Python
 alias pyactivate="source ./venv/bin/activate"
-alias activatestl="[ -f \"$HOME/Codes/sentinel-service/venv/bin/activate\" ] && source \"$HOME/Codes/sentinel-service/venv/bin/activate\""
-alias phcpy="scrcpy --turn-screen-off --no-audio"
 
 # Package Managers
 alias npmwin="npm i --legacy-peer-deps --verbose"
@@ -41,9 +38,6 @@ alias gcan="git commit --amend --no-edit"
 
 # Branch & Checkout
 alias gb="git branch"
-alias gba="git branch -a"
-alias gbd="git branch -d"
-alias gbD="git branch -D"
 alias gco="git checkout"
 alias gcb="git checkout -b"
 alias gsw="git switch"
