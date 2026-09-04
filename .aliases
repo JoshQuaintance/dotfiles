@@ -1,6 +1,7 @@
 # ==========================================
 # General & Editor Aliases
 # ==========================================
+alias v="nvim"
 alias vi="nvim"
 alias vim="nvim"
 
@@ -8,7 +9,16 @@ alias vim="nvim"
 alias gi="genignore"
 
 # Navigation & Projects
+alias cd..="cd .."
 alias codes="cd ~/Codes/"
+
+# Directory Listing (eza with icons & git status)
+if command -v eza &>/dev/null; then
+  alias l="eza --icons --group-directories-first"
+  alias ll="eza -la --icons --octal-permissions --group-directories-first --git"
+  alias lt="eza --tree --level=2 --icons"
+  alias tree="eza --tree --icons"
+fi
 
 # Environment & Python
 alias pyactivate="source ./venv/bin/activate"
@@ -16,6 +26,29 @@ alias pyactivate="source ./venv/bin/activate"
 # Package Managers
 alias npmwin="npm i --legacy-peer-deps --verbose"
 alias npmv="npm i --verbose"
+alias npmi-clean="rm -rf node_modules package-lock.json && npm install"
+
+# ==========================================
+# Ports & Process Management
+# ==========================================
+port() { lsof -i :"$1"; }
+
+killport() {
+  local pid
+  pid=$(lsof -ti :"$1")
+  if [ -n "$pid" ]; then
+    kill -9 "$pid" && echo "Killed process $pid on port $1"
+  else
+    echo "No process running on port $1"
+  fi
+}
+
+# ==========================================
+# Network & System Info
+# ==========================================
+alias myip="curl -s https://icanhazip.com"
+alias localip="ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print \$1}'"
+alias reload="exec zsh -l"
 
 # ==========================================
 # Git Shortcuts
@@ -38,6 +71,9 @@ alias gcan="git commit --amend --no-edit"
 
 # Branch & Checkout
 alias gb="git branch"
+alias gba="git branch -a"
+alias gbd="git branch -d"
+alias gbD="git branch -D"
 alias gco="git checkout"
 alias gcb="git checkout -b"
 alias gsw="git switch"
@@ -59,6 +95,8 @@ alias gpr="git pull --rebase"
 alias gl="git log --oneline --graph --decorate"
 alias glo="git log --oneline --graph --decorate -n 20"
 alias glog="git log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
+alias gshow="git show --stat"
+gsearch() { git log --all --grep="$1" --oneline; }
 
 # Stash
 alias gst="git stash"
@@ -80,3 +118,6 @@ alias grhh="git reset --hard"
 alias guncommit="git reset --soft HEAD~1"
 alias grs="git restore"
 alias grss="git restore --staged"
+
+# Branch Cleanup (deletes local branches already merged into main/master/develop)
+alias gbclean="git branch --merged | grep -Ev '(\*|master|main|develop|staging)' | xargs -r git branch -d 2>/dev/null || git branch --merged | grep -Ev '(\*|master|main|develop|staging)' | xargs git branch -d"
