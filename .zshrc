@@ -163,28 +163,10 @@ export EDITOR='nvim'
 export VISUAL='nvim'
 
 # ==========================================
-# Aliases
+# Aliases & Shortcuts
 # ==========================================
-alias v="nvim"
-alias vi="nvim"
-alias vim="nvim"
-
-# Git Ignore generator alias
-alias gi="genignore"
-
-alias pyactivate="source ./venv/bin/activate"
-alias activatestl="[ -f \"$HOME/Codes/sentinel-service/venv/bin/activate\" ] && source \"$HOME/Codes/sentinel-service/venv/bin/activate\""
-alias phcpy="scrcpy --turn-screen-off --no-audio"
-alias codes="cd ~/Codes/"
-alias npmwin="npm i --legacy-peer-deps --verbose"
-alias npmv="npm i --verbose"
-
-# Git aliases
-alias gs="git status"
-alias ga="git add"
-alias gc="git commit"
-alias gp="git push"
-alias gl="git log --oneline --graph --decorate"
+[ -f "$HOME/.aliases" ] && source "$HOME/.aliases"
+[ -f "$DOTFILES_DIR/.aliases" ] && [ ! -f "$HOME/.aliases" ] && source "$DOTFILES_DIR/.aliases"
 
 # ==========================================
 # Custom Functions
@@ -242,6 +224,10 @@ conf() {
       target_file="$HOME/.bashrc"
       is_shell_rc=true
       ;;
+    alias|aliases)
+      target_file="$HOME/.aliases"
+      is_shell_rc=true
+      ;;
     nvim|vim)
       target_file="$HOME/.config/nvim"
       ;;
@@ -259,7 +245,7 @@ conf() {
         target_file="$1"
       else
         echo "Unknown config target: $1"
-        echo "Usage: conf [shell|nvim|dotfiles|git|starship|<path>]"
+        echo "Usage: conf [shell|alias|nvim|dotfiles|git|starship|<path>]"
         return 1
       fi
       ;;

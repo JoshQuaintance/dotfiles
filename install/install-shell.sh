@@ -51,4 +51,18 @@ if [ -f "$DOTFILES_DIR/.zshrc" ]; then
     success "Linked ~/.zshrc -> $DOTFILES_DIR/.zshrc"
 fi
 
+# 5. Symlink .aliases with .bak backup
+if [ -f "$DOTFILES_DIR/.aliases" ]; then
+    if [ -e "$HOME/.aliases" ] || [ -L "$HOME/.aliases" ]; then
+        if [ "$(readlink "$HOME/.aliases" 2>/dev/null)" != "$DOTFILES_DIR/.aliases" ]; then
+            log "Backing up existing ~/.aliases to ~/.aliases.bak..."
+            cp -L "$HOME/.aliases" "$HOME/.aliases.bak" 2>/dev/null || mv "$HOME/.aliases" "$HOME/.aliases.bak"
+            success "Created backup at ~/.aliases.bak"
+        fi
+    fi
+
+    ln -sfn "$DOTFILES_DIR/.aliases" "$HOME/.aliases"
+    success "Linked ~/.aliases -> $DOTFILES_DIR/.aliases"
+fi
+
 success "Zsh shell setup complete!"
