@@ -6,7 +6,7 @@ disable -r log 2>/dev/null || true
 
 # Repository configuration
 DOTFILES_REPO="https://github.com/JoshQuaintance/dotfiles.git"
-DOTFILES_BRANCH="${DOTFILES_BRANCH:-interactive}"
+DOTFILES_BRANCH="${DOTFILES_BRANCH:-main}"
 RAW_BASE_URL="https://raw.githubusercontent.com/JoshQuaintance/dotfiles/${DOTFILES_BRANCH}"
 DEFAULT_TARGET_DIR="$HOME/Codes/dotfiles"
 
