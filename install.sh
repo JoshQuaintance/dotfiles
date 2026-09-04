@@ -147,27 +147,95 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
     cd "$DOTFILES_DIR"
     source "$DOTFILES_DIR/install/common.sh"
 
-    read_input "Install Core CLI Utilities (ripgrep, fd, fzf, zoxide, genignore)? [y/N]: " a_cli
-    read_input "Install & Configure Zsh Shell (.zshrc & Oh My Zsh)? [y/N]: " a_shell
+    # Step 1: Core CLI Utilities Checklist
+    echo ""
+    cli_options=(
+        "ripgrep (rg)    - Fast text search in files"
+        "fd-find (fd)    - User-friendly, fast find replacement"
+        "fzf             - General-purpose command-line fuzzy finder"
+        "zoxide (z)      - Smarter cd directory jumper"
+        "eza             - Modern ls with icons & git status"
+        "starship        - Ultra-fast customizable shell prompt"
+        "atuin           - Shell history with sync and fuzzy search"
+        "genignore       - Smart gitignore generator"
+    )
+    cli_keys=(ripgrep fd fzf zoxide eza starship atuin genignore)
+    cli_defs=(1 1 1 1 1 1 1 1)
+    chosen_cli_indices=()
+    multiselect "Step 1/2: Select Core CLI Utilities to install" cli_options cli_defs chosen_cli_indices
 
-    read_input "Install Neovim & Configuration? [y/N]: " a_nvim
-    if [[ "$a_nvim" =~ ^[Yy]$ ]]; then
-        read_input "  Use (f)ull plugins or (s)erver minimal? [f/s]: " n_ans
+    # Map chosen CLI indices to tool names
+    selected_cli_tools=()
+    for idx in "${chosen_cli_indices[@]}"; do
+        selected_cli_tools+=("${cli_keys[$idx]}")
+    done
+
+    # Step 2: Main Environments & Development Tools
+    echo ""
+    env_options=(
+        "Zsh Shell & Config      - Portable .zshrc, .aliases & Oh My Zsh"
+        "Neovim & Configuration   - Modern Lua setup, Lazy, Treesitter, LSP"
+        "Visual Studio Code       - Settings, keybindings, snippets & extensions"
+        "Mise & Node 24           - Polyglot runtime manager with Node 24"
+        "Astral Python Tools      - uv package manager & ruff linter/formatter"
+    )
+    env_keys=(shell nvim vscode mise astral)
+    env_defs=(1 1 1 1 1)
+    chosen_env_indices=()
+    multiselect "Step 2/2: Select Development Environments to install" env_options env_defs chosen_env_indices
+
+    selected_envs=()
+    for idx in "${chosen_env_indices[@]}"; do
+        selected_envs+=("${env_keys[$idx]}")
+    done
+
+    # If Neovim was chosen, ask profile
+    nvim_mode="--full"
+    for env_item in "${selected_envs[@]}"; do
+        if [ "$env_item" = "nvim" ]; then
+            echo ""
+            nvim_opts=(
+                "Full Workstation  - Complete plugin suite (Treesitter, Telescope, Git, Markdown)"
+                "Server / Minimal  - Lightweight configuration for headless servers"
+            )
+            nvim_defs=(1 0)
+            chosen_nvim_idx=()
+            multiselect "Select Neovim Profile:" nvim_opts nvim_defs chosen_nvim_idx
+            if [ "${#chosen_nvim_idx[@]}" -gt 0 ] && [ "${chosen_nvim_idx[0]}" -eq 1 ]; then
+                nvim_mode="--server"
+            fi
+            break
+        fi
+    done
+
+    echo ""
+    log "Beginning installation of selected components..."
+
+    # Run selected CLI tools
+    if [ "${#selected_cli_tools[@]}" -gt 0 ]; then
+        "$DOTFILES_DIR/install/install-cli.sh" "${selected_cli_tools[@]}"
     fi
 
-    read_input "Install VSCode settings & extensions? [y/N]: " a_vsc
-    read_input "Install Mise & Node 24? [y/N]: " a_mise
-    read_input "Install Astral Python Tools (uv & ruff)? [y/N]: " a_astral
-
-    # Run selected module installers
-    [[ "$a_cli" =~ ^[Yy]$ ]] && "$DOTFILES_DIR/install/install-cli.sh"
-    [[ "$a_shell" =~ ^[Yy]$ ]] && "$DOTFILES_DIR/install/install-shell.sh"
-    if [[ "$a_nvim" =~ ^[Yy]$ ]]; then
-        [[ "$n_ans" =~ ^[Ss]$ ]] && "$DOTFILES_DIR/install/install-nvim.sh" "--server" || "$DOTFILES_DIR/install/install-nvim.sh" "--full"
-    fi
-    [[ "$a_vsc" =~ ^[Yy]$ ]] && "$DOTFILES_DIR/install/install-vscode.sh"
-    [[ "$a_mise" =~ ^[Yy]$ ]] && "$DOTFILES_DIR/install/install-mise.sh"
-    [[ "$a_astral" =~ ^[Yy]$ ]] && "$DOTFILES_DIR/install/install-astral.sh"
+    # Run selected environments
+    for env_item in "${selected_envs[@]}"; do
+        case "$env_item" in
+            shell)
+                "$DOTFILES_DIR/install/install-shell.sh"
+                ;;
+            nvim)
+                "$DOTFILES_DIR/install/install-nvim.sh" "$nvim_mode"
+                ;;
+            vscode)
+                "$DOTFILES_DIR/install/install-vscode.sh"
+                ;;
+            mise)
+                "$DOTFILES_DIR/install/install-mise.sh"
+                ;;
+            astral)
+                "$DOTFILES_DIR/install/install-astral.sh"
+                ;;
+        esac
+    done
 
     launch_shell "Selected dotfiles components installed successfully!"
 fi
