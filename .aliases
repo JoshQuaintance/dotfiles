@@ -11,6 +11,15 @@ alias gi="genignore"
 # Navigation & Projects
 alias cd..="cd .."
 alias codes="cd ~/Codes/"
+take() { mkdir -p "$1" && cd "$1"; }
+alias groot='cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"'
+alias path="echo \$PATH | tr ':' '\n'"
+alias diskuse="du -sh * 2>/dev/null | sort -h"
+
+# Safety Defaults
+alias cp="cp -i"
+alias mv="mv -i"
+alias df="df -h"
 
 # Directory Listing (eza with icons & git status)
 if command -v eza &>/dev/null; then
@@ -121,5 +130,17 @@ alias guncommit="git reset --soft HEAD~1"
 alias grs="git restore"
 alias grss="git restore --staged"
 
-# Branch Cleanup (deletes local branches already merged into main/master/develop)
+# Branch Cleanup & Prune
+alias gprune="git fetch --prune"
 alias gbclean="git branch --merged | grep -Ev '(\*|master|main|develop|staging)' | xargs -r git branch -d 2>/dev/null || git branch --merged | grep -Ev '(\*|master|main|develop|staging)' | xargs git branch -d"
+
+# ==========================================
+# Git Worktree Shortcuts
+# ==========================================
+alias gwt="git worktree"
+alias gwtl="git worktree list"
+alias gwta="git worktree add"
+alias gwtb="git worktree add -b"
+alias gwtr="git worktree remove"
+alias gwtrm="git worktree remove"
+alias gwtp="git worktree prune"
