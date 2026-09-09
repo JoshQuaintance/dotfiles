@@ -276,6 +276,10 @@ return {
           vim.opt_local.spell = true
           vim.opt_local.colorcolumn = "72,100"
 
+          -- Disable Neovim's default auto-wrap at 72 chars so you can type up to 100 chars
+          vim.opt_local.textwidth = 0
+          vim.opt_local.formatoptions:remove("t")
+
           -- Pre-fill template if fresh commit
           prefill_commit_template(bufnr)
 
