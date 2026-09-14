@@ -8,7 +8,7 @@ disable -r log 2>/dev/null || true
 DOTFILES_REPO="https://github.com/JoshQuaintance/dotfiles.git"
 DOTFILES_BRANCH="${DOTFILES_BRANCH:-main}"
 RAW_BASE_URL="https://raw.githubusercontent.com/JoshQuaintance/dotfiles/${DOTFILES_BRANCH}"
-DEFAULT_TARGET_DIR="$HOME/Codes/dotfiles"
+DEFAULT_TARGET_DIR="$HOME/.dotfiles"
 
 # Determine if running from a local clone or remotely via curl
 CURRENT_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
@@ -88,7 +88,8 @@ if [[ "$CHOICE" == "1" || "$CHOICE" == "--workstation" || "$CHOICE" == "--all" ]
     if [ ! -d "$DOTFILES_DIR/.git" ]; then
         log "Cloning dotfiles to $DOTFILES_DIR..."
         mkdir -p "$(dirname "$DOTFILES_DIR")"
-        git clone -b "$DOTFILES_BRANCH" "$DOTFILES_REPO" "$DOTFILES_DIR"
+        git clone --single-branch --branch "$DOTFILES_BRANCH" --depth 1 "$DOTFILES_REPO" "$DOTFILES_DIR"
+        git -C "$DOTFILES_DIR" config remote.origin.fetch "+refs/heads/$DOTFILES_BRANCH:refs/remotes/origin/$DOTFILES_BRANCH" 2>/dev/null || true
     fi
 
     git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
@@ -100,7 +101,7 @@ if [[ "$CHOICE" == "1" || "$CHOICE" == "--workstation" || "$CHOICE" == "--all" ]
     "$DOTFILES_DIR/install/install-cli.sh"
     "$DOTFILES_DIR/install/install-shell.sh"
     "$DOTFILES_DIR/install/install-nvim.sh" "--full"
-    "$DOTFILES_DIR/install/install-vscode.sh" "--all"
+    "$DOTFILES_DIR/install/install-vscode.sh"
     "$DOTFILES_DIR/install/install-mise.sh"
     "$DOTFILES_DIR/install/install-astral.sh"
 
@@ -116,7 +117,8 @@ if [[ "$CHOICE" == "2" || "$CHOICE" == "--server" || "$CHOICE" == "--minimal" ]]
     DOTFILES_DIR="${HOME}/.dotfiles"
     if [ ! -d "$DOTFILES_DIR/.git" ]; then
         log "Cloning sparse repository to $DOTFILES_DIR..."
-        git clone -b "$DOTFILES_BRANCH" --depth 1 --filter=blob:none --sparse "$DOTFILES_REPO" "$DOTFILES_DIR"
+        git clone --single-branch --branch "$DOTFILES_BRANCH" --depth 1 --filter=blob:none --sparse "$DOTFILES_REPO" "$DOTFILES_DIR"
+        git -C "$DOTFILES_DIR" config remote.origin.fetch "+refs/heads/$DOTFILES_BRANCH:refs/remotes/origin/$DOTFILES_BRANCH" 2>/dev/null || true
     fi
 
     git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
@@ -141,7 +143,8 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
     if [ ! -d "$DOTFILES_DIR/.git" ]; then
         log "Cloning dotfiles repository to $DOTFILES_DIR..."
         mkdir -p "$(dirname "$DOTFILES_DIR")"
-        git clone -b "$DOTFILES_BRANCH" "$DOTFILES_REPO" "$DOTFILES_DIR"
+        git clone --single-branch --branch "$DOTFILES_BRANCH" --depth 1 "$DOTFILES_REPO" "$DOTFILES_DIR"
+        git -C "$DOTFILES_DIR" config remote.origin.fetch "+refs/heads/$DOTFILES_BRANCH:refs/remotes/origin/$DOTFILES_BRANCH" 2>/dev/null || true
     fi
 
     git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
@@ -176,7 +179,7 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
     env_options=(
         "Zsh Shell & Config      - Portable .zshrc, .aliases & Oh My Zsh"
         "Neovim & Configuration   - Modern Lua setup, Lazy, Treesitter, LSP"
-        "Visual Studio Code       - Settings, keybindings, snippets & extensions"
+        "Visual Studio Code       - Settings, keybindings & snippets"
         "Mise & Node 24           - Polyglot runtime manager with Node 24"
         "Astral Python Tools      - uv package manager & ruff linter/formatter"
     )

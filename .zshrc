@@ -292,7 +292,8 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
     fi
 
     # 1. Dotfiles info (branch & short commit)
-    _dot_dir="${DOTFILES_DIR:-$HOME/Codes/dotfiles}"
+    _dot_dir="${DOTFILES_DIR:-$HOME/.dotfiles}"
+    [ ! -d "$_dot_dir/.git" ] && [ -d "$HOME/Codes/dotfiles/.git" ] && _dot_dir="$HOME/Codes/dotfiles"
     _dot_branch="$(git -C "$_dot_dir" branch --show-current 2>/dev/null || echo "main")"
     _dot_hash="$(git -C "$_dot_dir" rev-parse --short HEAD 2>/dev/null || echo "")"
     _dot_info="${_dot_branch}${_dot_hash:+ (${_dot_hash})}"
@@ -314,8 +315,10 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
             _batt_extra=1
         fi
     elif [ -d /sys/class/power_supply ]; then
-        # Linux laptops
-        for _bat in /sys/class/power_supply/BAT* /sys/class/power_supply/battery; do
+        # Linux laptops (safely omit via (N) nullglob if in container or desktop)
+        local -a _bats
+        _bats=(/sys/class/power_supply/BAT*(N) /sys/class/power_supply/battery(N))
+        for _bat in "${_bats[@]}"; do
             if [ -f "$_bat/capacity" ]; then
                 _pct="$(cat "$_bat/capacity" 2>/dev/null)%"
                 _st="$(cat "$_bat/status" 2>/dev/null)"
@@ -513,7 +516,8 @@ conf() {
       target_file="$HOME/.config/nvim"
       ;;
     dotfiles|dots)
-      target_file="$HOME/Codes/dotfiles"
+      target_file="${DOTFILES_DIR:-$HOME/.dotfiles}"
+      [ ! -d "$target_file" ] && [ -d "$HOME/Codes/dotfiles" ] && target_file="$HOME/Codes/dotfiles"
       ;;
     git)
       target_file="$HOME/.gitconfig"

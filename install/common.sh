@@ -5,7 +5,7 @@ set -e
 disable -r log 2>/dev/null || true
 
 # Base dotfiles directory
-export DOTFILES_DIR="${DOTFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd || echo "$HOME/Codes/dotfiles")}"
+export DOTFILES_DIR="${DOTFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd || echo "$HOME/.dotfiles")}"
 export OS="$(uname -s)"
 export ARCH="$(uname -m)"
 
@@ -265,4 +265,41 @@ ensure_git() {
     fi
     git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
     git config --global --add safe.directory "$(pwd)" 2>/dev/null || true
+}
+
+# Universal single-branch shallow clone helper
+# Usage: git_clone_single <repo_url> <target_dir> [branch] [extra_git_args...]
+git_clone_single() {
+    local repo_url="$1"
+    local target_dir="$2"
+    local branch="${3:-main}"
+    shift 3 || true
+    log "Cloning $repo_url (single-branch: $branch)..."
+    git clone --single-branch --branch "$branch" --depth 1 "$@" "$repo_url" "$target_dir"
+    git -C "$target_dir" config remote.origin.fetch "+refs/heads/$branch:refs/remotes/origin/$branch" 2>/dev/null || true
+}
+
+# Run a build or install command inside a temporary git clone and automatically clean it up
+# Usage: git_clone_and_clean <repo_url> <branch> <command_to_run_inside_repo>
+git_clone_and_clean() {
+    local repo_url="$1"
+    local branch="${2:-main}"
+    local build_cmd="$3"
+    local tmp_repo
+    tmp_repo="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-build.XXXXXX")"
+    log "Cloning $repo_url (single-branch: $branch) to temporary directory..."
+    if git clone --single-branch --branch "$branch" --depth 1 "$repo_url" "$tmp_repo"; then
+        (
+            cd "$tmp_repo"
+            eval "$build_cmd"
+        )
+        local status=$?
+        rm -rf "$tmp_repo"
+        log "Cleaned up temporary repository."
+        return $status
+    else
+        rm -rf "$tmp_repo"
+        error "Failed to clone $repo_url"
+        return 1
+    fi
 }

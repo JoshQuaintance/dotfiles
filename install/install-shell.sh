@@ -33,8 +33,13 @@ fi
 
 # 3. Install Oh My Zsh if missing
 if [ ! -d "$HOME/.oh-my-zsh" ]; then
-    log "Installing Oh My Zsh..."
+    log "Installing Oh My Zsh (single-branch)..."
     RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended || true
+fi
+# Enforce single-branch tracking and prune any extra branches from Oh My Zsh
+if [ -d "$HOME/.oh-my-zsh/.git" ]; then
+    git -C "$HOME/.oh-my-zsh" config remote.origin.fetch "+refs/heads/master:refs/remotes/origin/master" 2>/dev/null || true
+    git -C "$HOME/.oh-my-zsh" remote prune origin 2>/dev/null || true
 fi
 
 # 4. Symlink .zshrc with .bak backup

@@ -241,10 +241,13 @@ dotupdate() {
     fi
   fi
   if [ -z "$dotfiles_dir" ] || [ ! -d "$dotfiles_dir/.git" ]; then
-    dotfiles_dir="$HOME/Codes/dotfiles"
-  fi
-  if [ ! -d "$dotfiles_dir/.git" ]; then
-    dotfiles_dir="$HOME/.dotfiles"
+    if [ -d "$HOME/.dotfiles/.git" ]; then
+      dotfiles_dir="$HOME/.dotfiles"
+    elif [ -d "$HOME/Codes/dotfiles/.git" ]; then
+      dotfiles_dir="$HOME/Codes/dotfiles"
+    else
+      dotfiles_dir="$HOME/.dotfiles"
+    fi
   fi
   if [ ! -d "$dotfiles_dir/.git" ]; then
     printf "\033[31m✖ Dotfiles repository not found at %s\033[0m\n" "$dotfiles_dir" >&2

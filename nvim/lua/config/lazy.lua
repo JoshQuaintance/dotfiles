@@ -4,8 +4,9 @@ if not vim.loop.fs_stat(lazypath) then
     "git",
     "clone",
     "--filter=blob:none",
-    "https://github.com/folke/lazy.nvim.git",
+    "--single-branch",
     "--branch=stable",
+    "https://github.com/folke/lazy.nvim.git",
     lazypath,
   })
 end
@@ -21,6 +22,10 @@ require("lazy").setup({
   },
   install = {
     colorscheme = { "tokyonight" },
+  },
+  git = {
+    -- Ensure all plugins cloned by lazy.nvim only pull a single branch
+    args = { "--filter=blob:none", "--single-branch" },
   },
   checker = {
     enabled = false,

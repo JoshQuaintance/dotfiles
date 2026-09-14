@@ -4,9 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-EXTENSIONS_JSON="$DOTFILES_DIR/vscode/extensions.json"
-
-log "Setting up Visual Studio Code & Modular Extensions..."
+log "Setting up Visual Studio Code Configuration (settings, keybindings, snippets)..."
 
 # 1. Install or update VSCode application
 DO_CODE=true
@@ -84,89 +82,6 @@ if [ -d "$DOTFILES_DIR/vscode/snippets" ]; then
     success "Linked VSCode snippets directory"
 fi
 
-# 6. Modular Extension Installation
-if command -v code &>/dev/null && [ -f "$EXTENSIONS_JSON" ]; then
-    # Extra flags if running as root in containers
-    CODE_FLAGS=""
-    if [ "$(id -u)" -eq 0 ]; then
-        CODE_FLAGS="--no-sandbox --user-data-dir=$HOME/.config/Code"
-    fi
-
-    # Helper to parse extension groups using python3 or node
-    get_group_extensions() {
-        local group="$1"
-        python3 -c "
-import json, sys
-data = json.load(open('$EXTENSIONS_JSON'))
-if '$group' == 'all':
-    for g in data.values():
-        for ext in g.get('extensions', []):
-            print(ext)
-elif '$group' in data:
-    for ext in data['$group'].get('extensions', []):
-        print(ext)
-" 2>/dev/null || node -e "
-const data = require('$EXTENSIONS_JSON');
-if ('$group' === 'all') {
-    Object.values(data).forEach(g => (g.extensions || []).forEach(e => console.log(e)));
-} else if (data['$group']) {
-    (data['$group'].extensions || []).forEach(e => console.log(e));
-}
-" 2>/dev/null
-    }
-
-    # Determine which categories to install
-    SELECTED_GROUPS=()
-
-    if [ "$#" -gt 0 ]; then
-        for arg in "$@"; do
-            clean_arg="${arg#--}"
-            SELECTED_GROUPS+=("$clean_arg")
-        done
-    else
-        echo ""
-        vsc_cat_labels=(
-            "Core Tools          - Themes, GitLens, Prettier, ESLint, Neovim"
-            "Web / TypeScript    - Tailwind CSS, Bun runtime support"
-            "Svelte & SvelteKit  - Official language support & snippets"
-            "Angular             - Language Service & schematic console"
-            "Python              - Pylance, ruff, debugpy"
-            "Java & Gradle       - Red Hat Java, debugger, Gradle"
-            "Go                  - Go language tools & LSP"
-            "Markdown & Docs     - Mermaid diagrams, Markdown All-in-One"
-            "Remote & Cloud      - Remote SSH, WSL & Dev Containers"
-        )
-        vsc_cat_keys=(core web svelte angular python java go markdown_docs remote_cloud)
-        vsc_cat_defs=(1 1 1 1 1 0 0 1 1)
-        chosen_vsc_indices=()
-
-        multiselect "Select VSCode Extension Categories to install" vsc_cat_labels vsc_cat_defs chosen_vsc_indices
-
-        for idx in "${chosen_vsc_indices[@]}"; do
-            SELECTED_GROUPS+=("${vsc_cat_keys[$idx]}")
-        done
-    fi
-
-    if [ "${#SELECTED_GROUPS[@]}" -gt 0 ]; then
-        log "Syncing selected VSCode extension categories: ${SELECTED_GROUPS[*]}..."
-        INSTALLED_EXTS="$(code $CODE_FLAGS --list-extensions 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
-
-        for group in "${SELECTED_GROUPS[@]}"; do
-            EXTS=$(get_group_extensions "$group")
-            for ext in $EXTS; do
-                ext_lower="$(echo "$ext" | tr '[:upper:]' '[:lower:]')"
-                if echo "$INSTALLED_EXTS" | grep -q "^${ext_lower}$"; then
-                    success "Extension already installed: $ext"
-                else
-                    log "Installing extension: $ext..."
-                    code $CODE_FLAGS --install-extension "$ext" --force >/dev/null 2>&1 || warn "Could not install: $ext"
-                fi
-            done
-        done
-        success "VSCode extensions sync complete!"
-    else
-        log "Skipped VSCode extensions install."
-    fi
-fi
+log "Note: VSCode extensions are managed manually via Settings Sync."
 
 success "VSCode setup complete!"
