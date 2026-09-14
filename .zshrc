@@ -1,7 +1,13 @@
 # Startup verbose checklist & environment banner
 if [[ -o interactive ]] && [ -t 1 ] && [ "${ZSH_STARTUP_VERBOSE:-true}" = true ]; then
     _ZSH_STARTUP_VERBOSE=true
-    [ -z "$LANG" ] && [ -z "$LC_ALL" ] && export LANG="en_US.UTF-8"
+    # Ensure UTF-8 locale is active for proper multibyte character measurement in containers
+    if [ "${#${:-🐧}}" -ne 1 ]; then
+        for _loc in "C.UTF-8" "en_US.UTF-8" "C.utf8" "UTF-8"; do
+            export LANG="$_loc" LC_ALL="$_loc" 2>/dev/null
+            [ "${#${:-🐧}}" -eq 1 ] && break
+        done
+    fi
     zmodload zsh/datetime 2>/dev/null || true
     _t_start=$EPOCHREALTIME
     _t_step=$_t_start
@@ -59,15 +65,17 @@ if [[ -o interactive ]] && [ -t 1 ] && [ "${ZSH_STARTUP_VERBOSE:-true}" = true ]
 
     if [ "$(uname -s)" = "Darwin" ]; then
         _os_logo=""
-        _logo_extra=0
     else
         _os_logo="🐧"
-        _logo_extra=1
     fi
     _raw_title="${ZSH_BANNER_TITLE:-$(whoami)@$(hostname -s)}"
     _title="${_os_logo} ${_raw_title}"
-    _pad_top=$(( 51 - ${#_title} - _logo_extra ))
-    printf "${_c_border}╭─ ${_c_title}%s${_c_reset}${_c_border} %s╮${_c_reset}\n" "$_title" "$(printf "─%.0s" {1..$_pad_top})"
+    if [ "${(m)#_title}" -gt 46 ]; then
+        _title="${_title[1,43]}..."
+    fi
+    _pad_top=$(( 51 - ${(m)#_title} ))
+    [ "$_pad_top" -lt 1 ] && _pad_top=1
+    printf "${_c_border}╭─ ${_c_title}%s${_c_reset}${_c_border} %s╮${_c_reset}\n" "$_title" "$(repeat $_pad_top printf "─")"
 else
     _ZSH_STARTUP_VERBOSE=false
     _step() { :; }
@@ -300,7 +308,6 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
 
     # 2. Battery status (macOS pmset + Linux sysfs /sys/class/power_supply)
     _batt_info=""
-    _batt_extra=0
     _batt_label="Battery:"
     if command -v pmset &>/dev/null; then
         # macOS
@@ -312,7 +319,6 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
             else
                 _batt_info="${_batt_pct} 🔋"
             fi
-            _batt_extra=1
         fi
     elif [ -d /sys/class/power_supply ]; then
         # Linux laptops (safely omit via (N) nullglob if in container or desktop)
@@ -329,7 +335,6 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
                 else
                     _batt_info="${_pct} 🔋"
                 fi
-                _batt_extra=1
                 break
             fi
         done
@@ -338,7 +343,6 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
     if [ -z "$_batt_info" ]; then
         _batt_label="Network:"
         _batt_info="Online"
-        _batt_extra=0
     fi
 
     # 3. System Uptime (macOS sysctl + Linux /proc/uptime)
@@ -413,8 +417,7 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
     vpad() {
         local val="$1"
         local target_w="$2"
-        local extra_w="${3:-0}"
-        local val_len=$(( ${#val} + extra_w ))
+        local val_len=${(m)#val}
         local pad_len=$(( target_w - val_len ))
         local spaces=""
         if [ "$pad_len" -gt 0 ]; then
@@ -424,9 +427,9 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
     }
 
     grid_row() {
-        local k1="$1" v1="$2" k2="$3" v2="$4" extra1="${5:-0}" extra2="${6:-0}"
-        local p_v1="$(vpad "$v1" 15 "$extra1")"
-        local p_v2="$(vpad "$v2" 15 "$extra2")"
+        local k1="$1" v1="$2" k2="$3" v2="$4"
+        local p_v1="$(vpad "$v1" 15)"
+        local p_v2="$(vpad "$v2" 15)"
         printf "${_c_border}│${_c_reset}  ${_c_key}%-9s${_c_reset}%s${_c_border}│${_c_reset}  ${_c_key}%-10s${_c_reset}%s${_c_border}│${_c_reset}\n" \
             "$k1" "$p_v1" "$k2" "$p_v2"
     }
@@ -435,13 +438,13 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
     grid_row "System:"       "$_os_str"                         "Dotfiles:" "$_dot_info"
     grid_row "Uptime:"       "$_uptime_str"                     "Node:"     "$_node_ver"
     grid_row "CPU/RAM:"      "${_cpu_load:-N/A} / ${_mem_str}"  "Bun:"      "$_bun_ver"
-    grid_row "Disk:"         "${_disk_str:-N/A}"                "$_batt_label" "$_batt_info" 0 "$_batt_extra"
+    grid_row "Disk:"         "${_disk_str:-N/A}"                "$_batt_label" "$_batt_info"
     grid_row "Shell:"        "zsh ${ZSH_VERSION:-5.9}"          "Ready in:" "$_tot_str"
     printf "${_c_border}├%s┴%s┤${_c_reset}\n" "$(printf "─%.0s" {1..26})" "$(printf "─%.0s" {1..27})"
 
     # Rotating Tip Line
     _tip_line="💡 ${_random_tip}"
-    _pad_tip=$(( 51 - ${#_tip_line} ))
+    _pad_tip=$(( 52 - ${(m)#_tip_line} ))
     _spaces_tip=""
     if [ "$_pad_tip" -gt 0 ]; then
         _spaces_tip=$(printf "%*s" "$_pad_tip" "")
