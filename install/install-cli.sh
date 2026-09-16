@@ -166,6 +166,19 @@ if [ -f "$DOTFILES_DIR/bat/config" ]; then
     success "Linked ~/.config/bat/config -> $DOTFILES_DIR/bat/config"
 fi
 
+# Symlink eza theme configuration
+if [ -f "$DOTFILES_DIR/eza/theme.yml" ]; then
+    mkdir -p "$HOME/.config/eza"
+    ln -sfn "$DOTFILES_DIR/eza/theme.yml" "$HOME/.config/eza/theme.yml"
+    success "Linked ~/.config/eza/theme.yml -> $DOTFILES_DIR/eza/theme.yml"
+
+    if [ "$OS" = "Darwin" ]; then
+        mkdir -p "$HOME/Library/Application Support/eza"
+        ln -sfn "$DOTFILES_DIR/eza/theme.yml" "$HOME/Library/Application Support/eza/theme.yml"
+        success "Linked ~/Library/Application Support/eza/theme.yml -> $DOTFILES_DIR/eza/theme.yml"
+    fi
+fi
+
 # Symlink standalone bin utilities (dotupdate, dotcheck, dotdoctor, git-prompt-dir, esdiff, killport)
 if [ -d "$DOTFILES_DIR/bin" ]; then
     for tool in "$DOTFILES_DIR/bin/"*; do

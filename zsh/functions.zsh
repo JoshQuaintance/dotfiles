@@ -56,12 +56,15 @@ conf() {
     bat)
       target_file="$HOME/.config/bat/config"
       ;;
+    eza)
+      target_file="$HOME/.config/eza/theme.yml"
+      ;;
     *)
       if [ -f "$1" ] || [ -d "$1" ]; then
         target_file="$1"
       else
         echo "Unknown config target: $1"
-        echo "Usage: conf [shell|alias|functions|nvim|ghostty|bat|dotfiles|git|starship|<path>]"
+        echo "Usage: conf [shell|alias|functions|nvim|ghostty|bat|eza|dotfiles|git|starship|<path>]"
         return 1
       fi
       ;;

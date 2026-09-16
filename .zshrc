@@ -157,8 +157,9 @@ if command -v fzf &>/dev/null; then
     source <(fzf --zsh 2>/dev/null) 2>/dev/null || true
 fi
 
-# Bat syntax highlighter theme
+# Bat & Eza CLI themes (Catppuccin Mocha)
 export BAT_THEME="Catppuccin Mocha"
+export EZA_CONFIG_DIR="$HOME/.config/eza"
 
 # Preferred editor for local and remote sessions
 export EDITOR='nvim'
