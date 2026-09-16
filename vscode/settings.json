@@ -253,7 +253,7 @@
   "workbench.browser.openLocalhostLinks": false,
   "flow-icons.licenseKey": "FLOW-TTWQT1-SMEPBK-2258XZ-XK83KU",
   "chat.titleBar.openInAgentsWindow.enabled": false,
-  "workbench.colorTheme": "Bearded Theme Arc Blueberry",
+  "workbench.colorTheme": "Catppuccin Mocha",
   "sonarlint.connectedMode.connections.sonarqube": [
     {
       "serverUrl": "https://sonarqube.winsupply.com",
