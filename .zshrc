@@ -12,45 +12,11 @@ if [[ -o interactive ]] && [ -t 1 ] && [ "${ZSH_STARTUP_VERBOSE:-true}" = true ]
     _t_start=$EPOCHREALTIME
     _t_step=$_t_start
 
-    # Theme palette (configurable via ZSH_BANNER_THEME: cyan, catppuccin, tokyonight, nord, matrix, monochrome)
-    case "${ZSH_BANNER_THEME:-cyan}" in
-        catppuccin|mauve)
-            _c_border="\033[38;2;203;166;247m"
-            _c_check="\033[38;2;166;227;161m"
-            _c_title="\033[1;38;2;245;194;231m"
-            _c_key="\033[1;38;2;137;180;250m"
-            ;;
-        tokyonight|blue)
-            _c_border="\033[38;2;122;162;247m"
-            _c_check="\033[38;2;115;218;202m"
-            _c_title="\033[1;38;2;187;154;247m"
-            _c_key="\033[1;38;2;125;207;255m"
-            ;;
-        nord)
-            _c_border="\033[38;2;136;192;208m"
-            _c_check="\033[38;2;163;190;140m"
-            _c_title="\033[1;38;2;129;161;193m"
-            _c_key="\033[1;38;2;236;239;244m"
-            ;;
-        matrix|green)
-            _c_border="\033[1;32m"
-            _c_check="\033[1;32m"
-            _c_title="\033[1;32m"
-            _c_key="\033[32m"
-            ;;
-        monochrome|minimal)
-            _c_border="\033[2m"
-            _c_check="\033[1m"
-            _c_title="\033[1m"
-            _c_key="\033[1m"
-            ;;
-        *) # cyan / default
-            _c_border="\033[1;36m"
-            _c_check="\033[1;32m"
-            _c_title="\033[1;36m"
-            _c_key="\033[1m"
-            ;;
-    esac
+    # Standard terminal ANSI colors (inherits directly from the active terminal palette)
+    _c_border="\033[36m"
+    _c_check="\033[32m"
+    _c_title="\033[1;36m"
+    _c_key="\033[1m"
     _c_reset="\033[0m"
     _c_dim="\033[2m"
 
@@ -59,7 +25,7 @@ if [[ -o interactive ]] && [ -t 1 ] && [ "${ZSH_STARTUP_VERBOSE:-true}" = true ]
             local t_now=$EPOCHREALTIME
             local elapsed=$(( (t_now - _t_step) * 1000 ))
             _t_step=$t_now
-            printf "  ${_c_check}✔${_c_reset} %-44s ${_c_dim}%5.0fms${_c_reset}\n" "$1" "$elapsed"
+            printf "${_c_border}▌${_c_reset}  ${_c_check}✔${_c_reset} %-44s ${_c_dim}%5.0fms${_c_reset}\n" "$1" "$elapsed"
         fi
     }
 
@@ -365,7 +331,7 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
     _tip_line="💡 ${_random_tip}"
 
     # Render Left Accent Bar
-    echo ""
+    printf "${_c_border}▌${_c_reset}\n"
     printf "${_c_border}▌${_c_reset} ${_c_title}%s${_c_reset} ${_c_dim}•${_c_reset} %s ${_c_dim}•${_c_reset} %s ${_c_dim}•${_c_reset} ${_c_check}Ready in %s${_c_reset}\n" \
         "$_title" "$_os_str" "zsh ${ZSH_VERSION:-5.9}" "$_tot_str"
     printf "${_c_border}▌${_c_reset} ${_c_key}Dotfiles:${_c_reset} %s\n" "$_dot_info"
