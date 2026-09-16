@@ -27,6 +27,8 @@ if command -v eza &>/dev/null; then
 fi
 alias als="toggle-autols"
 alias autols="toggle-autols"
+alias aliases="fa"
+alias falias="fa"
 
 # Python virtual environment
 alias pyactivate="source ./venv/bin/activate"

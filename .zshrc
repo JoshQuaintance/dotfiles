@@ -322,6 +322,7 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
         "'take <dir>'      → mkdir -p and cd in one step"
         "'sz'              → Reload ~/.zshrc and aliases"
         "'als'             → Toggle auto-ls after cd"
+        "'fa' / 'aliases'  → Fuzzy search aliases & functions"
         "'port <port>'     → Show process on port"
     )
     _random_tip="${_tips[$(( (RANDOM % ${#_tips[@]}) + 1 ))]}"

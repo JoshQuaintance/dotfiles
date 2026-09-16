@@ -357,3 +357,60 @@ toggle-autols() {
       ;;
   esac
 }
+
+# ==========================================
+# 7. Search Aliases & Functions (fa / aliases)
+# ==========================================
+
+fa() {
+  local query="$1"
+  local dot_dir="${DOTFILES_DIR:-$HOME/Codes/dotfiles}"
+
+  _gen_list() {
+    # 1. Custom dotfiles functions
+    for fn in take groot conf clone port gsearch npmr bunr pnpmr dotupdate dotcheck toggle-autols acceptance fa; do
+      if (( $+functions[$fn] )); then
+        printf "function\t%-18s\t(shell function)\n" "$fn"
+      fi
+    done
+
+    # 2. Standalone dotfiles bin tools
+    if [ -d "$dot_dir/bin" ]; then
+      for b in "$dot_dir/bin/"*; do
+        [ -x "$b" ] && printf "tool\t%-18s\t%s\n" "$(basename "$b")" "(CLI utility in ~/.local/bin)"
+      done
+    fi
+
+    # 3. Active shell aliases
+    alias | while IFS='=' read -r name val; do
+      printf "alias\t%-18s\t%s\n" "$name" "$val"
+    done
+  }
+
+  if [ -n "$query" ]; then
+    # Text-filtered query
+    _gen_list | awk -F'\t' -v q="$query" 'tolower($0) ~ tolower(q) {
+      if ($1 == "alias")    printf "\033[38;2;137;180;250m[%s]\033[0m \033[1;38;2;203;166;247m%-18s\033[0m %s\n", $1, $2, $3
+      if ($1 == "function") printf "\033[38;2;166;227;161m[%s]\033[0m \033[1;38;2;203;166;247m%-18s\033[0m %s\n", $1, $2, $3
+      if ($1 == "tool")     printf "\033[38;2;249;226;175m[%s]\033[0m \033[1;38;2;203;166;247m%-18s\033[0m %s\n", $1, $2, $3
+    }'
+  elif command -v fzf &>/dev/null; then
+    # Interactive FZF browser with live bat syntax preview
+    local selected
+    selected=$(_gen_list | fzf \
+      --delimiter='\t' \
+      --with-nth=1,2,3 \
+      --preview='which {2} 2>/dev/null | if command -v bat &>/dev/null; then bat -l zsh --color=always --style=plain; else cat; fi' \
+      --preview-window='right:55%:wrap' \
+      --header='Tab/Arrows to navigate • Enter to paste onto command line • Esc to quit' \
+      --prompt='🔍 Search Aliases & Functions > ')
+
+    if [ -n "$selected" ]; then
+      local cmd
+      cmd=$(echo "$selected" | awk -F'\t' '{print $2}' | xargs)
+      print -z "$cmd "
+    fi
+  else
+    _gen_list
+  fi
+}
