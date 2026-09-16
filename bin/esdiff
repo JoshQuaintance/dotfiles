@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -e
+
+# ESLint changed TypeScript files compared to upstream/base branch
+BASE_BRANCH="${1:-origin/develop}"
+
+# Ensure inside a git repository
+if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+  echo "Error: Not inside a git repository" >&2
+  exit 1
+fi
+
+# Collect changed .ts and .tsx files
+changed_files=()
+while IFS= read -r file; do
+  [ -n "$file" ] && changed_files+=("$file")
+done < <(git diff "$BASE_BRANCH"...HEAD --name-only --diff-filter=d 2>/dev/null | grep -E '\.(ts|tsx)$' || true)
+
+if [ "${#changed_files[@]}" -eq 0 ]; then
+  echo "✔ No TypeScript files changed vs $BASE_BRANCH"
+  exit 0
+fi
+
+echo "Checking ${#changed_files[@]} file(s) against $BASE_BRANCH:"
+printf '  %s\n' "${changed_files[@]}"
+echo ""
+
+npx eslint "${changed_files[@]}"

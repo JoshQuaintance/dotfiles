@@ -1,0 +1,28 @@
+# Global Git ignore rules
+
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Windows system files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux & editor backup files
+*~
+*.swp
+*.swo
+.directory
+
+# Local environment & secret overrides
+.env.local
+.env.*.local
+.direnv/
+
+# Merge & patch artifacts
+*.orig
+*.rej

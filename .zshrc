@@ -98,78 +98,13 @@ fi
 [ -d "/opt/homebrew/opt/python@3.14/bin" ] && export PATH="/opt/homebrew/opt/python@3.14/bin:$PATH"
 _step "Homebrew environment"
 
-# Path to your Oh My Zsh installation.
+# Oh My Zsh configuration
 export ZSH="$HOME/.oh-my-zsh"
-
-# Set name of the theme to load --- if set to "random", it will
-# load a random theme each time Oh My Zsh is loaded, in which case,
-# to know which specific one was loaded, run: echo $RANDOM_THEME
-# See https://github.com/ohmyzsh/ohmyzsh/wiki/Themes
 ZSH_THEME="robbyrussell"
-
-# Set list of themes to pick from when loading at random
-# Setting this variable when ZSH_THEME=random will cause zsh to load
-# a theme from this variable instead of looking in $ZSH/themes/
-# If set to an empty array, this variable will have no effect.
-# ZSH_THEME_RANDOM_CANDIDATES=( "robbyrussell" "agnoster" )
-
-# Uncomment the following line to use case-sensitive completion.
-# CASE_SENSITIVE="true"
-
-# Uncomment the following line to use hyphen-insensitive completion.
-# Case-sensitive completion must be off. _ and - will be interchangeable.
-# HYPHEN_INSENSITIVE="true"
-
-# Uncomment one of the following lines to change the auto-update behavior
-# zstyle ':omz:update' mode disabled  # disable automatic updates
-# zstyle ':omz:update' mode auto      # update automatically without asking
-# zstyle ':omz:update' mode reminder  # just remind me to update when it's time
-
-# Uncomment the following line to change how often to auto-update (in days).
-# zstyle ':omz:update' frequency 13
-
-# Uncomment the following line if pasting URLs and other text is messed up.
-# DISABLE_MAGIC_FUNCTIONS="true"
-
-# Uncomment the following line to disable colors in ls.
-# DISABLE_LS_COLORS="true"
-
-# Uncomment the following line to disable auto-setting terminal title.
-# DISABLE_AUTO_TITLE="true"
-
-# Uncomment the following line to enable command auto-correction.
-# ENABLE_CORRECTION="true"
-
-# Uncomment the following line to display red dots whilst waiting for completion.
-# You can also set it to another string to have that shown instead of the default red dots.
-# e.g. COMPLETION_WAITING_DOTS="%F{yellow}waiting...%f"
-# Caution: this setting can cause issues with multiline prompts in zsh < 5.7.1 (see #5765)
-# COMPLETION_WAITING_DOTS="true"
-
-# Uncomment the following line if you want to disable marking untracked files
-# under VCS as dirty. This makes repository status check for large repositories
-# much, much faster.
-# DISABLE_UNTRACKED_FILES_DIRTY="true"
-
-# Uncomment the following line if you want to change the command execution time
-# stamp shown in the history command output.
-# You can set one of the optional three formats:
-# "mm/dd/yyyy"|"dd.mm.yyyy"|"yyyy-mm-dd"
-# or set a custom format using the strftime function format specifications,
-# see 'man strftime' for details.
-# HIST_STAMPS="mm/dd/yyyy"
-
-# Would you like to use another custom folder than $ZSH/custom?
-# ZSH_CUSTOM=/path/to/new-custom-folder
+zstyle ':omz:update' mode reminder
 zstyle ':omz:plugins:eza' 'icons' yes
 zstyle ':omz:plugins:eza' 'git-status' yes
 zstyle ':omz:plugins:eza' 'hyperlink' yes
-
-# Which plugins would you like to load?
-# Standard plugins can be found in $ZSH/plugins/
-# Custom plugins may be added to $ZSH_CUSTOM/plugins/
-# Example format: plugins=(rails git textmate ruby lighthouse)
-# Add wisely, as too many plugins slow down shell startup.
 plugins=(git eza starship)
 
 # Compile ~/.zcompdump to bytecode ~/.zcompdump.zwc for instant load
@@ -275,14 +210,23 @@ fi
 # Preferred editor for local and remote sessions
 export EDITOR='nvim'
 export VISUAL='nvim'
+
+# GPG & Git signing terminal pinentry support (routes passphrase prompt to active terminal)
+if [ -t 0 ] || [ -t 1 ]; then
+    export GPG_TTY=$(tty 2>/dev/null || true)
+fi
 _step "CLI tools (Atuin, Zoxide, FZF, Bun)"
 
 # ==========================================
-# Aliases & Shortcuts
+# Functions & Aliases
 # ==========================================
+_dot_dir="${DOTFILES_DIR:-$HOME/.dotfiles}"
+[ ! -d "$_dot_dir/.git" ] && [ -d "$HOME/Codes/dotfiles/.git" ] && _dot_dir="$HOME/Codes/dotfiles"
+
+[ -f "$_dot_dir/zsh/functions.zsh" ] && source "$_dot_dir/zsh/functions.zsh"
 [ -f "$HOME/.aliases" ] && source "$HOME/.aliases"
-[ -f "$DOTFILES_DIR/.aliases" ] && [ ! -f "$HOME/.aliases" ] && source "$DOTFILES_DIR/.aliases"
-_step "Dotfiles aliases & script runners"
+[ -f "$_dot_dir/.aliases" ] && [ ! -f "$HOME/.aliases" ] && source "$_dot_dir/.aliases"
+_step "Dotfiles aliases & functions"
 
 # Startup Summary Card
 if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
@@ -290,8 +234,16 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
     _tot_str=$(printf "%.2fs" "$_t_total")
     _arch="$(uname -m)"
     _os_name="$(uname -s)"
-    _node_ver=$(node -v 2>/dev/null || echo "N/A")
-    _bun_ver=$(bun -v 2>/dev/null || echo "N/A")
+
+    # Cached runtime versions (refreshed periodically or on cache miss)
+    _cache_file="${TMPDIR:-/tmp}/.zsh_runtimes_${USER}"
+    if [ -f "$_cache_file" ]; then
+        read -r _node_ver _bun_ver < "$_cache_file"
+    else
+        _node_ver=$(node -v 2>/dev/null || echo "N/A")
+        _bun_ver=$(bun -v 2>/dev/null || echo "N/A")
+        echo "$_node_ver $_bun_ver" > "$_cache_file" 2>/dev/null || true
+    fi
 
     if [ "$_os_name" = "Darwin" ]; then
         _os_str="macOS (${_arch})"
@@ -299,11 +251,25 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
         _os_str="${_os_name} (${_arch})"
     fi
 
-    # 1. Dotfiles info (branch & short commit)
-    _dot_dir="${DOTFILES_DIR:-$HOME/.dotfiles}"
-    [ ! -d "$_dot_dir/.git" ] && [ -d "$HOME/Codes/dotfiles/.git" ] && _dot_dir="$HOME/Codes/dotfiles"
-    _dot_branch="$(git -C "$_dot_dir" branch --show-current 2>/dev/null || echo "main")"
-    _dot_hash="$(git -C "$_dot_dir" rev-parse --short HEAD 2>/dev/null || echo "")"
+    # 1. Dotfiles info (fast shell reading without git subshell)
+    _dot_branch=""
+    _dot_hash=""
+    if [ -f "$_dot_dir/.git/HEAD" ]; then
+        read -r _head_line < "$_dot_dir/.git/HEAD"
+        if [[ "$_head_line" == ref:\ * ]]; then
+            _dot_branch="${_head_line#ref: refs/heads/}"
+            _ref_file="$_dot_dir/.git/${_head_line#ref: }"
+            if [ -f "$_ref_file" ]; then
+                read -r _full_hash < "$_ref_file"
+                _dot_hash="${_full_hash[1,7]}"
+            fi
+        else
+            _dot_branch="detached"
+            _dot_hash="${_head_line[1,7]}"
+        fi
+    fi
+    [ -z "$_dot_branch" ] && _dot_branch="$(git -C "$_dot_dir" branch --show-current 2>/dev/null || echo "main")"
+    [ -z "$_dot_hash" ] && _dot_hash="$(git -C "$_dot_dir" rev-parse --short HEAD 2>/dev/null || echo "")"
     _dot_info="${_dot_branch}${_dot_hash:+ (${_dot_hash})}"
 
     # 2. Battery status (macOS pmset + Linux sysfs /sys/class/power_supply)
@@ -456,118 +422,7 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
 fi
 
 # ==========================================
-# Custom Functions
+# Local / Machine-Specific Overrides
 # ==========================================
-
-# ESLint changed .ts files vs origin/develop
-esdiff() {
-  local files
-  files=($(git diff origin/develop...HEAD --name-only --diff-filter=d | grep '\.ts$'))
-  if (( $#files == 0 )); then
-    echo "No .ts files changed vs origin/develop"
-    return 0
-  fi
-  echo "Checking $#files file(s):"
-  printf '  %s\n' $files
-  npx eslint $files
-}
-
-# Run specific acceptance test
-acceptance() {
-  local test=$1
-  echo "Running test \"$test\""
-  npm run test:acceptance:refactored -- --grep "$test"
-}
-
-# Quick git clone helper: clone <org/repo>
-clone() {
-  local repo=$1
-  echo "Cloning $repo - git clone git@github.com:$repo.git"
-  git clone git@github.com:$repo.git
-}
-
-# Edit configurations and reload automatically only if modified
-conf() {
-  local target="${1:-shell}"
-  local target_file=""
-  local is_shell_rc=false
-
-  case "$target" in
-    shell|"")
-      if [ -n "$ZSH_VERSION" ]; then
-        target_file="$HOME/.zshrc"
-      elif [ -n "$BASH_VERSION" ]; then
-        target_file="$HOME/.bashrc"
-      else
-        target_file="$HOME/.zshrc"
-      fi
-      is_shell_rc=true
-      ;;
-    zsh)
-      target_file="$HOME/.zshrc"
-      is_shell_rc=true
-      ;;
-    bash)
-      target_file="$HOME/.bashrc"
-      is_shell_rc=true
-      ;;
-    alias|aliases)
-      target_file="$HOME/.aliases"
-      is_shell_rc=true
-      ;;
-    nvim|vim)
-      target_file="$HOME/.config/nvim"
-      ;;
-    dotfiles|dots)
-      target_file="${DOTFILES_DIR:-$HOME/.dotfiles}"
-      [ ! -d "$target_file" ] && [ -d "$HOME/Codes/dotfiles" ] && target_file="$HOME/Codes/dotfiles"
-      ;;
-    git)
-      target_file="$HOME/.gitconfig"
-      ;;
-    starship)
-      target_file="$HOME/.config/starship.toml"
-      ;;
-    *)
-      if [ -f "$1" ] || [ -d "$1" ]; then
-        target_file="$1"
-      else
-        echo "Unknown config target: $1"
-        echo "Usage: conf [shell|alias|nvim|dotfiles|git|starship|<path>]"
-        return 1
-      fi
-      ;;
-  esac
-
-  local editor="${EDITOR:-nvim}"
-  command -v "$editor" &>/dev/null || editor="nano"
-
-  # If opening a directory, open directly
-  if [ -d "$target_file" ]; then
-    "$editor" "$target_file"
-    return 0
-  fi
-
-  [ ! -f "$target_file" ] && touch "$target_file"
-
-  local before_sum
-  before_sum=$(cksum "$target_file" 2>/dev/null)
-
-  "$editor" "$target_file"
-
-  local after_sum
-  after_sum=$(cksum "$target_file" 2>/dev/null)
-
-  # Only reload if the file was modified and it's a shell rc file
-  if [ "$before_sum" != "$after_sum" ]; then
-    if [ "$is_shell_rc" = true ]; then
-      echo "Changes detected. Sourcing $target_file..."
-      source "$target_file"
-      echo "✔ Terminal environment updated!"
-    else
-      echo "✔ Saved changes to $target_file"
-    fi
-  else
-    echo "No changes made."
-  fi
-}
+[ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
+[ -f "$HOME/.aliases.local" ] && source "$HOME/.aliases.local"

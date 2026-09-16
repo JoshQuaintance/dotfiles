@@ -142,16 +142,14 @@ if is_tool_requested "starship"; then
     fi
 fi
 
-# Symlink standalone bin utilities (like genignore)
+# Symlink standalone bin utilities (dotupdate, dotcheck, dotdoctor, genignore, esdiff, killport)
 if [ -d "$DOTFILES_DIR/bin" ]; then
     for tool in "$DOTFILES_DIR/bin/"*; do
         if [ -f "$tool" ] && [ -x "$tool" ]; then
             tool_name="$(basename "$tool")"
-            if is_tool_requested "$tool_name"; then
-                ln -sf "$tool" "$HOME/.local/bin/$tool_name"
-                [ "$(id -u)" -eq 0 ] && ln -sf "$tool" "/usr/local/bin/$tool_name" 2>/dev/null || true
-                success "Installed tool: $tool_name -> ~/.local/bin/$tool_name"
-            fi
+            ln -sf "$tool" "$HOME/.local/bin/$tool_name"
+            [ "$(id -u)" -eq 0 ] && ln -sf "$tool" "/usr/local/bin/$tool_name" 2>/dev/null || true
+            success "Installed tool: $tool_name -> ~/.local/bin/$tool_name"
         fi
     done
 fi

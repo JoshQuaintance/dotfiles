@@ -1,0 +1,16 @@
+# Local and machine-specific overrides
+*.local
+.zshrc.local
+.aliases.local
+.gitconfig.local
+
+# Backups
+*.bak
+*.bak.*
+
+# Shell dumps and cache
+.zcompdump*
+
+# OS artifacts
+.DS_Store
+Thumbs.db

@@ -70,4 +70,29 @@ if [ -f "$DOTFILES_DIR/.aliases" ]; then
     success "Linked ~/.aliases -> $DOTFILES_DIR/.aliases"
 fi
 
-success "Zsh shell setup complete!"
+# 6. Global Git Configuration & Identity Migration
+if [ -f "$DOTFILES_DIR/.gitconfig" ]; then
+    if [ -f "$HOME/.gitconfig" ] && [ ! -L "$HOME/.gitconfig" ]; then
+        if [ ! -f "$HOME/.gitconfig.local" ]; then
+            log "Migrating personal Git credentials to ~/.gitconfig.local..."
+            cp "$HOME/.gitconfig" "$HOME/.gitconfig.local"
+            success "Preserved personal credentials at ~/.gitconfig.local"
+        fi
+        log "Backing up existing ~/.gitconfig to ~/.gitconfig.bak..."
+        cp -L "$HOME/.gitconfig" "$HOME/.gitconfig.bak" 2>/dev/null || mv "$HOME/.gitconfig" "$HOME/.gitconfig.bak"
+    fi
+
+    ln -sfn "$DOTFILES_DIR/.gitconfig" "$HOME/.gitconfig"
+    success "Linked ~/.gitconfig -> $DOTFILES_DIR/.gitconfig"
+fi
+
+# 7. Global Git Ignore
+if [ -f "$DOTFILES_DIR/.gitignore_global" ]; then
+    if [ -f "$HOME/.gitignore_global" ] && [ ! -L "$HOME/.gitignore_global" ]; then
+        cp -L "$HOME/.gitignore_global" "$HOME/.gitignore_global.bak" 2>/dev/null || true
+    fi
+    ln -sfn "$DOTFILES_DIR/.gitignore_global" "$HOME/.gitignore_global"
+    success "Linked ~/.gitignore_global -> $DOTFILES_DIR/.gitignore_global"
+fi
+
+success "Zsh shell and Git environment setup complete!"

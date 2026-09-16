@@ -1,0 +1,32 @@
+# Global Git configuration with modern engineering defaults
+
+[init]
+    defaultBranch = main
+
+[pull]
+    rebase = true
+
+[push]
+    autoSetupRemote = true
+    followTags = true
+
+[merge]
+    conflictstyle = zdiff3
+
+[diff]
+    colorMoved = zebra
+    algorithm = histogram
+
+[core]
+    excludesfile = ~/.gitignore_global
+    autocrlf = input
+
+[help]
+    autocorrect = prompt
+
+[rebase]
+    autoStash = true
+
+# Local & private user credentials (name, email, signing key)
+[include]
+    path = ~/.gitconfig.local

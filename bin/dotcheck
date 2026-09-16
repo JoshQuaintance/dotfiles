@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Quick shortcut to check dotfiles update status without applying
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec "$SCRIPT_DIR/dotupdate" --check "$@"

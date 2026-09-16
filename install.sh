@@ -74,6 +74,9 @@ echo "================================================="
 echo ""
 
 CHOICE="$1"
+if [[ "$CHOICE" == "-y" || "$CHOICE" == "--yes" || "$CHOICE" == "--unattended" ]]; then
+    CHOICE="1"
+fi
 if [ -z "$CHOICE" ]; then
     read_input "Select installation profile [1-3]: " CHOICE
 fi
