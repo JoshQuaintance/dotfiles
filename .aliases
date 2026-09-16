@@ -30,7 +30,6 @@ fi
 alias pyactivate="source ./venv/bin/activate"
 
 # Node & Package Managers
-alias npmwin="npm i --legacy-peer-deps --verbose"
 alias npmv="npm i --verbose"
 alias npmi-clean="rm -rf node_modules package-lock.json && npm install"
 

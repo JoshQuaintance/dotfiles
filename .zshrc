@@ -52,10 +52,6 @@ if [ -f "/opt/homebrew/bin/brew" ]; then
 elif [ -f "/home/linuxbrew/.linuxbrew/bin/brew" ]; then
     eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 fi
-
-# Optional Homebrew tool paths (if installed)
-[ -d "/opt/homebrew/opt/openjdk@21/bin" ] && export PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"
-[ -d "/opt/homebrew/opt/python@3.14/bin" ] && export PATH="/opt/homebrew/opt/python@3.14/bin:$PATH"
 _step "Homebrew environment"
 
 # Oh My Zsh configuration

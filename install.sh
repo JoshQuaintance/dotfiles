@@ -106,6 +106,7 @@ if [[ "$CHOICE" == "1" || "$CHOICE" == "--workstation" || "$CHOICE" == "--all" ]
     "$DOTFILES_DIR/install/install-nvim.sh" "--full"
     "$DOTFILES_DIR/install/install-vscode.sh"
     "$DOTFILES_DIR/install/install-mise.sh"
+    "$DOTFILES_DIR/install/install-nvm.sh"
     "$DOTFILES_DIR/install/install-astral.sh"
 
     launch_shell "Full Workstation setup complete!"
@@ -184,10 +185,11 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
         "Neovim & Configuration   - Modern Lua setup, Lazy, Treesitter, LSP"
         "Visual Studio Code       - Settings, keybindings & snippets"
         "Mise & Node 24           - Polyglot runtime manager with Node 24"
+        "NVM (Node Version Mgr)   - Node version switcher fallback"
         "Astral Python Tools      - uv package manager & ruff linter/formatter"
     )
-    env_keys=(shell nvim vscode mise astral)
-    env_defs=(1 1 1 1 1)
+    env_keys=(shell nvim vscode mise nvm astral)
+    env_defs=(1 1 1 1 1 1)
     chosen_env_indices=()
     multiselect "Step 2/2: Select Development Environments to install" env_options env_defs chosen_env_indices
 
@@ -237,6 +239,9 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
                 ;;
             mise)
                 "$DOTFILES_DIR/install/install-mise.sh"
+                ;;
+            nvm)
+                "$DOTFILES_DIR/install/install-nvm.sh"
                 ;;
             astral)
                 "$DOTFILES_DIR/install/install-astral.sh"

@@ -93,12 +93,6 @@ conf() {
 }
 
 # 3. Development & Testing Helpers
-acceptance() {
-  local test=$1
-  echo "Running test \"$test\""
-  npm run test:acceptance:refactored -- --grep "$test"
-}
-
 clone() {
   local repo=$1
   echo "Cloning $repo - git clone git@github.com:$repo.git"
