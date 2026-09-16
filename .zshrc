@@ -132,12 +132,6 @@ if command -v ng &>/dev/null; then
     fi
     [ -s "$_ng_cache" ] && source "$_ng_cache"
 fi
-
-export BASE="$HOME/Codes"
-[ -d "$HOME/Codes/sentinel-service/bin" ] && export PATH="$HOME/Codes/sentinel-service/bin:$PATH"
-
-export STL_VAULT_PROD_ADDR="https://vault.winsupply.com"
-export STL_VAULT_DEV_ADDR="https://vault-test.winsupply.com"
 _step "Completions & SDK paths"
 
 # Bun
