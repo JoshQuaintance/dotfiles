@@ -189,6 +189,14 @@ if [ -d "$DOTFILES_DIR/bin" ]; then
             success "Installed tool: $tool_name -> ~/.local/bin/$tool_name"
         fi
     done
+
+    # Dot-prefixed shortcuts (.doctor, .check, .update, .dotdoctor, .dotcheck, .dotupdate)
+    ln -sf "$DOTFILES_DIR/bin/dotdoctor" "$HOME/.local/bin/.doctor"
+    ln -sf "$DOTFILES_DIR/bin/dotdoctor" "$HOME/.local/bin/.dotdoctor"
+    ln -sf "$DOTFILES_DIR/bin/dotcheck" "$HOME/.local/bin/.check"
+    ln -sf "$DOTFILES_DIR/bin/dotcheck" "$HOME/.local/bin/.dotcheck"
+    ln -sf "$DOTFILES_DIR/bin/dotupdate" "$HOME/.local/bin/.update"
+    ln -sf "$DOTFILES_DIR/bin/dotupdate" "$HOME/.local/bin/.dotupdate"
 fi
 
 success "All Core CLI utilities & shell tools configured successfully!"

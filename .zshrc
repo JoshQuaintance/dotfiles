@@ -311,7 +311,8 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
     # 6. Rotating Shortcuts / Tips
     _tips=(
         "'npmr' / 'bunr'   → Interactive script runner"
-        "'dotcheck'        → Check for dotfiles updates"
+        "'.check' / '.update' → Check or update dotfiles"
+        "'.doctor'         → System health & dotfiles diagnostics"
         "'groot'           → Jump to git project root"
         "'killport <port>' → Kill process on port"
         "'esdiff'          → ESLint changed .ts files"

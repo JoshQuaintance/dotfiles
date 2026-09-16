@@ -42,9 +42,16 @@ alias reload="exec zsh -l"
 alias myip="curl -s https://icanhazip.com"
 alias localip="ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print \$1}'"
 
-# Dotfiles Shortcuts
+# Dotfiles Shortcuts (.doctor, .check, .update, etc.)
+alias .doctor="dotdoctor"
+alias .dotdoctor="dotdoctor"
+alias .check="dotcheck"
+alias .dotcheck="dotcheck"
+alias .update="dotupdate"
+alias .dotupdate="dotupdate"
 alias dotfiles-update="dotupdate"
 alias dotfiles-check="dotcheck"
+alias dotfiles-doctor="dotdoctor"
 
 # ==========================================
 # Git Shortcuts
