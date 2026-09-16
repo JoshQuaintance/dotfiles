@@ -142,7 +142,7 @@ if is_tool_requested "starship"; then
     fi
 fi
 
-# Symlink standalone bin utilities (dotupdate, dotcheck, dotdoctor, genignore, esdiff, killport)
+# Symlink standalone bin utilities (dotupdate, dotcheck, dotdoctor, git-prompt-dir, esdiff, killport)
 if [ -d "$DOTFILES_DIR/bin" ]; then
     for tool in "$DOTFILES_DIR/bin/"*; do
         if [ -f "$tool" ] && [ -x "$tool" ]; then

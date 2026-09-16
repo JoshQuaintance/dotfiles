@@ -59,7 +59,7 @@ if [[ -o interactive ]] && [ -t 1 ] && [ "${ZSH_STARTUP_VERBOSE:-true}" = true ]
             local t_now=$EPOCHREALTIME
             local elapsed=$(( (t_now - _t_step) * 1000 ))
             _t_step=$t_now
-            printf "${_c_border}│${_c_reset}  ${_c_check}✔${_c_reset} %-41s ${_c_dim}%5.0fms${_c_reset} ${_c_border}│${_c_reset}\n" "$1" "$elapsed"
+            printf "  ${_c_check}✔${_c_reset} %-44s ${_c_dim}%5.0fms${_c_reset}\n" "$1" "$elapsed"
         fi
     }
 
@@ -70,12 +70,6 @@ if [[ -o interactive ]] && [ -t 1 ] && [ "${ZSH_STARTUP_VERBOSE:-true}" = true ]
     fi
     _raw_title="${ZSH_BANNER_TITLE:-$(whoami)@$(hostname -s)}"
     _title="${_os_logo} ${_raw_title}"
-    if [ "${(m)#_title}" -gt 46 ]; then
-        _title="${_title[1,43]}..."
-    fi
-    _pad_top=$(( 51 - ${(m)#_title} ))
-    [ "$_pad_top" -lt 1 ] && _pad_top=1
-    printf "${_c_border}╭─ ${_c_title}%s${_c_reset}${_c_border} %s╮${_c_reset}\n" "$_title" "$(repeat $_pad_top printf "─")"
 else
     _ZSH_STARTUP_VERBOSE=false
     _step() { :; }
@@ -228,22 +222,12 @@ _dot_dir="${DOTFILES_DIR:-$HOME/.dotfiles}"
 [ -f "$_dot_dir/.aliases" ] && [ ! -f "$HOME/.aliases" ] && source "$_dot_dir/.aliases"
 _step "Dotfiles aliases & functions"
 
-# Startup Summary Card
+# Startup Summary Card (Option 1: Left Accent Bar)
 if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
     _t_total=$(( EPOCHREALTIME - _t_start ))
     _tot_str=$(printf "%.2fs" "$_t_total")
     _arch="$(uname -m)"
     _os_name="$(uname -s)"
-
-    # Cached runtime versions (refreshed periodically or on cache miss)
-    _cache_file="${TMPDIR:-/tmp}/.zsh_runtimes_${USER}"
-    if [ -f "$_cache_file" ]; then
-        read -r _node_ver _bun_ver < "$_cache_file"
-    else
-        _node_ver=$(node -v 2>/dev/null || echo "N/A")
-        _bun_ver=$(bun -v 2>/dev/null || echo "N/A")
-        echo "$_node_ver $_bun_ver" > "$_cache_file" 2>/dev/null || true
-    fi
 
     if [ "$_os_name" = "Darwin" ]; then
         _os_str="macOS (${_arch})"
@@ -378,48 +362,19 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
         "'port <port>'     → Show process on port"
     )
     _random_tip="${_tips[$(( (RANDOM % ${#_tips[@]}) + 1 ))]}"
-
-    # Formatting helpers for exact column alignment
-    vpad() {
-        local val="$1"
-        local target_w="$2"
-        local val_len=${(m)#val}
-        local pad_len=$(( target_w - val_len ))
-        local spaces=""
-        if [ "$pad_len" -gt 0 ]; then
-            spaces=$(printf "%*s" "$pad_len" "")
-        fi
-        printf "%s%s" "$val" "$spaces"
-    }
-
-    grid_row() {
-        local k1="$1" v1="$2" k2="$3" v2="$4"
-        local p_v1="$(vpad "$v1" 15)"
-        local p_v2="$(vpad "$v2" 15)"
-        printf "${_c_border}│${_c_reset}  ${_c_key}%-9s${_c_reset}%s${_c_border}│${_c_reset}  ${_c_key}%-10s${_c_reset}%s${_c_border}│${_c_reset}\n" \
-            "$k1" "$p_v1" "$k2" "$p_v2"
-    }
-
-    printf "${_c_border}├%s┬%s┤${_c_reset}\n" "$(printf "─%.0s" {1..26})" "$(printf "─%.0s" {1..27})"
-    grid_row "System:"       "$_os_str"                         "Dotfiles:" "$_dot_info"
-    grid_row "Uptime:"       "$_uptime_str"                     "Node:"     "$_node_ver"
-    grid_row "CPU/RAM:"      "${_cpu_load:-N/A} / ${_mem_str}"  "Bun:"      "$_bun_ver"
-    grid_row "Disk:"         "${_disk_str:-N/A}"                "$_batt_label" "$_batt_info"
-    grid_row "Shell:"        "zsh ${ZSH_VERSION:-5.9}"          "Ready in:" "$_tot_str"
-    printf "${_c_border}├%s┴%s┤${_c_reset}\n" "$(printf "─%.0s" {1..26})" "$(printf "─%.0s" {1..27})"
-
-    # Rotating Tip Line
     _tip_line="💡 ${_random_tip}"
-    _pad_tip=$(( 52 - ${(m)#_tip_line} ))
-    _spaces_tip=""
-    if [ "$_pad_tip" -gt 0 ]; then
-        _spaces_tip=$(printf "%*s" "$_pad_tip" "")
-    fi
-    printf "${_c_border}│${_c_reset}  ${_c_dim}%s%s${_c_reset}${_c_border}│${_c_reset}\n" "$_tip_line" "$_spaces_tip"
 
-    printf "${_c_border}╰%s╯${_c_reset}\n" "$(printf "─%.0s" {1..54})"
+    # Render Left Accent Bar
+    echo ""
+    printf "${_c_border}▌${_c_reset} ${_c_title}%s${_c_reset} ${_c_dim}•${_c_reset} %s ${_c_dim}•${_c_reset} %s ${_c_dim}•${_c_reset} ${_c_check}Ready in %s${_c_reset}\n" \
+        "$_title" "$_os_str" "zsh ${ZSH_VERSION:-5.9}" "$_tot_str"
+    printf "${_c_border}▌${_c_reset} ${_c_key}Dotfiles:${_c_reset} %s\n" "$_dot_info"
+    printf "${_c_border}▌${_c_reset} ${_c_key}System:${_c_reset}   %s up ${_c_dim}•${_c_reset} %s RAM ${_c_dim}•${_c_reset} %s Disk ${_c_dim}•${_c_reset} %s %s\n" \
+        "$_uptime_str" "$_mem_str" "$_disk_str" "$_batt_label" "$_batt_info"
+    printf "${_c_border}▌${_c_reset} ${_c_dim}%s${_c_reset}\n" "$_tip_line"
     echo ""
 fi
+
 
 # ==========================================
 # Local / Machine-Specific Overrides
