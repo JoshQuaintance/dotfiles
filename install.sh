@@ -163,12 +163,13 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
         "fzf             - General-purpose command-line fuzzy finder"
         "zoxide (z)      - Smarter cd directory jumper"
         "eza             - Modern ls with icons & git status"
+        "bat             - Cat clone with syntax highlighting & Git status"
         "starship        - Ultra-fast customizable shell prompt"
         "atuin           - Shell history with sync and fuzzy search"
         "genignore       - Smart gitignore generator"
     )
-    cli_keys=(ripgrep fd fzf zoxide eza starship atuin genignore)
-    cli_defs=(1 1 1 1 1 1 1 1)
+    cli_keys=(ripgrep fd fzf zoxide eza bat starship atuin genignore)
+    cli_defs=(1 1 1 1 1 1 1 1 1)
     chosen_cli_indices=()
     multiselect "Step 1/2: Select Core CLI Utilities to install" cli_options cli_defs chosen_cli_indices
 

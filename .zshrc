@@ -157,6 +157,9 @@ if command -v fzf &>/dev/null; then
     source <(fzf --zsh 2>/dev/null) 2>/dev/null || true
 fi
 
+# Bat syntax highlighter theme
+export BAT_THEME="Catppuccin Mocha"
+
 # Preferred editor for local and remote sessions
 export EDITOR='nvim'
 export VISUAL='nvim'
@@ -165,7 +168,7 @@ export VISUAL='nvim'
 if [ -t 0 ] || [ -t 1 ]; then
     export GPG_TTY=$(tty 2>/dev/null || true)
 fi
-_step "CLI tools (Atuin, Zoxide, FZF, Bun)"
+_step "CLI tools (Atuin, Zoxide, FZF, Bun, Bat)"
 
 # ==========================================
 # Functions & Aliases

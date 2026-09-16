@@ -4,7 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-log "Installing Core CLI Utilities (ripgrep, fd, fzf, zoxide, starship, eza, atuin)..."
+log "Installing Core CLI Utilities (ripgrep, fd, fzf, zoxide, starship, eza, atuin, bat)..."
 
 # Ensure local bin directory exists in PATH
 mkdir -p "$HOME/.local/bin"
@@ -28,7 +28,7 @@ is_tool_requested() {
 if [ "$OS" = "Darwin" ]; then
     ensure_homebrew
     log "Installing / Updating CLI tools via Homebrew..."
-    for pkg in ripgrep fd fzf zoxide starship eza atuin; do
+    for pkg in ripgrep fd fzf zoxide starship eza atuin bat; do
         if is_tool_requested "$pkg"; then
             if brew list "$pkg" &>/dev/null; then
                 ask_update_tool "$pkg" "$(brew info "$pkg" 2>/dev/null | head -n 1 | awk '{print $3}')" DO_UPD
@@ -48,24 +48,28 @@ elif [ "$OS" = "Linux" ]; then
         # Ubuntu / Debian
         log "Ensuring base CLI packages via apt..."
         run_sudo apt-get update -y
-        run_sudo apt-get install -y curl wget git build-essential ripgrep fd-find fzf tar gzip
+        run_sudo apt-get install -y curl wget git build-essential ripgrep fd-find fzf bat tar gzip
         
-        # Link fdfind -> fd if necessary on Debian/Ubuntu
+        # Link fdfind -> fd and batcat -> bat if necessary on Debian/Ubuntu
         if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
             ln -sf "$(which fdfind)" "$HOME/.local/bin/fd"
             [ "$(id -u)" -eq 0 ] && ln -sf "$(which fdfind)" "/usr/local/bin/fd" 2>/dev/null || true
         fi
+        if command -v batcat &>/dev/null && ! command -v bat &>/dev/null; then
+            ln -sf "$(which batcat)" "$HOME/.local/bin/bat"
+            [ "$(id -u)" -eq 0 ] && ln -sf "$(which batcat)" "/usr/local/bin/bat" 2>/dev/null || true
+        fi
     elif command -v dnf &>/dev/null; then
         # Fedora / RHEL
         log "Ensuring base CLI packages via dnf..."
-        run_sudo dnf install -y curl wget git make gcc ripgrep fd-find fzf eza tar gzip
+        run_sudo dnf install -y curl wget git make gcc ripgrep fd-find fzf eza bat tar gzip
         if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
             ln -sf "$(which fdfind)" "$HOME/.local/bin/fd"
             [ "$(id -u)" -eq 0 ] && ln -sf "$(which fdfind)" "/usr/local/bin/fd" 2>/dev/null || true
         fi
     elif command -v pacman &>/dev/null; then
         # Arch Linux
-        run_sudo pacman -S --noconfirm --needed curl wget git base-devel ripgrep fd fzf eza atuin
+        run_sudo pacman -S --noconfirm --needed curl wget git base-devel ripgrep fd fzf eza atuin bat
     fi
 
     # 1. eza
@@ -153,6 +157,13 @@ if [ -f "$DOTFILES_DIR/ghostty/config" ]; then
         ln -sfn "$DOTFILES_DIR/ghostty/config" "$HOME/Library/Application Support/com.mitchellh.ghostty/config"
         ln -sfn "$DOTFILES_DIR/ghostty/config" "$HOME/Library/Application Support/com.mitchellh.ghostty/config.ghostty"
     fi
+fi
+
+# Symlink bat configuration
+if [ -f "$DOTFILES_DIR/bat/config" ]; then
+    mkdir -p "$HOME/.config/bat"
+    ln -sfn "$DOTFILES_DIR/bat/config" "$HOME/.config/bat/config"
+    success "Linked ~/.config/bat/config -> $DOTFILES_DIR/bat/config"
 fi
 
 # Symlink standalone bin utilities (dotupdate, dotcheck, dotdoctor, git-prompt-dir, esdiff, killport)

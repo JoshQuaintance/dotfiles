@@ -1,0 +1,9 @@
+# Bat syntax viewer configuration
+# Theme: Catppuccin Mocha
+--theme="Catppuccin Mocha"
+
+# Show line numbers, Git modifications, and file header
+--style="numbers,changes,header"
+
+# Enable italics in themes that support it
+--italic-text=always
