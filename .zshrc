@@ -160,6 +160,7 @@ fi
 # Bat & Eza CLI themes (Catppuccin Mocha)
 export BAT_THEME="Catppuccin Mocha"
 export EZA_CONFIG_DIR="$HOME/.config/eza"
+unset LS_COLORS
 
 # Preferred editor for local and remote sessions
 export EDITOR='nvim'

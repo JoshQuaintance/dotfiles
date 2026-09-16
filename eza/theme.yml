@@ -1,11 +1,11 @@
 # Catppuccin Mocha theme for eza
-# Source: https://github.com/catppuccin/eza (Mocha with Blue directory accent)
+# Source: https://github.com/catppuccin/eza (Mocha with default Mauve accent)
 
 colourful: true
 
 filekinds:
   normal: {foreground: "#cdd6f4"}
-  directory: {foreground: "#89b4fa"}
+  directory: {foreground: "#cba6f7"}
   symlink: {foreground: "#89b4fa"}
   pipe: {foreground: "#bac2de"}
   block_device: {foreground: "#eba0ac"}
