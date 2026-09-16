@@ -25,6 +25,8 @@ if command -v eza &>/dev/null; then
   alias lt="eza --tree --level=2 --icons"
   alias tree="eza --tree --icons"
 fi
+alias als="toggle-autols"
+alias autols="toggle-autols"
 
 # Python virtual environment
 alias pyactivate="source ./venv/bin/activate"
