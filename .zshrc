@@ -12,13 +12,13 @@ if [[ -o interactive ]] && [ -t 1 ] && [ "${ZSH_STARTUP_VERBOSE:-true}" = true ]
     _t_start=$EPOCHREALTIME
     _t_step=$_t_start
 
-    # Standard terminal ANSI colors (inherits directly from the active terminal palette)
-    _c_border="\033[36m"
-    _c_check="\033[32m"
-    _c_title="\033[1;36m"
-    _c_key="\033[1m"
+    # Catppuccin Mocha palette
+    _c_border="\033[38;2;203;166;247m"  # Mauve (#cba6f7)
+    _c_check="\033[38;2;166;227;161m"   # Green (#a6e3a1)
+    _c_title="\033[1;38;2;245;194;231m" # Pink (#f5c2e7)
+    _c_key="\033[1;38;2;137;180;250m"   # Blue (#89b4fa)
+    _c_dim="\033[38;2;108;112;134m"     # Overlay0 (#6c7086)
     _c_reset="\033[0m"
-    _c_dim="\033[2m"
 
     _step() {
         if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
