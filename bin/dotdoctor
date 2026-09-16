@@ -95,6 +95,7 @@ check_link "$HOME/.gitconfig" "Global Git config" ".gitconfig"
 check_link "$HOME/.gitignore_global" "Global Git ignore" ".gitignore_global"
 check_link "$HOME/.config/starship.toml" "Starship prompt" "starship.toml"
 check_link "$HOME/.config/nvim" "Neovim config" "nvim"
+check_link "$HOME/.config/ghostty/config" "Ghostty config" "ghostty/config"
 echo ""
 
 # 3. Core Development CLI Tools

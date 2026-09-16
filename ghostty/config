@@ -1,0 +1,18 @@
+# Ghostty Terminal Configuration
+# Theme: Catppuccin Mocha (darkest variant)
+theme = Catppuccin Mocha
+
+# Font settings
+font-family = Miracode
+font-size = 14
+
+# Window styling & padding
+window-padding-x = 10
+window-padding-y = 10
+window-padding-balance = true
+macos-titlebar-style = transparent
+
+# Cursor & Shell Integration
+cursor-style = block
+cursor-style-blink = false
+shell-integration-features = ssh-terminfo,ssh-env

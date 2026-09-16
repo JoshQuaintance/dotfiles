@@ -50,12 +50,15 @@ conf() {
     starship)
       target_file="$HOME/.config/starship.toml"
       ;;
+    ghostty)
+      target_file="$HOME/.config/ghostty/config"
+      ;;
     *)
       if [ -f "$1" ] || [ -d "$1" ]; then
         target_file="$1"
       else
         echo "Unknown config target: $1"
-        echo "Usage: conf [shell|alias|functions|nvim|dotfiles|git|starship|<path>]"
+        echo "Usage: conf [shell|alias|functions|nvim|ghostty|dotfiles|git|starship|<path>]"
         return 1
       fi
       ;;

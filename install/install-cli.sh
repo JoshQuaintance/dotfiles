@@ -142,6 +142,19 @@ if is_tool_requested "starship"; then
     fi
 fi
 
+# Symlink Ghostty configuration
+if [ -f "$DOTFILES_DIR/ghostty/config" ]; then
+    mkdir -p "$HOME/.config/ghostty"
+    ln -sfn "$DOTFILES_DIR/ghostty/config" "$HOME/.config/ghostty/config"
+    success "Linked ~/.config/ghostty/config -> $DOTFILES_DIR/ghostty/config"
+
+    if [ "$OS" = "Darwin" ]; then
+        mkdir -p "$HOME/Library/Application Support/com.mitchellh.ghostty"
+        ln -sfn "$DOTFILES_DIR/ghostty/config" "$HOME/Library/Application Support/com.mitchellh.ghostty/config"
+        ln -sfn "$DOTFILES_DIR/ghostty/config" "$HOME/Library/Application Support/com.mitchellh.ghostty/config.ghostty"
+    fi
+fi
+
 # Symlink standalone bin utilities (dotupdate, dotcheck, dotdoctor, git-prompt-dir, esdiff, killport)
 if [ -d "$DOTFILES_DIR/bin" ]; then
     for tool in "$DOTFILES_DIR/bin/"*; do
