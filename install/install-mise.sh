@@ -36,12 +36,12 @@ if [ -f "$DOTFILES_DIR/mise/config.toml" ]; then
     success "Linked ~/.config/mise/config.toml"
 fi
 
-# 3. Install & Set Default Node 22
+# 3. Install & Set Default Node LTS
 if command -v mise &>/dev/null; then
-    log "Configuring Node 22 via mise..."
-    mise use -g node@22
+    log "Configuring Node LTS via mise..."
+    mise use -g node@lts
     mise install -y
-    success "Node 22 configured and set as default via mise!"
+    success "Node LTS configured and set as default via mise!"
 fi
 
 success "Mise setup complete!"

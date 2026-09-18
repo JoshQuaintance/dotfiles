@@ -212,7 +212,7 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
         "Neovim & Configuration   - Modern Lua setup, Lazy, Treesitter, LSP"
         "Visual Studio Code       - Settings, keybindings & snippets"
         "Zed Editor               - Fast GPU editor, Vim mode, Bearded Theme"
-        "Mise & Node 22           - Polyglot runtime manager with Node 22"
+        "Mise & Node LTS          - Polyglot runtime manager with Node LTS"
         "NVM (Node Version Mgr)   - Node version switcher fallback"
         "Astral Python Tools      - uv package manager & ruff linter/formatter"
     )

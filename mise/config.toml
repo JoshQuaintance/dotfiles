@@ -1,7 +1,10 @@
 [tools]
-node = "22"
+node = "lts"
 
 [settings]
 legacy_version_file = true
 idiomatic_version_file = true
 idiomatic_version_file_enable_tools = ["node"]
+
+[settings.status]
+missing_tools = "if_other_versions_installed"
