@@ -46,6 +46,9 @@ read_input() {
 launch_shell() {
     echo ""
     success "$1"
+    if [ "${CI:-false}" = "true" ] || [ "${DOTFILES_NO_EXEC:-false}" = "true" ]; then
+        return 0
+    fi
     if command -v zsh &>/dev/null; then
         log "Launching your new Zsh environment..."
         if [ -e /dev/tty ] && [ -r /dev/tty ] && (true < /dev/tty) 2>/dev/null; then
@@ -74,8 +77,11 @@ echo "================================================="
 echo ""
 
 CHOICE="$1"
+DOTFILES_UNATTENDED=false
 if [[ "$CHOICE" == "-y" || "$CHOICE" == "--yes" || "$CHOICE" == "--unattended" ]]; then
     CHOICE="1"
+    DOTFILES_UNATTENDED=true
+    export DOTFILES_UNATTENDED
 fi
 if [ -z "$CHOICE" ]; then
     read_input "Select installation profile [1-3]: " CHOICE

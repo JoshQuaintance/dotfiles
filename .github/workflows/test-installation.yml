@@ -1,0 +1,106 @@
+name: Test Installation
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  # 1. Fast Syntax & Lint Validation (< 15 seconds)
+  syntax:
+    name: Syntax & Lint Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Shellcheck & Zsh
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y zsh shellcheck
+
+      - name: Validate Bash Script Syntax
+        run: |
+          bash -n install.sh
+          bash -n install/*.sh
+          bash -n bin/*
+
+      - name: Validate Zsh Configuration Syntax
+        run: |
+          zsh -n .zshrc
+          zsh -n .aliases
+          zsh -n zsh/*.zsh
+
+      - name: Run Shellcheck on Core Utilities
+        run: |
+          shellcheck -e SC1090,SC1091 bin/dotcheck bin/dotdoctor bin/git-prompt-dir || true
+
+  # 2. Test Full Workstation Installation on macOS (Homebrew runner)
+  macos:
+    name: macOS Installation (Homebrew)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Run Full Dotfiles Installer
+        run: |
+          ./install.sh -y
+
+      - name: Verify Configuration Symlinks
+        run: |
+          ls -la ~/.zshrc
+          ls -la ~/.config/starship.toml
+          ls -la ~/.config/bat/config
+          ls -la ~/.config/eza/theme.yml
+          ls -la ~/.config/zed/settings.json
+          ls -la ~/.config/mise/config.toml
+
+      - name: Verify Core CLI Tools
+        run: |
+          which rg fd fzf zoxide starship eza atuin bat
+          rg --version
+          fd --version
+          fzf --version
+          starship --version
+          eza --version
+          bat --version
+
+      - name: Run Dotfiles Health Doctor
+        run: |
+          ./bin/dotdoctor
+
+      - name: Test Interactive Zsh Boot
+        run: |
+          zsh -i -c "echo 'Zsh environment booted successfully!'"
+
+  # 3. Test Full Workstation Installation on Linux (Ubuntu runner)
+  linux:
+    name: Linux Installation (Ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Run Full Dotfiles Installer
+        run: |
+          ./install.sh -y
+
+      - name: Verify Configuration Symlinks
+        run: |
+          ls -la ~/.zshrc
+          ls -la ~/.config/starship.toml
+          ls -la ~/.config/bat/config
+          ls -la ~/.config/eza/theme.yml
+          ls -la ~/.config/zed/settings.json
+          ls -la ~/.config/mise/config.toml
+
+      - name: Run Dotfiles Health Doctor
+        run: |
+          ./bin/dotdoctor
+
+      - name: Test Interactive Zsh Boot
+        run: |
+          zsh -i -c "echo 'Zsh environment booted successfully!'"

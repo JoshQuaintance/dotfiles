@@ -194,6 +194,11 @@ ask_update_tool() {
     local version_info="$2"
     local ans_var="$3"
     
+    if [ "${DOTFILES_UNATTENDED:-false}" = "true" ] || [ "${CI:-false}" = "true" ]; then
+        eval "$ans_var=false"
+        return 0
+    fi
+    
     local prompt_msg="  [?] $tool_name"
     if [ -n "$version_info" ]; then
         prompt_msg="$prompt_msg ($version_info)"
