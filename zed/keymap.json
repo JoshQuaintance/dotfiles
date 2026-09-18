@@ -1,121 +1,122 @@
 [
-  // ---------------------------------------------------------------------------
-  // 1. Insert Mode
-  // ---------------------------------------------------------------------------
-  {
-    "context": "Editor && vim_mode == insert && !menu",
-    "bindings": {
-      "j k": "vim::NormalBefore",
-      "k j": "vim::NormalBefore"
-    }
-  },
+    // ---------------------------------------------------------------------------
+    // 1. Insert Mode
+    // ---------------------------------------------------------------------------
+    {
+        "context": "Editor && vim_mode == insert && !menu",
+        "bindings": {
+            "j k": "vim::NormalBefore",
+            "k j": "vim::NormalBefore",
+        },
+    },
 
-  // ---------------------------------------------------------------------------
-  // 2. Normal Mode: Leader Shortcuts & Navigation
-  // ---------------------------------------------------------------------------
-  {
-    "context": "Editor && vim_mode == normal && !VimWaiting && !menu",
-    "bindings": {
-      // File & Buffer Management
-      "space w": "workspace::Save",
-      "space q": "pane::CloseActiveItem",
-      "space Q": "pane::CloseAllItems",
-      "space b d": "pane::CloseActiveItem",
-      "shift-h": "pane::ActivatePrevItem",
-      "shift-l": "pane::ActivateNextItem",
+    // ---------------------------------------------------------------------------
+    // 2. Normal Mode: Leader Shortcuts & Navigation
+    // ---------------------------------------------------------------------------
+    {
+        "context": "Editor && vim_mode == normal && !VimWaiting && !menu",
+        "bindings": {
+            // File & Buffer Management
+            "space w": "workspace::Save",
+            "space q": "pane::CloseActiveItem",
+            "space Q": "pane::CloseAllItems",
+            "space b d": "pane::CloseActiveItem",
+            "shift-h": "pane::ActivatePrevItem",
+            "shift-l": "pane::ActivateNextItem",
 
-      // File Finder & Search (Telescope parity)
-      "space f f": "file_finder::Toggle",
-      "space f g": "workspace::NewSearch",
-      "space f b": "tab_switcher::Toggle",
-      "space f s": "buffer_search::Deploy",
-      "space t h": "theme_selector::Toggle",
-      "space e": "project_panel::ToggleFocus",
-      "space o": "project_panel::ToggleFocus",
+            // File Finder & Search (Telescope parity)
+            "space f f": "file_finder::Toggle",
+            "space f g": "workspace::NewSearch",
+            "space f b": "tab_switcher::Toggle",
+            "space f s": "buffer_search::Deploy",
+            "space t h": "theme_selector::Toggle",
+            "space e": "project_panel::ToggleFocus",
+            "space o": "project_panel::ToggleFocus",
 
-      // Window Splits & Navigation
-      "space s v": "pane::SplitRight",
-      "space s h": "pane::SplitDown",
-      "space s x": "pane::CloseActiveItem",
-      "space s e": "pane::ToggleZoom",
-      "ctrl-h": "workspace::ActivatePaneLeft",
-      "ctrl-j": "workspace::ActivatePaneDown",
-      "ctrl-k": "workspace::ActivatePaneUp",
-      "ctrl-l": "workspace::ActivatePaneRight",
+            // Window Splits & Navigation
+            "space s v": "pane::SplitRight",
+            "space s h": "pane::SplitDown",
+            "space s x": "pane::CloseActiveItem",
+            "space s e": "workspace::ResetPaneSizes",
+            "space s m": "workspace::ToggleZoom",
+            "ctrl-h": "workspace::ActivatePaneLeft",
+            "ctrl-j": "workspace::ActivatePaneDown",
+            "ctrl-k": "workspace::ActivatePaneUp",
+            "ctrl-l": "workspace::ActivatePaneRight",
 
-      // LSP / Code Actions & Diagnostics
-      "space c a": "editor::ToggleCodeActions",
-      "space r n": "editor::Rename",
-      "space c f": "editor::Format",
-      "space c d": "editor::ToggleDiagnostics",
-      "shift-k": "editor::Hover",
-      "g d": "editor::GoToDefinition",
-      "g r": "editor::FindAllReferences",
-      "g I": "editor::GoToImplementation",
-      "] d": "editor::GoToDiagnostic",
-      "[ d": "editor::GoToPreviousDiagnostic",
+            // LSP / Code Actions & Diagnostics
+            "space c a": "editor::ToggleCodeActions",
+            "space r n": "editor::Rename",
+            "space c f": "editor::Format",
+            "space c d": "editor::ToggleDiagnostics",
+            "shift-k": "editor::Hover",
+            "g d": "editor::GoToDefinition",
+            "g r": "editor::FindAllReferences",
+            "g I": "editor::GoToImplementation",
+            "] d": "editor::GoToDiagnostic",
+            "[ d": "editor::GoToPreviousDiagnostic",
 
-      // Git Hunks & Blame
-      "space h b": "editor::ToggleGitBlameInline",
-      "space h p": "editor::ToggleSelectedDiffHunks",
-      "] h": "editor::GoToHunk",
-      "[ h": "editor::GoToPreviousHunk",
+            // Git Hunks & Blame
+            "space h b": "editor::ToggleGitBlameInline",
+            "space h p": "editor::ToggleSelectedDiffHunks",
+            "] h": "editor::GoToHunk",
+            "[ h": "editor::GoToPreviousHunk",
 
-      // Clipboard
-      "space y": "editor::Copy",
-      "space Y": "editor::Copy",
-      "space p": "editor::Paste",
-      "space P": "editor::Paste",
+            // Clipboard
+            "space y": "editor::Copy",
+            "space Y": "editor::Copy",
+            "space p": "editor::Paste",
+            "space P": "editor::Paste",
 
-      // Commenting
-      "g c c": "editor::ToggleComments"
-    }
-  },
+            // Commenting
+            "g c c": "editor::ToggleComments",
+        },
+    },
 
-  // ---------------------------------------------------------------------------
-  // 3. Visual Mode: Line Manipulation & Indentation
-  // ---------------------------------------------------------------------------
-  {
-    "context": "Editor && vim_mode == visual && !VimWaiting && !menu",
-    "bindings": {
-      // Move selected lines up/down (J / K)
-      "shift-j": "editor::MoveLineDown",
-      "shift-k": "editor::MoveLineUp",
+    // ---------------------------------------------------------------------------
+    // 3. Visual Mode: Line Manipulation & Indentation
+    // ---------------------------------------------------------------------------
+    {
+        "context": "Editor && vim_mode == visual && !VimWaiting && !menu",
+        "bindings": {
+            // Move selected lines up/down (J / K)
+            "shift-j": "editor::MoveLineDown",
+            "shift-k": "editor::MoveLineUp",
 
-      // Keep selection while indenting
-      "<": "editor::Outdent",
-      ">": "editor::Indent",
+            // Keep selection while indenting
+            "<": "editor::Outdent",
+            ">": "editor::Indent",
 
-      // Clipboard
-      "space y": "editor::Copy",
-      "space p": "editor::Paste",
-      "cmd-c": "editor::Copy",
-      "cmd-v": "editor::Paste",
+            // Clipboard
+            "space y": "editor::Copy",
+            "space p": "editor::Paste",
+            "cmd-c": "editor::Copy",
+            "cmd-v": "editor::Paste",
 
-      // Commenting
-      "g c": "editor::ToggleComments"
-    }
-  },
+            // Commenting
+            "g c": "editor::ToggleComments",
+        },
+    },
 
-  // ---------------------------------------------------------------------------
-  // 4. Global Editor & macOS Conveniences
-  // ---------------------------------------------------------------------------
-  {
-    "context": "Editor",
-    "bindings": {
-      "cmd-s": "workspace::Save",
-      "cmd-w": "pane::CloseActiveItem",
-      "cmd-/": "editor::ToggleComments",
-      "ctrl-/": "editor::ToggleComments"
-    }
-  },
-  {
-    "context": "Workspace",
-    "bindings": {
-      "ctrl-h": "workspace::ActivatePaneLeft",
-      "ctrl-j": "workspace::ActivatePaneDown",
-      "ctrl-k": "workspace::ActivatePaneUp",
-      "ctrl-l": "workspace::ActivatePaneRight"
-    }
-  }
+    // ---------------------------------------------------------------------------
+    // 4. Global Editor & macOS Conveniences
+    // ---------------------------------------------------------------------------
+    {
+        "context": "Editor",
+        "bindings": {
+            "cmd-s": "workspace::Save",
+            "cmd-w": "pane::CloseActiveItem",
+            "cmd-/": "editor::ToggleComments",
+            "ctrl-/": "editor::ToggleComments",
+        },
+    },
+    {
+        "context": "Workspace",
+        "bindings": {
+            "ctrl-h": "workspace::ActivatePaneLeft",
+            "ctrl-j": "workspace::ActivatePaneDown",
+            "ctrl-k": "workspace::ActivatePaneUp",
+            "ctrl-l": "workspace::ActivatePaneRight",
+        },
+    },
 ]

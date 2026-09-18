@@ -4,6 +4,10 @@
 // documentation: https://zed.dev/docs/configuring-zed
 
 {
+  "collaboration_panel": {
+    "button": false
+  },
+  "mouse_wheel_zoom": false,
   "agent_servers": {
     "antigravity-acp": {
       "type": "registry",
@@ -42,14 +46,33 @@
   "colorize_brackets": true,
   "auto_indent_on_paste": true,
   "linked_edits": true,
-  "semantic_tokens": "full",
+  "semantic_tokens": "combined",
   "line_ending": "prefer_lf",
   "format_on_save": "on",
   "soft_wrap": "editor_width",
   "hard_tabs": false,
-  "icon_theme": "Zed (Default)",
+  "icon_theme": "Flow Deep",
   "base_keymap": "VSCode",
-  "ui_font_size": 16,
+  "ui_font_size": 13.0,
   "buffer_font_size": 13.0,
-  "theme": "Bearded Theme Arc",
+  "theme": {
+    "mode": "dark",
+    "light": "Bearded Theme Light",
+    "dark": "Bearded Theme Arc Blueberry",
+  },
+  "languages": {
+    "TypeScript": {
+      "language_servers": ["angular", "..."],
+    },
+    "HTML": {
+      "language_servers": ["angular", "..."],
+    },
+  },
+  "lsp": {
+    "angular": {
+      "initialization_options": {
+        "angular_language_server_path": "/opt/homebrew/lib/node_modules/@angular/language-server",
+      },
+    },
+  },
 }
