@@ -179,6 +179,14 @@ if [ -f "$DOTFILES_DIR/eza/theme.yml" ]; then
     fi
 fi
 
+# Symlink Zed editor configuration
+if [ -d "$DOTFILES_DIR/zed" ]; then
+    mkdir -p "$HOME/.config/zed"
+    [ -f "$DOTFILES_DIR/zed/settings.json" ] && ln -sfn "$DOTFILES_DIR/zed/settings.json" "$HOME/.config/zed/settings.json"
+    [ -f "$DOTFILES_DIR/zed/keymap.json" ] && ln -sfn "$DOTFILES_DIR/zed/keymap.json" "$HOME/.config/zed/keymap.json"
+    success "Linked Zed configuration (~/.config/zed/)"
+fi
+
 # Symlink standalone bin utilities (dotupdate, dotcheck, dotdoctor, git-prompt-dir, esdiff, killport)
 if [ -d "$DOTFILES_DIR/bin" ]; then
     for tool in "$DOTFILES_DIR/bin/"*; do

@@ -98,6 +98,8 @@ check_link "$HOME/.config/nvim" "Neovim config" "nvim"
 check_link "$HOME/.config/ghostty/config" "Ghostty config" "ghostty/config"
 check_link "$HOME/.config/bat/config" "Bat syntax viewer config" "bat/config"
 check_link "$HOME/.config/eza/theme.yml" "Eza theme config" "eza/theme.yml"
+check_link "$HOME/.config/zed/settings.json" "Zed settings" "zed/settings.json"
+check_link "$HOME/.config/zed/keymap.json" "Zed keymap" "zed/keymap.json"
 echo ""
 
 # 3. Core Development CLI Tools

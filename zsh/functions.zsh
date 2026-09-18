@@ -59,12 +59,15 @@ conf() {
     eza)
       target_file="$HOME/.config/eza/theme.yml"
       ;;
+    zed)
+      target_file="$HOME/.config/zed/keymap.json"
+      ;;
     *)
       if [ -f "$1" ] || [ -d "$1" ]; then
         target_file="$1"
       else
         echo "Unknown config target: $1"
-        echo "Usage: conf [shell|alias|functions|nvim|ghostty|bat|eza|dotfiles|git|starship|<path>]"
+        echo "Usage: conf [shell|alias|functions|nvim|ghostty|bat|eza|zed|dotfiles|git|starship|<path>]"
         return 1
       fi
       ;;

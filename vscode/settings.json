@@ -279,4 +279,5 @@
     "scminput": false,
   },
   "editor.semanticHighlighting.enabled": true,
+  "workbench.editor.labelFormat": "short",
 }
