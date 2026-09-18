@@ -119,6 +119,51 @@ gsearch() {
   git log --all --grep="$1" --oneline
 }
 
+# Zed CLI Smart Window Wrapper (VSCode-like behavior)
+# Opens directories in a new window (-n) and files in the existing window (-e)
+zed() {
+  if [ "$#" -eq 0 ]; then
+    command zed
+    return $?
+  fi
+
+  local has_window_flag=false
+  local has_dir=false
+
+  for arg in "$@"; do
+    case "$arg" in
+      -n|--new|-e|--existing|-a|--add|--diff|-h|--help|-v|--version|--uninstall|--completions|--dev-server-token|--system-specs)
+        has_window_flag=true
+        break
+        ;;
+    esac
+  done
+
+  if [ "$has_window_flag" = true ]; then
+    command zed "$@"
+    return $?
+  fi
+
+  # Check if any non-flag target argument is a directory
+  for arg in "$@"; do
+    [[ "$arg" == -* ]] && continue
+
+    local target_path="${arg%%:*}"
+    target_path="${target_path/#\~/$HOME}"
+
+    if [ -d "$target_path" ] || [[ "$arg" == */ ]]; then
+      has_dir=true
+      break
+    fi
+  done
+
+  if [ "$has_dir" = true ]; then
+    command zed -n "$@"
+  else
+    command zed -e "$@"
+  fi
+}
+
 # 4. Interactive Package.json Script Selector (FZF)
 _find_package_json() {
   local dir="$PWD"
@@ -384,7 +429,7 @@ fa() {
 
   _gen_list() {
     # 1. Custom dotfiles functions
-    for fn in take groot conf clone port gsearch npmr bunr pnpmr dotupdate dotcheck toggle-autols acceptance fa; do
+    for fn in take groot conf clone port gsearch zed npmr bunr pnpmr dotupdate dotcheck toggle-autols acceptance fa; do
       if (( $+functions[$fn] )); then
         printf "function\t%-18s\t(shell function)\n" "$fn"
       fi
