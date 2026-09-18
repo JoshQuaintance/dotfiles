@@ -11,6 +11,9 @@
 # Shell dumps and cache
 .zcompdump*
 
+# Neovim local lockfile
+lazy-lock.json
+
 # OS artifacts
 .DS_Store
 Thumbs.db
