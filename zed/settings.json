@@ -75,4 +75,9 @@
       },
     },
   },
+  "auto_install_extensions": {
+    "angular": true,
+    "bearded-theme": true,
+    "html": true,
+  },
 }

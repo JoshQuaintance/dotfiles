@@ -103,8 +103,34 @@ if [[ "$CHOICE" == "1" || "$CHOICE" == "--workstation" || "$CHOICE" == "--all" ]
     
     "$DOTFILES_DIR/install/install-cli.sh"
     "$DOTFILES_DIR/install/install-shell.sh"
-    "$DOTFILES_DIR/install/install-nvim.sh" "--full"
-    "$DOTFILES_DIR/install/install-vscode.sh"
+
+    # Interactive Editor Selection (default to all if unattended/piped)
+    selected_editors=(nvim vscode zed)
+    if [[ "$1" != "-y" && "$1" != "--yes" && "$1" != "--unattended" ]] && [ -t 0 ] && [ -e /dev/tty ]; then
+        echo ""
+        editor_opts=(
+            "Neovim & Configuration   - Modern Lua setup, Lazy, Treesitter, LSP"
+            "Visual Studio Code       - Settings, keybindings & snippets"
+            "Zed Editor               - Fast GPU editor, Vim mode, Bearded Theme"
+        )
+        editor_keys=(nvim vscode zed)
+        editor_defs=(1 1 1)
+        chosen_editor_idx=()
+        multiselect "Select Editors to set up:" editor_opts editor_defs chosen_editor_idx
+        selected_editors=()
+        for idx in "${chosen_editor_idx[@]}"; do
+            selected_editors+=("${editor_keys[$idx]}")
+        done
+    fi
+
+    for ed in "${selected_editors[@]}"; do
+        case "$ed" in
+            nvim)   "$DOTFILES_DIR/install/install-nvim.sh" "--full" ;;
+            vscode) "$DOTFILES_DIR/install/install-vscode.sh" ;;
+            zed)    "$DOTFILES_DIR/install/install-zed.sh" ;;
+        esac
+    done
+
     "$DOTFILES_DIR/install/install-mise.sh"
     "$DOTFILES_DIR/install/install-nvm.sh"
     "$DOTFILES_DIR/install/install-astral.sh"
@@ -185,12 +211,13 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
         "Zsh Shell & Config      - Portable .zshrc, .aliases & Oh My Zsh"
         "Neovim & Configuration   - Modern Lua setup, Lazy, Treesitter, LSP"
         "Visual Studio Code       - Settings, keybindings & snippets"
-        "Mise & Node 24           - Polyglot runtime manager with Node 24"
+        "Zed Editor               - Fast GPU editor, Vim mode, Bearded Theme"
+        "Mise & Node 22           - Polyglot runtime manager with Node 22"
         "NVM (Node Version Mgr)   - Node version switcher fallback"
         "Astral Python Tools      - uv package manager & ruff linter/formatter"
     )
-    env_keys=(shell nvim vscode mise nvm astral)
-    env_defs=(1 1 1 1 1 1)
+    env_keys=(shell nvim vscode zed mise nvm astral)
+    env_defs=(1 1 1 1 1 1 1)
     chosen_env_indices=()
     multiselect "Step 2/2: Select Development Environments to install" env_options env_defs chosen_env_indices
 
@@ -237,6 +264,9 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
                 ;;
             vscode)
                 "$DOTFILES_DIR/install/install-vscode.sh"
+                ;;
+            zed)
+                "$DOTFILES_DIR/install/install-zed.sh"
                 ;;
             mise)
                 "$DOTFILES_DIR/install/install-mise.sh"
