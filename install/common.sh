@@ -221,11 +221,13 @@ case ":$PATH:" in
   *) export PATH="$HOME/.local/bin:$PATH" ;;
 esac
 
-# Ensure Homebrew environment on macOS
-if [ "$OS" = "Darwin" ]; then
-    if [ -f "/opt/homebrew/bin/brew" ]; then
-        eval "$(/opt/homebrew/bin/brew shellenv)"
-    fi
+# Ensure Homebrew environment on macOS & Linux/WSL
+if [ -f "/opt/homebrew/bin/brew" ]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+elif [ -f "/usr/local/bin/brew" ]; then
+    eval "$(/usr/local/bin/brew shellenv)"
+elif [ -f "/home/linuxbrew/.linuxbrew/bin/brew" ]; then
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 fi
 
 # Function to ensure Homebrew on macOS
@@ -236,6 +238,8 @@ ensure_homebrew() {
             /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
             if [ -f "/opt/homebrew/bin/brew" ]; then
                 eval "$(/opt/homebrew/bin/brew shellenv)"
+            elif [ -f "/usr/local/bin/brew" ]; then
+                eval "$(/usr/local/bin/brew shellenv)"
             fi
         fi
     fi

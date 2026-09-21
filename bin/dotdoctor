@@ -134,6 +134,12 @@ check_tool "nvim"     "Neovim editor"       "nvim --version"
 check_tool "yazi"     "Yazi file manager"   "yazi --version"
 check_tool "dust"     "dust disk analyzer"  "dust --version"
 check_tool "btop"     "btop system monitor" "btop --version"
+if command -v brew &>/dev/null; then
+  check_tool "brew"   "Homebrew manager"    "brew --version"
+  if [ -f "$DOTFILES_DIR/Brewfile" ]; then
+    report_ok "Brewfile manifest" "Present ($DOTFILES_DIR/Brewfile)"
+  fi
+fi
 gpg_format="$(git config --get gpg.format 2>/dev/null || echo "openpgp")"
 if [ "$gpg_format" != "ssh" ]; then
   check_tool "gpg"    "GnuPG encryption"    "gpg --version"

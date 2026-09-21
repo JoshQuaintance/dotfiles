@@ -196,12 +196,26 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
         "bat             - Cat clone with syntax highlighting & Git status"
         "starship        - Ultra-fast customizable shell prompt"
         "atuin           - Shell history with sync and fuzzy search"
+        "yazi            - Blazingly fast terminal file manager"
+        "dust            - Intuitive disk usage analyzer"
+        "btop            - Modern resource & performance monitor"
+        "fzf-tab         - Interactive zsh completion menu"
         "genignore       - Smart gitignore generator"
     )
-    cli_keys=(ripgrep fd fzf zoxide eza bat starship atuin genignore)
-    cli_defs=(1 1 1 1 1 1 1 1 1)
+    cli_keys=(ripgrep fd fzf zoxide eza bat starship atuin yazi dust btop fzf-tab genignore)
+    cli_defs=(1 1 1 1 1 1 1 1 1 1 1 1 1)
+
+    if [ "$OS" = "Darwin" ]; then
+        cli_options+=(
+            "Ghostty         - Fast GPU terminal emulator (macOS cask)"
+            "Nerd Font       - JetBrainsMono Nerd Font (macOS cask)"
+        )
+        cli_keys+=(ghostty font-jetbrains-mono-nerd-font)
+        cli_defs+=(1 1)
+    fi
+
     chosen_cli_indices=()
-    multiselect "Step 1/2: Select Core CLI Utilities to install" cli_options cli_defs chosen_cli_indices
+    multiselect "Step 1/2: Select CLI & Terminal Components to install" cli_options cli_defs chosen_cli_indices
 
     # Map chosen CLI indices to tool names
     selected_cli_tools=()

@@ -25,21 +25,43 @@ is_tool_requested() {
     return 1
 }
 
-if [ "$OS" = "Darwin" ]; then
+if command -v brew &>/dev/null; then
     ensure_homebrew
-    log "Installing / Updating CLI tools via Homebrew..."
-    for pkg in ripgrep fd fzf zoxide starship eza atuin bat yazi dust btop fzf-tab; do
-        if is_tool_requested "$pkg"; then
-            if brew list "$pkg" &>/dev/null; then
-                ask_update_tool "$pkg" "$(brew info "$pkg" 2>/dev/null | head -n 1 | awk '{print $3}')" DO_UPD
-                if [ "$DO_UPD" = true ]; then
-                    brew upgrade "$pkg" 2>/dev/null || true
-                fi
-            else
-                brew install "$pkg"
-            fi
+    log "Homebrew detected! Managing requested CLI tools..."
+    
+    # If no specific tools or --all requested, run brew bundle with the Brewfile
+    if [ "${#REQUESTED_TOOLS[@]}" -eq 0 ] || [ "${REQUESTED_TOOLS[0]}" = "--all" ]; then
+        if [ -f "$DOTFILES_DIR/Brewfile" ]; then
+            log "Running brew bundle with $DOTFILES_DIR/Brewfile..."
+            brew bundle --file="$DOTFILES_DIR/Brewfile"
         fi
-    done
+    else
+        # Install only specifically requested tools
+        for pkg in "${REQUESTED_TOOLS[@]}"; do
+            case "$pkg" in
+                ripgrep|fd|fzf|zoxide|starship|eza|atuin|bat|yazi|dust|btop|fzf-tab|git|lazygit)
+                    if brew list "$pkg" &>/dev/null; then
+                        ask_update_tool "$pkg" "$(brew info "$pkg" 2>/dev/null | head -n 1 | awk '{print $3}')" DO_UPD
+                        [ "$DO_UPD" = true ] && brew upgrade "$pkg" 2>/dev/null || true
+                    else
+                        brew install "$pkg"
+                    fi
+                    ;;
+                ghostty|visual-studio-code|font-jetbrains-mono-nerd-font)
+                    if [ "$OS" = "Darwin" ]; then
+                        if brew list --cask "$pkg" &>/dev/null; then
+                            log "$pkg is already installed."
+                        else
+                            brew install --cask "$pkg"
+                        fi
+                    fi
+                    ;;
+                genignore)
+                    # Handled by bin linking below
+                    ;;
+            esac
+        done
+    fi
 
 elif [ "$OS" = "Linux" ]; then
     ARCH="$(uname -m)"
@@ -48,7 +70,7 @@ elif [ "$OS" = "Linux" ]; then
         # Ubuntu / Debian
         log "Ensuring base CLI packages via apt..."
         run_sudo apt-get update -y
-        run_sudo apt-get install -y curl wget git build-essential ripgrep fd-find fzf bat tar gzip
+        run_sudo apt-get install -y curl wget git build-essential ripgrep fd-find fzf bat tar gzip unzip
         
         # Link fdfind -> fd and batcat -> bat if necessary on Debian/Ubuntu
         if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
@@ -62,14 +84,14 @@ elif [ "$OS" = "Linux" ]; then
     elif command -v dnf &>/dev/null; then
         # Fedora / RHEL
         log "Ensuring base CLI packages via dnf..."
-        run_sudo dnf install -y curl wget git make gcc ripgrep fd-find fzf eza bat tar gzip
+        run_sudo dnf install -y curl wget git make gcc ripgrep fd-find fzf eza bat tar gzip unzip
         if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
             ln -sf "$(which fdfind)" "$HOME/.local/bin/fd"
             [ "$(id -u)" -eq 0 ] && ln -sf "$(which fdfind)" "/usr/local/bin/fd" 2>/dev/null || true
         fi
     elif command -v pacman &>/dev/null; then
         # Arch Linux
-        run_sudo pacman -S --noconfirm --needed curl wget git base-devel ripgrep fd fzf eza atuin bat
+        run_sudo pacman -S --noconfirm --needed curl wget git base-devel ripgrep fd fzf eza atuin bat tar gzip unzip
     fi
 
     # 1. eza
@@ -128,6 +150,45 @@ elif [ "$OS" = "Linux" ]; then
         if [ "$DO_ATUIN" = true ]; then
             log "Installing / Updating Atuin (shell history)..."
             curl --proto '=https' --tlsv1.2 -sSf https://setup.atuin.sh | sh -s -- --no-modify-path 2>/dev/null || true
+        fi
+    fi
+
+    # 5. dust (standalone binary)
+    if is_tool_requested "dust"; then
+        if ! command -v dust &>/dev/null; then
+            log "Installing dust..."
+            DUST_ARCH="x86_64-unknown-linux-musl"
+            [ "$ARCH" = "aarch64" -o "$ARCH" = "arm64" ] && DUST_ARCH="aarch64-unknown-linux-musl"
+            curl -fsSL "https://github.com/bootandy/dust/releases/latest/download/dust-v1.1.1-${DUST_ARCH}.tar.gz" 2>/dev/null | tar -xz -C "/tmp" 2>/dev/null || true
+            if [ -f "/tmp/dust-v1.1.1-${DUST_ARCH}/dust" ]; then
+                mv "/tmp/dust-v1.1.1-${DUST_ARCH}/dust" "$HOME/.local/bin/dust"
+                chmod +x "$HOME/.local/bin/dust"
+                rm -rf "/tmp/dust-v1.1.1-${DUST_ARCH}"
+                success "dust ready!"
+            fi
+        fi
+    fi
+
+    # 6. btop
+    if is_tool_requested "btop"; then
+        if ! command -v btop &>/dev/null; then
+            if command -v apt-get &>/dev/null; then
+                run_sudo apt-get install -y btop 2>/dev/null || true
+            elif command -v dnf &>/dev/null; then
+                run_sudo dnf install -y btop 2>/dev/null || true
+            elif command -v pacman &>/dev/null; then
+                run_sudo pacman -S --noconfirm btop 2>/dev/null || true
+            fi
+        fi
+    fi
+
+    # 7. fzf-tab (clone to ~/.local/share/fzf-tab if not present)
+    if is_tool_requested "fzf-tab"; then
+        if [ ! -d "${XDG_DATA_HOME:-$HOME/.local/share}/fzf-tab" ]; then
+            log "Installing fzf-tab..."
+            mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}"
+            git clone --depth 1 https://github.com/Aloxaf/fzf-tab "${XDG_DATA_HOME:-$HOME/.local/share}/fzf-tab" 2>/dev/null || true
+            success "fzf-tab ready!"
         fi
     fi
 fi
