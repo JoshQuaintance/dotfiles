@@ -17,8 +17,12 @@ fi
 
 # Navigation & Directories
 alias cd..="cd .."
+alias ..="cd .."
+alias ...="cd ../.."
+alias ....="cd ../../.."
 alias codes="cd ~/Codes/"
 alias path="echo \$PATH | tr ':' '\n'"
+alias x="extract"
 if command -v dust &>/dev/null; then
   alias diskuse="dust"
 else

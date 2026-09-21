@@ -31,6 +31,7 @@ brew "fzf-tab"      # Interactive zsh completion menu
 # ----------------------------------------------------------------------
 brew "git"          # Fast distributed version control
 brew "lazygit"      # Terminal UI for git
+brew "dura"         # Background automated snapshot daemon for git
 brew "neovim"       # Extensible text editor
 
 # ----------------------------------------------------------------------

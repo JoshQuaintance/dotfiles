@@ -10,6 +10,34 @@ groot() {
   cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 }
 
+# Smart Ancestor Navigation: 'up 3' or 'up src' or 'up' (defaults to 1 level up)
+up() {
+  local target="${1:-1}"
+
+  # If numeric, go up N levels
+  if [[ "$target" =~ ^[0-9]+$ ]]; then
+    local path=""
+    for ((i = 0; i < target; i++)); do
+      path="../$path"
+    done
+    cd "$path" || return 1
+    return 0
+  fi
+
+  # If string, search upward for matching ancestor directory name
+  local curr="$PWD"
+  while [ "$curr" != "/" ] && [ -n "$curr" ]; do
+    if [ "$(basename "$curr")" = "$target" ]; then
+      cd "$curr" || return 1
+      return 0
+    fi
+    curr="$(dirname "$curr")"
+  done
+
+  printf "\033[31m✖ No ancestor directory named '%s' found.\033[0m\n" "$target" >&2
+  return 1
+}
+
 # 2. Dynamic Configuration Manager (fuzzy matching & auto-reloading)
 # Usage:
 #   conf                  # Open ~/.zshrc (default)
@@ -372,6 +400,40 @@ scratch() {
   "$editor" "$target_file"
 }
 
+# Universal Archive Extractor (extract / x)
+extract() {
+  if [ -z "$1" ]; then
+    printf "\033[33mUsage: extract <archive_file>\033[0m\n" >&2
+    printf "Supports: .tar.gz, .tgz, .tar.bz2, .tbz2, .tar.xz, .txz, .zip, .rar, .7z, .tar.zst, .zst, .gz, .bz2\n" >&2
+    return 1
+  fi
+
+  if [ ! -f "$1" ]; then
+    printf "\033[31m✖ File not found: %s\033[0m\n" "$1" >&2
+    return 1
+  fi
+
+  local file="$1"
+  case "${file:l}" in
+    *.tar.bz2|*.tbz2)   tar xvjf "$file" ;;
+    *.tar.gz|*.tgz)     tar xvzf "$file" ;;
+    *.tar.xz|*.txz)     tar xvJf "$file" ;;
+    *.tar.zst)          tar --zstd -xvf "$file" 2>/dev/null || zstd -d -c "$file" | tar xvf - ;;
+    *.tar)              tar xvf "$file" ;;
+    *.bz2)              bunzip2 "$file" ;;
+    *.rar)              unrar x "$file" ;;
+    *.gz)               gunzip "$file" ;;
+    *.zip)              unzip "$file" ;;
+    *.z)                uncompress "$file" ;;
+    *.7z)               7z x "$file" ;;
+    *.zst)              zstd -d "$file" ;;
+    *)
+      printf "\033[31m✖ Cannot extract '%s' — unsupported extension.\033[0m\n" "$file" >&2
+      return 1
+      ;;
+  esac
+}
+
 # 5. Interactive Package.json Script Selector (FZF)
 _find_package_json() {
   local dir="$PWD"
@@ -637,7 +699,7 @@ fa() {
 
   _gen_list() {
     # 1. Custom dotfiles functions
-    for fn in take groot conf clone port gsearch wt y copy paste scratch npmr bunr pnpmr dotupdate dotcheck toggle-autols acceptance fa; do
+    for fn in take up groot conf clone port gsearch wt y copy paste scratch extract npmr bunr pnpmr dotupdate dotcheck toggle-autols acceptance fa; do
       if (( $+functions[$fn] )); then
         printf "function\t%-18s\t(shell function)\n" "$fn"
       fi
