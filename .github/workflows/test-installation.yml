@@ -32,6 +32,7 @@ jobs:
           zsh -n .zshrc
           zsh -n .aliases
           zsh -n zsh/*.zsh
+          zsh -n zsh/functions/*.zsh
 
       - name: Run Shellcheck on Core Utilities
         run: |
@@ -56,6 +57,7 @@ jobs:
           ls -la ~/.config/bat/config
           ls -la ~/.config/eza/theme.yml
           ls -la ~/.config/mise/config.toml
+          ls -la ~/.config/yazi
 
       - name: Verify Core CLI Tools
         run: |
@@ -70,6 +72,10 @@ jobs:
       - name: Run Dotfiles Health Doctor
         run: |
           ./bin/dotdoctor
+
+      - name: Run Deep Dotfiles Test Suite
+        run: |
+          ./bin/dottest
 
       - name: Test Interactive Zsh Boot
         run: |
@@ -94,10 +100,15 @@ jobs:
           ls -la ~/.config/bat/config
           ls -la ~/.config/eza/theme.yml
           ls -la ~/.config/mise/config.toml
+          ls -la ~/.config/yazi
 
       - name: Run Dotfiles Health Doctor
         run: |
           ./bin/dotdoctor
+
+      - name: Run Deep Dotfiles Test Suite
+        run: |
+          ./bin/dottest
 
       - name: Test Interactive Zsh Boot
         run: |

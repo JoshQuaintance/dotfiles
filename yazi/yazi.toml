@@ -16,21 +16,3 @@ max_height = 1200
 image_filter = "triangle"
 image_quality = 80
 sixel_fraction = 15
-
-[opener]
-edit = [
-	{ run = '${EDITOR:-nvim} "$@"', block = true, for = "unix" },
-]
-open = [
-	{ run = 'open "$@"', desc = "Open", for = "macos" },
-	{ run = 'xdg-open "$@"', desc = "Open", for = "linux" },
-]
-
-[open]
-rules = [
-	{ name = "*/", use = [ "edit", "open", "reveal" ] },
-	{ mime = "text/*", use = [ "edit", "reveal" ] },
-	{ mime = "application/json", use = [ "edit", "reveal" ] },
-	{ mime = "*/javascript", use = [ "edit", "reveal" ] },
-	{ mime = "*", use = [ "open", "reveal" ] },
-]

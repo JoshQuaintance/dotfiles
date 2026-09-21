@@ -272,6 +272,8 @@ if [ -d "$DOTFILES_DIR/bin" ]; then
     ln -sf "$DOTFILES_DIR/bin/dotcheck" "$HOME/.local/bin/.dotcheck"
     ln -sf "$DOTFILES_DIR/bin/dotupdate" "$HOME/.local/bin/.update"
     ln -sf "$DOTFILES_DIR/bin/dotupdate" "$HOME/.local/bin/.dotupdate"
+    ln -sf "$DOTFILES_DIR/bin/dottest" "$HOME/.local/bin/.test"
+    ln -sf "$DOTFILES_DIR/bin/dottest" "$HOME/.local/bin/.dottest"
 fi
 
 success "All Core CLI utilities & shell tools configured successfully!"
