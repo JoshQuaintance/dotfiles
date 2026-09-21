@@ -30,6 +30,7 @@ jobs:
       - name: Validate Zsh Configuration Syntax
         run: |
           zsh -n .zshrc
+          zsh -n .zshenv
           zsh -n .aliases
           zsh -n zsh/*.zsh
           zsh -n zsh/functions/*.zsh
@@ -53,6 +54,7 @@ jobs:
       - name: Verify Configuration Symlinks
         run: |
           ls -la ~/.zshrc
+          ls -la ~/.zshenv
           ls -la ~/.config/starship.toml
           ls -la ~/.config/bat/config
           ls -la ~/.config/eza/theme.yml
@@ -101,6 +103,7 @@ jobs:
       - name: Verify Configuration Symlinks
         run: |
           ls -la ~/.zshrc
+          ls -la ~/.zshenv
           ls -la ~/.config/starship.toml
           ls -la ~/.config/bat/config
           ls -la ~/.config/eza/theme.yml

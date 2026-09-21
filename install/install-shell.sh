@@ -56,6 +56,12 @@ if [ -f "$DOTFILES_DIR/.zshrc" ]; then
     success "Linked ~/.zshrc -> $DOTFILES_DIR/.zshrc"
 fi
 
+# Symlink .zshenv for global environment & UTF-8 consistency
+if [ -f "$DOTFILES_DIR/.zshenv" ]; then
+    ln -sfn "$DOTFILES_DIR/.zshenv" "$HOME/.zshenv"
+    success "Linked ~/.zshenv -> $DOTFILES_DIR/.zshenv"
+fi
+
 # 5. Symlink .aliases with .bak backup
 if [ -f "$DOTFILES_DIR/.aliases" ]; then
     if [ -e "$HOME/.aliases" ] || [ -L "$HOME/.aliases" ]; then

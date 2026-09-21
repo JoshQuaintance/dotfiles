@@ -89,6 +89,7 @@ check_link() {
 }
 
 check_link "$HOME/.zshrc" "Zsh main config" ".zshrc"
+check_link "$HOME/.zshenv" "Zsh global environment" ".zshenv"
 check_link "$HOME/.aliases" "Zsh aliases" ".aliases"
 check_link "$HOME/.gitconfig" "Global Git config" ".gitconfig"
 check_link "$HOME/.gitignore_global" "Global Git ignore" ".gitignore_global"

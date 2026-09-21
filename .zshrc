@@ -1,9 +1,9 @@
 # Ensure UTF-8 locale is always active for proper Unicode & multibyte rendering
-if [ "${#${:-🐧}}" -ne 1 ]; then
-    for _loc in "en_US.UTF-8" "C.UTF-8" "UTF-8" "C.utf8"; do
-        export LANG="$_loc" LC_ALL="$_loc" 2>/dev/null
-        [ "${#${:-🐧}}" -eq 1 ] && break
-    done
+if [ -z "$LANG" ] || [ "$LANG" = "C" ] || [ "$LANG" = "POSIX" ]; then
+    export LANG="en_US.UTF-8"
+fi
+if [ -z "$LC_ALL" ] || [ "$LC_ALL" = "C" ] || [ "$LC_ALL" = "POSIX" ]; then
+    export LC_ALL="$LANG"
 fi
 
 # Startup verbose checklist & environment banner
@@ -157,8 +157,40 @@ command -v atuin &>/dev/null && eval "$(atuin init zsh)"
 # Zoxide (Smart directory jumper: 'z <folder>')
 command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
 
-# FZF (Fuzzy finder integration)
+# FZF (Fuzzy finder integration & Catppuccin Mocha theme)
 if command -v fzf &>/dev/null; then
+    # Catppuccin Mocha color palette & ergonomics
+    export FZF_DEFAULT_OPTS=" \
+    --color=bg+:#313244,bg:#1e1e2e,spinner:#f5e0dc,hl:#f38ba8 \
+    --color=fg:#cdd6f4,header:#f38ba8,info:#cba6f7,pointer:#f5e0dc \
+    --color=marker:#b4befe,fg+:#cdd6f4,prompt:#cba6f7,hl+:#f38ba8 \
+    --color=selected-bg:#45475a \
+    --multi \
+    --height=50% \
+    --layout=reverse \
+    --border=rounded \
+    --prompt='❯ ' \
+    --pointer='◆ ' \
+    --marker='✓ '"
+
+    # Fast file discovery via fd (includes hidden files, excludes .git)
+    if command -v fd &>/dev/null; then
+        export FZF_DEFAULT_COMMAND="fd --hidden --strip-cwd-prefix --exclude .git"
+        export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+        export FZF_ALT_C_COMMAND="fd --type=d --hidden --strip-cwd-prefix --exclude .git"
+    fi
+
+    # Interactive previews for Ctrl-T (files) and Alt-C (directories)
+    if command -v bat &>/dev/null; then
+        export FZF_CTRL_T_OPTS="--preview 'if [ -d {} ]; then eza --tree --level=2 --color=always {} 2>/dev/null; else bat --style=numbers --color=always --line-range :300 {} 2>/dev/null; fi'"
+    elif command -v eza &>/dev/null; then
+        export FZF_CTRL_T_OPTS="--preview 'if [ -d {} ]; then eza --tree --level=2 --color=always {} 2>/dev/null; fi'"
+    fi
+
+    if command -v eza &>/dev/null; then
+        export FZF_ALT_C_OPTS="--preview 'eza --tree --level=2 --color=always {} 2>/dev/null'"
+    fi
+
     source <(fzf --zsh 2>/dev/null) 2>/dev/null || true
 
     # FZF-Tab (interactive completion menu)

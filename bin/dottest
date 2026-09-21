@@ -302,7 +302,7 @@ if ! command -v zsh &>/dev/null; then
     test_fail "Zsh scripts syntax" "zsh binary not found"
 else
     zsh_syntax_fail=false
-    for zscript in "$DOTFILES_DIR/.zshrc" "$DOTFILES_DIR/.aliases" "$DOTFILES_DIR/zsh/"*.zsh "$DOTFILES_DIR/zsh/functions/"*.zsh; do
+    for zscript in "$DOTFILES_DIR/.zshrc" "$DOTFILES_DIR/.zshenv" "$DOTFILES_DIR/.aliases" "$DOTFILES_DIR/zsh/"*.zsh "$DOTFILES_DIR/zsh/functions/"*.zsh; do
         if [ -f "$zscript" ] && ! zsh -n "$zscript" 2>/dev/null; then
             test_fail "Zsh syntax: $(basename "$zscript")" "Syntax error"
             zsh_syntax_fail=true
@@ -315,7 +315,7 @@ fi
 
 # 3c. Dangling Symlink Inspection
 dangling_symlinks=()
-for target in "$HOME/.zshrc" "$HOME/.aliases" "$HOME/.gitconfig" "$HOME/.config/starship.toml" "$HOME/.config/nvim" "$HOME/.config/ghostty/config" "$HOME/.config/bat/config" "$HOME/.config/eza/theme.yml" "$HOME/.config/mise/config.toml" "$HOME/.config/yazi"; do
+for target in "$HOME/.zshrc" "$HOME/.zshenv" "$HOME/.aliases" "$HOME/.gitconfig" "$HOME/.config/starship.toml" "$HOME/.config/nvim" "$HOME/.config/ghostty/config" "$HOME/.config/bat/config" "$HOME/.config/eza/theme.yml" "$HOME/.config/mise/config.toml" "$HOME/.config/yazi"; do
     if [ -L "$target" ] && [ ! -e "$target" ]; then
         dangling_symlinks+=("$target")
     fi
