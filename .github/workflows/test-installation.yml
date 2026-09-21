@@ -89,6 +89,11 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Install System Prerequisites
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y zsh
+
       - name: Run Full Dotfiles Installer
         run: |
           ./install.sh -y
