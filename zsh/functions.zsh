@@ -10,63 +10,135 @@ groot() {
   cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 }
 
-# 2. Configuration Manager (auto-reloads shell rc if modified)
+# 2. Dynamic Configuration Manager (fuzzy matching & auto-reloading)
+# Usage:
+#   conf                  # Open ~/.zshrc (default)
+#   conf <target>         # Smart fuzzy lookup (e.g. conf ghost, conf nvim, conf brew, conf star)
+#   conf <path>           # Direct file or directory path
+_conf_candidates() {
+  local dot_dir="${DOTFILES_DIR:-$HOME/.dotfiles}"
+  local cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}"
+
+  # 1. Base shell & dotfile anchors
+  [ -f "$HOME/.zshrc" ] && printf "zsh\t%s\n" "$HOME/.zshrc"
+  [ -f "$HOME/.zshrc" ] && printf "shell\t%s\n" "$HOME/.zshrc"
+  [ -f "$HOME/.aliases" ] && printf "alias\t%s\n" "$HOME/.aliases"
+  [ -f "$HOME/.aliases" ] && printf "aliases\t%s\n" "$HOME/.aliases"
+  [ -f "$dot_dir/zsh/functions.zsh" ] && printf "functions\t%s\n" "$dot_dir/zsh/functions.zsh"
+  [ -f "$dot_dir/zsh/functions.zsh" ] && printf "func\t%s\n" "$dot_dir/zsh/functions.zsh"
+  [ -f "$HOME/.gitconfig" ] && printf "git\t%s\n" "$HOME/.gitconfig"
+  [ -f "$HOME/.gitconfig" ] && printf "gitconfig\t%s\n" "$HOME/.gitconfig"
+  [ -f "$dot_dir/Brewfile" ] && printf "brew\t%s\n" "$dot_dir/Brewfile"
+  [ -f "$dot_dir/Brewfile" ] && printf "brewfile\t%s\n" "$dot_dir/Brewfile"
+  [ -d "$dot_dir" ] && printf "dotfiles\t%s\n" "$dot_dir"
+  [ -d "$dot_dir" ] && printf "dots\t%s\n" "$dot_dir"
+  [ -d "${SCRATCH_DIR:-$HOME/.scratch}" ] && printf "scratch\t%s\n" "${SCRATCH_DIR:-$HOME/.scratch}"
+
+  # 2. Dynamic discovery in ~/.config
+  if [ -d "$cfg_dir" ]; then
+    for item in "$cfg_dir"/*(N); do
+      local bname="$(basename "$item")"
+      [[ "$bname" == .* ]] && continue
+
+      if [ -d "$item" ]; then
+        local primary=""
+        for sub in "$item"/config*(N) "$item"/settings.json(N) "$item"/theme.yml(N) "$item"/init.lua(N); do
+          if [ -f "$sub" ]; then
+            primary="$sub"
+            break
+          fi
+        done
+        if [ -n "$primary" ]; then
+          printf "%s\t%s\n" "$bname" "$primary"
+        else
+          printf "%s\t%s\n" "$bname" "$item"
+        fi
+      elif [ -f "$item" ]; then
+        local stripped="${bname%.*}"
+        printf "%s\t%s\n" "$stripped" "$item"
+      fi
+    done
+  fi
+}
+
 conf() {
-  local target="${1:-shell}"
   local target_file=""
   local is_shell_rc=false
 
-  case "$target" in
-    shell|"")
-      target_file="$HOME/.zshrc"
-      is_shell_rc=true
-      ;;
-    zsh)
-      target_file="$HOME/.zshrc"
-      is_shell_rc=true
-      ;;
-    bash)
-      target_file="$HOME/.bashrc"
-      is_shell_rc=true
-      ;;
-    alias|aliases)
-      target_file="$HOME/.aliases"
-      is_shell_rc=true
-      ;;
-    func|functions)
-      target_file="${DOTFILES_DIR:-$HOME/.dotfiles}/zsh/functions.zsh"
-      is_shell_rc=true
-      ;;
-    nvim|vim)
-      target_file="$HOME/.config/nvim"
-      ;;
-    dotfiles|dots)
-      target_file="${DOTFILES_DIR:-$HOME/.dotfiles}"
-      [ ! -d "$target_file" ] && [ -d "$HOME/Codes/dotfiles" ] && target_file="$HOME/Codes/dotfiles"
-      ;;
-    git)
-      target_file="$HOME/.gitconfig"
-      ;;
-    starship)
-      target_file="$HOME/.config/starship.toml"
-      ;;
-    ghostty)
-      target_file="$HOME/.config/ghostty/config"
-      ;;
-    bat)
-      target_file="$HOME/.config/bat/config"
-      ;;
-    eza)
-      target_file="$HOME/.config/eza/theme.yml"
-      ;;
-    *)
-      if [ -f "$1" ] || [ -d "$1" ]; then
-        target_file="$1"
+  # 1. If nothing passed, default to editing ~/.zshrc
+  if [ -z "$1" ]; then
+    target_file="$HOME/.zshrc"
+    is_shell_rc=true
+  # 2. If an explicit file or directory path was given
+  elif [ -f "$1" ] || [ -d "$1" ]; then
+    target_file="$1"
+  else
+    local query="$1"
+    local all_candidates
+    all_candidates=$(_conf_candidates)
+
+    # Check for exact key match first (case-insensitive)
+    local exact_match
+    exact_match=$(echo "$all_candidates" | awk -F'\t' -v q="$query" 'tolower($1) == tolower(q) { print $2; exit }')
+
+    if [ -n "$exact_match" ]; then
+      target_file="$exact_match"
+    else
+      # Fuzzy filter candidate entries
+      local matches
+      matches=$(echo "$all_candidates" | awk -F'\t' -v q="$query" 'tolower($1) ~ tolower(q) || tolower($2) ~ tolower(q) { print $0 }' | sort -u -k2,2)
+      local match_count
+      match_count=$(echo "$matches" | grep -c . || true)
+
+      if [ "$match_count" -eq 1 ]; then
+        target_file=$(echo "$matches" | awk -F'\t' '{print $2}')
+      elif command -v fzf &>/dev/null; then
+        local candidate_pool="$matches"
+        [ -z "$candidate_pool" ] && candidate_pool=$(echo "$all_candidates" | sort -u -k2,2)
+
+        local selected
+        selected=$(echo "$candidate_pool" | awk -F'\t' '{ printf "%-16s │ %s\t%s\n", $1, $2, $2 }' | fzf \
+          --delimiter='\t' \
+          --with-nth=1 \
+          --query="$query" \
+          --height=~50% \
+          --layout=reverse \
+          --border=rounded \
+          --prompt="⚙  Edit Config > " \
+          --header="Enter: open in editor • Esc: cancel" \
+          --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
+          --preview='if [ -d {2} ]; then if command -v eza &>/dev/null; then eza -la --color=always {2}; else ls -la {2}; fi; elif [ -f {2} ]; then if command -v bat &>/dev/null; then bat --style=plain --color=always --line-range :60 {2}; else head -n 60 {2}; fi; fi' \
+          --preview-window='right:55%:wrap')
+
+        if [ -n "$selected" ]; then
+          target_file=$(echo "$selected" | awk -F'\t' '{print $2}')
+        else
+          return 0
+        fi
       else
-        echo "Unknown config target: $1"
-        echo "Usage: conf [shell|alias|functions|nvim|ghostty|bat|eza|dotfiles|git|starship|<path>]"
-        return 1
+        if [ "$match_count" -gt 1 ]; then
+          printf "\033[33mMultiple matches for '%s':\033[0m\n" "$query"
+          echo "$matches" | awk -F'\t' '{printf "%2d) %-14s -> %s\n", NR, $1, $2}'
+          printf "Select config number: "
+          local choice
+          read -r choice
+          target_file=$(echo "$matches" | sed -n "${choice}p" | awk -F'\t' '{print $2}')
+        else
+          printf "\033[31m✖ No configuration found matching '%s'.\033[0m\n" "$query"
+          return 1
+        fi
       fi
+    fi
+  fi
+
+  if [ -z "$target_file" ]; then
+    return 0
+  fi
+
+  # Determine if target is a shell rc file that should trigger auto-reloading
+  case "$target_file" in
+    *"/.zshrc"|*"/.aliases"|*"/zsh/functions.zsh")
+      is_shell_rc=true
       ;;
   esac
 
@@ -226,7 +298,81 @@ paste() {
   fi
 }
 
-# 4. Interactive Package.json Script Selector (FZF)
+# 4. Instant Terminal Scratchpad (scratch)
+# Usage:
+#   scratch               # Open today's scratchpad (~/.scratch/YYYY-MM-DD.md)
+#   scratch notes         # Open a named scratchpad (~/.scratch/notes.md)
+#   scratch -l / --list   # Browse previous scratchpads with interactive fzf + preview
+#   scratch -d / --dir    # Output or cd to scratch directory
+#   curl ... | scratch    # Pipe stdin directly into a new timestamped scratchpad
+scratch() {
+  local scratch_dir="${SCRATCH_DIR:-$HOME/.scratch}"
+  mkdir -p "$scratch_dir"
+
+  # Browse / list mode
+  if [ "$1" = "-l" ] || [ "$1" = "--list" ]; then
+    if ! ls -1 "$scratch_dir"/*.md &>/dev/null; then
+      printf "\033[33mNo scratchpads found in %s\033[0m\n" "$scratch_dir"
+      return 0
+    fi
+
+    if command -v fzf &>/dev/null; then
+      local selected
+      selected=$(find "$scratch_dir" -maxdepth 1 -name "*.md" -type f -exec basename {} \; | sort -r | fzf \
+        --height=~50% \
+        --layout=reverse \
+        --border=rounded \
+        --prompt="📝 Select Scratchpad > " \
+        --header="Enter: open in editor • Esc: cancel" \
+        --preview="if command -v bat &>/dev/null; then bat --style=plain --color=always '$scratch_dir/{}'; else cat '$scratch_dir/{}'; fi" \
+        --preview-window='right:60%:wrap')
+
+      if [ -n "$selected" ]; then
+        local editor="${EDITOR:-nvim}"
+        command -v "$editor" &>/dev/null || editor="nano"
+        "$editor" "$scratch_dir/$selected"
+      fi
+      return 0
+    else
+      ls -lh "$scratch_dir"
+      return 0
+    fi
+  fi
+
+  # Directory jump mode
+  if [ "$1" = "-d" ] || [ "$1" = "--dir" ]; then
+    cd "$scratch_dir" || return 1
+    return 0
+  fi
+
+  # Determine target file
+  local target_file=""
+  if [ -n "$1" ]; then
+    local name="$1"
+    [[ "$name" != *.md ]] && name="${name}.md"
+    target_file="$scratch_dir/$name"
+  else
+    target_file="$scratch_dir/$(date +%Y-%m-%d).md"
+  fi
+
+  # Handle piped stdin (e.g. echo "data" | scratch or curl ... | scratch test)
+  if [ ! -t 0 ]; then
+    cat >> "$target_file"
+    printf "\033[32m✔ Appended stdin to %s\033[0m\n" "$target_file"
+    return 0
+  fi
+
+  # Add header if file is newly created
+  if [ ! -f "$target_file" ]; then
+    printf "# Scratchpad: %s\nCreated: %s\n\n" "$(basename "$target_file" .md)" "$(date '+%Y-%m-%d %H:%M:%S')" > "$target_file"
+  fi
+
+  local editor="${EDITOR:-nvim}"
+  command -v "$editor" &>/dev/null || editor="nano"
+  "$editor" "$target_file"
+}
+
+# 5. Interactive Package.json Script Selector (FZF)
 _find_package_json() {
   local dir="$PWD"
   while [ "$dir" != "/" ] && [ -n "$dir" ]; do
@@ -491,7 +637,7 @@ fa() {
 
   _gen_list() {
     # 1. Custom dotfiles functions
-    for fn in take groot conf clone port gsearch wt y copy paste npmr bunr pnpmr dotupdate dotcheck toggle-autols acceptance fa; do
+    for fn in take groot conf clone port gsearch wt y copy paste scratch npmr bunr pnpmr dotupdate dotcheck toggle-autols acceptance fa; do
       if (( $+functions[$fn] )); then
         printf "function\t%-18s\t(shell function)\n" "$fn"
       fi
