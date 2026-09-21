@@ -1,0 +1,32 @@
+# Fast compinit wrapper for Oh My Zsh
+# Adds -C flag when the completion dump is younger than 24 hours to skip 300ms fpath scan
+unfunction compinit
+
+# Temporarily remove this directory from fpath so system compinit is loaded
+local -a old_fpath
+old_fpath=("$fpath[@]")
+local custom_dir="${ZSH_CUSTOM:-$ZSH/custom}/functions"
+fpath=("${(@)fpath:#$custom_dir}")
+
+builtin autoload -Uz +X compinit
+fpath=("$old_fpath[@]")
+
+local dump=""
+local -a args=("$@")
+local i=1
+while (( i <= $#args )); do
+  if [[ "${args[i]}" == "-d" ]]; then
+    dump="${args[i+1]}"
+    break
+  fi
+  (( i++ ))
+done
+dump="${dump:-${ZDOTDIR:-$HOME}/.zcompdump}"
+
+setopt localoptions extendedglob
+local -a fresh=($dump(#qN.m-1))
+if (( $#fresh )); then
+  compinit -C "$@"
+else
+  compinit "$@"
+fi

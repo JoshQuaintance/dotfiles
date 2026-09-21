@@ -47,7 +47,7 @@ if command -v brew &>/dev/null; then
                         brew install "$pkg"
                     fi
                     ;;
-                ghostty|visual-studio-code|font-jetbrains-mono-nerd-font)
+                ghostty|visual-studio-code|font-jetbrains-mono-nerd-font|font-miracode|font-fira-code-nerd-font|font-monocraft)
                     if [ "$OS" = "Darwin" ]; then
                         if brew list --cask "$pkg" &>/dev/null; then
                             log "$pkg is already installed."

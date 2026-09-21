@@ -208,10 +208,13 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
     if [ "$OS" = "Darwin" ]; then
         cli_options+=(
             "Ghostty         - Fast GPU terminal emulator (macOS cask)"
-            "Nerd Font       - JetBrainsMono Nerd Font (macOS cask)"
+            "Miracode Font   - Terminal & editor primary font (macOS cask)"
+            "FiraCode NF     - Terminal fallback Nerd Font (macOS cask)"
+            "Monocraft Font  - Pixel editor font (macOS cask)"
+            "JetBrainsMono NF - Developer Nerd Font (macOS cask)"
         )
-        cli_keys+=(ghostty font-jetbrains-mono-nerd-font)
-        cli_defs+=(1 1)
+        cli_keys+=(ghostty font-miracode font-fira-code-nerd-font font-monocraft font-jetbrains-mono-nerd-font)
+        cli_defs+=(1 1 1 1 1)
     fi
 
     chosen_cli_indices=()

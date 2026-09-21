@@ -46,6 +46,9 @@ if OS.mac?
 
   # Developer Fonts (skipped if HOMEBREW_BUNDLE_NO_FONTS=1)
   unless ENV["HOMEBREW_BUNDLE_NO_FONTS"] == "1"
+    cask "font-miracode"
+    cask "font-fira-code-nerd-font"
+    cask "font-monocraft"
     cask "font-jetbrains-mono-nerd-font"
   end
 end

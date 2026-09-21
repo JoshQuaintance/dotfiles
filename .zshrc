@@ -30,12 +30,12 @@ if [[ -o interactive ]] && [ -t 1 ] && [ "${ZSH_STARTUP_VERBOSE:-true}" = true ]
         fi
     }
 
-    if [ "$(uname -s)" = "Darwin" ]; then
+    if [[ "$OSTYPE" == darwin* ]]; then
         _os_logo=""
     else
         _os_logo="🐧"
     fi
-    _raw_title="${ZSH_BANNER_TITLE:-$(whoami)@$(hostname -s)}"
+    _raw_title="${ZSH_BANNER_TITLE:-${USER}@${HOST/.*/}}"
     _title="${_os_logo} ${_raw_title}"
 else
     _ZSH_STARTUP_VERBOSE=false
@@ -45,11 +45,27 @@ fi
 # If you come from bash you might have to change your $PATH.
 export PATH=$HOME/bin:$HOME/.local/bin:/usr/local/bin:$PATH
 
-# Homebrew environment (macOS Apple Silicon & Linuxbrew)
-if [ -f "/opt/homebrew/bin/brew" ]; then
-    eval "$(/opt/homebrew/bin/brew shellenv)"
+# Homebrew environment (macOS Apple Silicon & Linuxbrew, fast static export)
+if [ -d "/opt/homebrew" ]; then
+    export HOMEBREW_PREFIX="/opt/homebrew"
+    export HOMEBREW_CELLAR="/opt/homebrew/Cellar"
+    export HOMEBREW_REPOSITORY="/opt/homebrew"
+    export PATH="/opt/homebrew/bin:/opt/homebrew/sbin${PATH+:$PATH}"
+    export MANPATH="/opt/homebrew/share/man${MANPATH+:$MANPATH}:"
+    export INFOPATH="/opt/homebrew/share/info:${INFOPATH:-}"
+    fpath=("/opt/homebrew/share/zsh/site-functions" $fpath)
     export C_INCLUDE_PATH="/opt/homebrew/include:$C_INCLUDE_PATH"
     export LIBRARY_PATH="/opt/homebrew/lib:$LIBRARY_PATH"
+elif [ -d "/home/linuxbrew/.linuxbrew" ]; then
+    export HOMEBREW_PREFIX="/home/linuxbrew/.linuxbrew"
+    export HOMEBREW_CELLAR="/home/linuxbrew/.linuxbrew/Cellar"
+    export HOMEBREW_REPOSITORY="/home/linuxbrew/.linuxbrew/Homebrew"
+    export PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin${PATH+:$PATH}"
+    export MANPATH="/home/linuxbrew/.linuxbrew/share/man${MANPATH+:$MANPATH}:"
+    export INFOPATH="/home/linuxbrew/.linuxbrew/share/info:${INFOPATH:-}"
+    fpath=("/home/linuxbrew/.linuxbrew/share/zsh/site-functions" $fpath)
+elif [ -f "/opt/homebrew/bin/brew" ]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
 elif [ -f "/home/linuxbrew/.linuxbrew/bin/brew" ]; then
     eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 fi
@@ -57,16 +73,17 @@ _step "Homebrew environment"
 
 # Oh My Zsh configuration
 export ZSH="$HOME/.oh-my-zsh"
+export ZSH_CUSTOM="${DOTFILES_DIR:-$HOME/.dotfiles}/zsh/custom"
+export ZSH_DISABLE_COMPFIX="true"
+export SHORT_HOST="${HOST/.*/}"
+export ZSH_COMPDUMP="${ZDOTDIR:-$HOME}/.zcompdump-${SHORT_HOST}-${ZSH_VERSION}"
 ZSH_THEME="robbyrussell"
-zstyle ':omz:update' mode reminder
-zstyle ':omz:plugins:eza' 'icons' yes
-zstyle ':omz:plugins:eza' 'git-status' yes
-zstyle ':omz:plugins:eza' 'hyperlink' yes
-plugins=(git eza)
+zstyle ':omz:update' mode disabled
+plugins=(git)
 
-# Compile ~/.zcompdump to bytecode ~/.zcompdump.zwc for instant load
-if [ -f "$HOME/.zcompdump" ] && [ ! -f "$HOME/.zcompdump.zwc" -o "$HOME/.zcompdump" -nt "$HOME/.zcompdump.zwc" ]; then
-    zcompile "$HOME/.zcompdump" 2>/dev/null || true
+# Precompile ~/.zcompdump to bytecode for instant loading
+if [ -f "$ZSH_COMPDUMP" ] && [ ! -f "${ZSH_COMPDUMP}.zwc" -o "$ZSH_COMPDUMP" -nt "${ZSH_COMPDUMP}.zwc" ]; then
+    zcompile "$ZSH_COMPDUMP" 2>/dev/null || true
 fi
 
 if [ -f "$ZSH/oh-my-zsh.sh" ]; then
@@ -79,7 +96,7 @@ else
     setopt PROMPT_SUBST
     PROMPT='%F{cyan}%~%F{yellow}${vcs_info_msg_0_}%F{reset} %# '
 fi
-_step "Oh My Zsh & plugins (git, eza)"
+_step "Oh My Zsh & plugins (git)"
 
 # Starship Prompt Initialization
 if command -v starship &>/dev/null && [ "$TERM" != "dumb" ]; then
@@ -106,18 +123,6 @@ if [ -s "$NVM_DIR/nvm.sh" ]; then
         [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
         nvm "$@"
     }
-fi
-
-# Astral Python Tools (uv & ruff completions, cached)
-if command -v uv &>/dev/null; then
-    _uv_cache="${XDG_CACHE_HOME:-$HOME/.cache}/uv_completion.zsh"
-    [ ! -s "$_uv_cache" ] && mkdir -p "$(dirname "$_uv_cache")" && (uv generate-shell-completion zsh > "$_uv_cache" 2>/dev/null || rm -f "$_uv_cache")
-    [ -s "$_uv_cache" ] && source "$_uv_cache"
-fi
-if command -v ruff &>/dev/null; then
-    _ruff_cache="${XDG_CACHE_HOME:-$HOME/.cache}/ruff_completion.zsh"
-    [ ! -s "$_ruff_cache" ] && mkdir -p "$(dirname "$_ruff_cache")" && (ruff generate-shell-completion zsh > "$_ruff_cache" 2>/dev/null || rm -f "$_ruff_cache")
-    [ -s "$_ruff_cache" ] && source "$_ruff_cache"
 fi
 
 # Angular CLI autocompletion (cached to prevent spawning node on every launch)
@@ -154,7 +159,6 @@ command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
 
 # FZF (Fuzzy finder integration)
 if command -v fzf &>/dev/null; then
-    [ -f "$HOME/.fzf.zsh" ] && source "$HOME/.fzf.zsh"
     source <(fzf --zsh 2>/dev/null) 2>/dev/null || true
 
     # FZF-Tab (interactive completion menu)
@@ -197,168 +201,14 @@ _step "CLI tools (Atuin, Zoxide, FZF, Bun, Bat)"
 # Functions & Aliases
 # ==========================================
 _dot_dir="${DOTFILES_DIR:-$HOME/.dotfiles}"
-[ ! -d "$_dot_dir/.git" ] && [ -d "$HOME/Codes/dotfiles/.git" ] && _dot_dir="$HOME/Codes/dotfiles"
 
 [ -f "$_dot_dir/zsh/functions.zsh" ] && source "$_dot_dir/zsh/functions.zsh"
 [ -f "$HOME/.aliases" ] && source "$HOME/.aliases"
 [ -f "$_dot_dir/.aliases" ] && [ ! -f "$HOME/.aliases" ] && source "$_dot_dir/.aliases"
 _step "Dotfiles aliases & functions"
 
-# Startup Summary Card (Option 1: Left Accent Bar)
-if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
-    _t_total=$(( EPOCHREALTIME - _t_start ))
-    _tot_str=$(printf "%.2fs" "$_t_total")
-    _arch="$(uname -m)"
-    _os_name="$(uname -s)"
-
-    if [ "$_os_name" = "Darwin" ]; then
-        _os_str="macOS (${_arch})"
-    else
-        _os_str="${_os_name} (${_arch})"
-    fi
-
-    # 1. Dotfiles info (fast shell reading without git subshell)
-    _dot_branch=""
-    _dot_hash=""
-    if [ -f "$_dot_dir/.git/HEAD" ]; then
-        read -r _head_line < "$_dot_dir/.git/HEAD"
-        if [[ "$_head_line" == ref:\ * ]]; then
-            _dot_branch="${_head_line#ref: refs/heads/}"
-            _ref_file="$_dot_dir/.git/${_head_line#ref: }"
-            if [ -f "$_ref_file" ]; then
-                read -r _full_hash < "$_ref_file"
-                _dot_hash="${_full_hash[1,7]}"
-            fi
-        else
-            _dot_branch="detached"
-            _dot_hash="${_head_line[1,7]}"
-        fi
-    fi
-    [ -z "$_dot_branch" ] && _dot_branch="$(git -C "$_dot_dir" branch --show-current 2>/dev/null || echo "main")"
-    [ -z "$_dot_hash" ] && _dot_hash="$(git -C "$_dot_dir" rev-parse --short HEAD 2>/dev/null || echo "")"
-    _dot_info="${_dot_branch}${_dot_hash:+ (${_dot_hash})}"
-
-    # 2. Battery status (macOS pmset + Linux sysfs /sys/class/power_supply)
-    _batt_info=""
-    _batt_label="Battery:"
-    if command -v pmset &>/dev/null; then
-        # macOS
-        _batt_raw="$(pmset -g batt 2>/dev/null)"
-        _batt_pct="$(echo "$_batt_raw" | grep -Eo '[0-9]+%' | head -n 1)"
-        if [ -n "$_batt_pct" ]; then
-            if echo "$_batt_raw" | grep -qi "charging" && ! echo "$_batt_raw" | grep -qi "not charging"; then
-                _batt_info="${_batt_pct} ⚡"
-            else
-                _batt_info="${_batt_pct} 🔋"
-            fi
-        fi
-    elif [ -d /sys/class/power_supply ]; then
-        # Linux laptops (safely omit via (N) nullglob if in container or desktop)
-        local -a _bats
-        _bats=(/sys/class/power_supply/BAT*(N) /sys/class/power_supply/battery(N))
-        for _bat in "${_bats[@]}"; do
-            if [ -f "$_bat/capacity" ]; then
-                _pct="$(cat "$_bat/capacity" 2>/dev/null)%"
-                _st="$(cat "$_bat/status" 2>/dev/null)"
-                if [ "$_st" = "Charging" ]; then
-                    _batt_info="${_pct} ⚡"
-                elif [ "$_st" = "Full" ]; then
-                    _batt_info="${_pct} 🔌"
-                else
-                    _batt_info="${_pct} 🔋"
-                fi
-                break
-            fi
-        done
-    fi
-
-    if [ -z "$_batt_info" ]; then
-        _batt_label="Network:"
-        _batt_info="Online"
-    fi
-
-    # 3. System Uptime (macOS sysctl + Linux /proc/uptime)
-    _uptime_str="N/A"
-    _up_sec=0
-    if [ "$_os_name" = "Darwin" ]; then
-        _boot_sec="$(sysctl -n kern.boottime 2>/dev/null | awk '{print $4}' | tr -d ',')"
-        [ -n "$_boot_sec" ] && _up_sec=$(( EPOCHSECONDS - _boot_sec ))
-    elif [ -f /proc/uptime ]; then
-        _up_sec=$(awk '{print int($1)}' /proc/uptime 2>/dev/null)
-    fi
-
-    if [ -n "$_up_sec" ] && [ "$_up_sec" -gt 0 ]; then
-        _up_d=$(( _up_sec / 86400 ))
-        _up_h=$(( (_up_sec % 86400) / 3600 ))
-        _up_m=$(( (_up_sec % 3600) / 60 ))
-        if [ "$_up_d" -gt 0 ]; then
-            _uptime_str="${_up_d}d ${_up_h}h"
-        elif [ "$_up_h" -gt 0 ]; then
-            _uptime_str="${_up_h}h ${_up_m}m"
-        else
-            _uptime_str="${_up_m}m"
-        fi
-    fi
-
-    # 4. CPU Load & Memory Stats (macOS vm_stat + Linux /proc)
-    _cpu_load=""
-    _mem_str="N/A"
-    if [ "$_os_name" = "Darwin" ]; then
-        _cpu_load="$(sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}')"
-        if command -v vm_stat &>/dev/null; then
-            _tot_ram=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1073741824 ))
-            _mem_str="$(vm_stat | awk -v tot="$_tot_ram" '
-                /page size of/ { ps = substr($8, 1, length($8)) + 0 }
-                /Pages active:/ { a = substr($3, 1, length($3)-1) + 0 }
-                /Pages wired/ { w = substr($4, 1, length($4)-1) + 0 }
-                /occupied by compressor:/ { c = substr($5, 1, length($5)-1) + 0 }
-                END {
-                    if (ps == 0) ps = 16384;
-                    used = (a + w + c) * ps / (1024*1024*1024);
-                    printf "%.0f/%.0fGB", used, tot;
-                }
-            ')"
-        fi
-    else
-        [ -f /proc/loadavg ] && _cpu_load="$(awk '{print $1}' /proc/loadavg 2>/dev/null)"
-        if [ -f /proc/meminfo ]; then
-            _mem_str="$(awk '/MemTotal:/ {tot=$2} /MemAvailable:/ {avail=$2} END { used=(tot-avail)/1048576; tot_gb=tot/1048576; printf "%.0f/%.0fGB", used, tot_gb }' /proc/meminfo 2>/dev/null)"
-        fi
-    fi
-
-    # 5. Disk Space
-    _disk_str="$(df -h / 2>/dev/null | awk 'NR==2 {printf "%s (%s)", $4, $5}')"
-
-    # 6. Rotating Shortcuts / Tips
-    _tips=(
-        "'npmr' / 'bunr'   → Interactive script runner"
-        "'.check' / '.update' → Check or update dotfiles"
-        "'.doctor'         → System health & dotfiles diagnostics"
-        "'groot'           → Jump to git project root"
-        "'killport <port>' → Kill process on port"
-        "'esdiff'          → ESLint changed .ts files"
-        "'conf <target>'   → Edit config & auto-reload"
-        "'gprune'          → Prune remote git branches"
-        "'gbclean'         → Delete merged git branches"
-        "'take <dir>'      → mkdir -p and cd in one step"
-        "'sz'              → Reload ~/.zshrc and aliases"
-        "'als'             → Toggle auto-ls after cd"
-        "'fa' / 'aliases'  → Fuzzy search aliases & functions"
-        "'port <port>'     → Show process on port"
-    )
-    _random_tip="${_tips[$(( (RANDOM % ${#_tips[@]}) + 1 ))]}"
-    _tip_line="💡 ${_random_tip}"
-
-    # Render Left Accent Bar
-    printf "${_c_border}▌${_c_reset}\n"
-    printf "${_c_border}▌${_c_reset} ${_c_title}%s${_c_reset} ${_c_dim}•${_c_reset} %s ${_c_dim}•${_c_reset} %s ${_c_dim}•${_c_reset} ${_c_check}Ready in %s${_c_reset}\n" \
-        "$_title" "$_os_str" "zsh ${ZSH_VERSION:-5.9}" "$_tot_str"
-    printf "${_c_border}▌${_c_reset} ${_c_key}Dotfiles:${_c_reset} %s\n" "$_dot_info"
-    printf "${_c_border}▌${_c_reset} ${_c_key}System:${_c_reset}   %s up ${_c_dim}•${_c_reset} %s RAM ${_c_dim}•${_c_reset} %s Disk ${_c_dim}•${_c_reset} %s %s\n" \
-        "$_uptime_str" "$_mem_str" "$_disk_str" "$_batt_label" "$_batt_info"
-    printf "${_c_border}▌${_c_reset} ${_c_dim}%s${_c_reset}\n" "$_tip_line"
-    echo ""
-fi
+# Startup Summary Card & Rotating Tips
+[ -f "$_dot_dir/zsh/banner.zsh" ] && source "$_dot_dir/zsh/banner.zsh"
 
 
 # ==========================================

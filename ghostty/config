@@ -2,8 +2,9 @@
 # Theme: Catppuccin Mocha (darkest variant)
 theme = Catppuccin Mocha
 
-# Font settings
+# Font settings (Miracode primary, FiraCode Nerd Font fallback)
 font-family = Miracode
+font-family = FiraCode Nerd Font
 font-size = 14
 
 # Window styling & padding

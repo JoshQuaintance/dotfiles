@@ -47,7 +47,6 @@ if [ -z "$DOTFILES_DIR" ] || [ ! -d "$DOTFILES_DIR/.git" ]; then
   fi
 fi
 [ -z "$DOTFILES_DIR" ] && [ -d "$HOME/.dotfiles/.git" ] && DOTFILES_DIR="$HOME/.dotfiles"
-[ -z "$DOTFILES_DIR" ] && [ -d "$HOME/Codes/dotfiles/.git" ] && DOTFILES_DIR="$HOME/Codes/dotfiles"
 
 if [ -n "$DOTFILES_DIR" ] && [ -d "$DOTFILES_DIR/.git" ]; then
   branch="$(git -C "$DOTFILES_DIR" branch --show-current 2>/dev/null || echo "detached")"
@@ -60,7 +59,7 @@ if [ -n "$DOTFILES_DIR" ] && [ -d "$DOTFILES_DIR/.git" ]; then
     report_warn "Working tree has uncommitted changes" "Run git status in $DOTFILES_DIR"
   fi
 else
-  report_fail "Dotfiles repository not found" "Checked ~/.dotfiles, ~/Codes/dotfiles"
+  report_fail "Dotfiles repository not found" "Checked ~/.dotfiles"
 fi
 echo ""
 
