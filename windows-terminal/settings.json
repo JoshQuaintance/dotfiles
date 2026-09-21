@@ -1,0 +1,46 @@
+{
+  "$schema": "https://aka.ms/terminal-profiles-schema",
+  "defaultProfile": "{2c4de342-38b7-51cf-b942-4c09ac7d00f9}",
+  "profiles": {
+    "defaults": {
+      "colorScheme": "Catppuccin Mocha",
+      "font": {
+        "face": "Miracode",
+        "fallbackFaces": [
+          "FiraCode Nerd Font",
+          "Consolas"
+        ],
+        "size": 13.0
+      },
+      "padding": "12, 12, 12, 12",
+      "opacity": 95,
+      "useAcrylic": false,
+      "cursorShape": "bar"
+    }
+  },
+  "schemes": [
+    {
+      "name": "Catppuccin Mocha",
+      "background": "#1E1E2E",
+      "foreground": "#CDD6F4",
+      "black": "#45475A",
+      "red": "#F38BA8",
+      "green": "#A6E3A1",
+      "yellow": "#F9E2AF",
+      "blue": "#89B4FA",
+      "purple": "#F5C2E7",
+      "cyan": "#94E2D5",
+      "white": "#BAC2DE",
+      "brightBlack": "#585B70",
+      "brightRed": "#F38BA8",
+      "brightGreen": "#A6E3A1",
+      "brightYellow": "#F9E2AF",
+      "brightBlue": "#89B4FA",
+      "brightPurple": "#F5C2E7",
+      "brightCyan": "#94E2D5",
+      "brightWhite": "#A6ADC8",
+      "cursorColor": "#F5E0DC",
+      "selectionBackground": "#585B70"
+    }
+  ]
+}

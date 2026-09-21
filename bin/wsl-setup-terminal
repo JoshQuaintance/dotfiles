@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# wsl-setup-terminal — Configure Windows Terminal from inside WSL
+# Injects Catppuccin Mocha theme, Miracode + FiraCode NF fonts, and 12px padding
+# ==============================================================================
+set -euo pipefail
+
+# Ensure running under WSL
+if [ -z "${WSL_DISTRO_NAME:-}" ] && ! grep -qi microsoft /proc/version 2>/dev/null; then
+    echo -e "\033[38;2;249;226;175m[WARN]\033[0m This utility is designed to be executed inside WSL."
+    echo "On macOS or Linux, your terminal configuration is managed via ~/.config/ghostty/config."
+    exit 0
+fi
+
+if ! command -v powershell.exe &>/dev/null; then
+    echo -e "\033[38;2;243;139;168m[ERROR]\033[0m powershell.exe is not accessible from WSL."
+    exit 1
+fi
+
+echo -e "\033[38;2;137;180;250m[INFO]\033[0m Locating Windows Terminal settings on Windows host..."
+
+# Retrieve Windows LocalAppData
+WIN_LOCALAPPDATA=$(powershell.exe -NoProfile -Command '$env:LOCALAPPDATA' 2>/dev/null | tr -d '\r')
+if [ -z "$WIN_LOCALAPPDATA" ] || ! command -v wslpath &>/dev/null; then
+    echo -e "\033[38;2;243;139;168m[ERROR]\033[0m Unable to resolve Windows LocalAppData path."
+    exit 1
+fi
+
+LOCALAPPDATA_MOUNT="$(wslpath "$WIN_LOCALAPPDATA")"
+
+# Search for settings.json across known package IDs
+SETTINGS_FILE=""
+CANDIDATE_PATHS=(
+    "$LOCALAPPDATA_MOUNT/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json"
+    "$LOCALAPPDATA_MOUNT/Packages/Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe/LocalState/settings.json"
+    "$LOCALAPPDATA_MOUNT/Microsoft/Windows Terminal/settings.json"
+)
+
+for path in "${CANDIDATE_PATHS[@]}"; do
+    if [ -f "$path" ]; then
+        SETTINGS_FILE="$path"
+        break
+    fi
+done
+
+if [ -z "$SETTINGS_FILE" ]; then
+    echo -e "\033[38;2;243;139;168m[ERROR]\033[0m Windows Terminal settings.json not found."
+    echo "Please ensure Windows Terminal is installed on Windows and has been launched at least once."
+    exit 1
+fi
+
+echo -e "\033[38;2;166;227;161m[✔]\033[0m Found Windows Terminal settings at:"
+echo "    $SETTINGS_FILE"
+
+# Backup original configuration
+BACKUP_FILE="${SETTINGS_FILE}.bak.$(date +%Y%m%d%H%M%S)"
+cp "$SETTINGS_FILE" "$BACKUP_FILE"
+echo -e "\033[38;2;166;227;161m[✔]\033[0m Backup saved to $BACKUP_FILE"
+
+# Safely inject Catppuccin Mocha and Font stack using Python
+python3 - <<EOF
+import json
+import sys
+
+settings_path = "$SETTINGS_FILE"
+
+try:
+    with open(settings_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+except Exception as e:
+    print(f"\033[38;2;243;139;168m[ERROR]\033[0m Failed to parse JSON: {e}", file=sys.stderr)
+    sys.exit(1)
+
+# 1. Inject or update Catppuccin Mocha color scheme
+mocha_scheme = {
+    "name": "Catppuccin Mocha",
+    "background": "#1E1E2E",
+    "foreground": "#CDD6F4",
+    "black": "#45475A",
+    "red": "#F38BA8",
+    "green": "#A6E3A1",
+    "yellow": "#F9E2AF",
+    "blue": "#89B4FA",
+    "purple": "#F5C2E7",
+    "cyan": "#94E2D5",
+    "white": "#BAC2DE",
+    "brightBlack": "#585B70",
+    "brightRed": "#F38BA8",
+    "brightGreen": "#A6E3A1",
+    "brightYellow": "#F9E2AF",
+    "brightBlue": "#89B4FA",
+    "brightPurple": "#F5C2E7",
+    "brightCyan": "#94E2D5",
+    "brightWhite": "#A6ADC8",
+    "cursorColor": "#F5E0DC",
+    "selectionBackground": "#585B70"
+}
+
+if "schemes" not in data or not isinstance(data["schemes"], list):
+    data["schemes"] = []
+
+# Replace if exists, otherwise append
+scheme_idx = next((i for i, s in enumerate(data["schemes"]) if s.get("name") == "Catppuccin Mocha"), None)
+if scheme_idx is not None:
+    data["schemes"][scheme_idx] = mocha_scheme
+else:
+    data["schemes"].append(mocha_scheme)
+
+# 2. Update profiles.defaults
+if "profiles" not in data or not isinstance(data["profiles"], dict):
+    data["profiles"] = {}
+
+if "defaults" not in data["profiles"] or not isinstance(data["profiles"]["defaults"], dict):
+    data["profiles"]["defaults"] = {}
+
+defaults = data["profiles"]["defaults"]
+defaults["colorScheme"] = "Catppuccin Mocha"
+defaults["padding"] = "12, 12, 12, 12"
+defaults["opacity"] = 95
+defaults["useAcrylic"] = False
+
+# Configure font with fallback faces
+if "font" not in defaults or not isinstance(defaults["font"], dict):
+    defaults["font"] = {}
+
+defaults["font"]["face"] = "Miracode"
+defaults["font"]["fallbackFaces"] = ["FiraCode Nerd Font", "Consolas"]
+defaults["font"]["size"] = 13.0
+
+with open(settings_path, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=4)
+
+print("\033[38;2;166;227;161m[✔]\033[0m Successfully updated Windows Terminal settings with Catppuccin Mocha and Miracode + FiraCode NF fonts!")
+EOF
+
+echo -e "\033[38;2;166;227;161m[✔]\033[0m Windows Terminal setup complete! Restart or switch tabs in Windows Terminal to see the new theme."

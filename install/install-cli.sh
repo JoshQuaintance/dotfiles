@@ -191,6 +191,13 @@ elif [ "$OS" = "Linux" ]; then
             success "fzf-tab ready!"
         fi
     fi
+
+    # 8. Developer Fonts (Miracode, FiraCode NF, Monocraft)
+    if is_tool_requested "fonts" || is_tool_requested "font-miracode" || is_tool_requested "font-fira-code-nerd-font"; then
+        if [ -x "$DOTFILES_DIR/install/install-fonts.sh" ]; then
+            bash "$DOTFILES_DIR/install/install-fonts.sh"
+        fi
+    fi
 fi
 
 # Symlink Starship prompt configuration with backup
@@ -238,6 +245,13 @@ if [ -f "$DOTFILES_DIR/eza/theme.yml" ]; then
         ln -sfn "$DOTFILES_DIR/eza/theme.yml" "$HOME/Library/Application Support/eza/theme.yml"
         success "Linked ~/Library/Application Support/eza/theme.yml -> $DOTFILES_DIR/eza/theme.yml"
     fi
+fi
+
+# Symlink yazi configuration
+if [ -d "$DOTFILES_DIR/yazi" ]; then
+    mkdir -p "$HOME/.config"
+    ln -sfn "$DOTFILES_DIR/yazi" "$HOME/.config/yazi"
+    success "Linked ~/.config/yazi -> $DOTFILES_DIR/yazi"
 fi
 
 # Symlink standalone bin utilities (dotupdate, dotcheck, dotdoctor, git-prompt-dir, esdiff, killport)

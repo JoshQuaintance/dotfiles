@@ -98,6 +98,7 @@ check_link "$HOME/.config/ghostty/config" "Ghostty config" "ghostty/config"
 check_link "$HOME/.config/bat/config" "Bat syntax viewer config" "bat/config"
 check_link "$HOME/.config/eza/theme.yml" "Eza theme config" "eza/theme.yml"
 check_link "$HOME/.config/mise/config.toml" "Mise config" "mise/config.toml"
+check_link "$HOME/.config/yazi" "Yazi config directory" "yazi"
 echo ""
 
 # 3. Core Development CLI Tools

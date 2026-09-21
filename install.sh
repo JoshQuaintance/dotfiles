@@ -215,6 +215,12 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
         )
         cli_keys+=(ghostty font-miracode font-fira-code-nerd-font font-monocraft font-jetbrains-mono-nerd-font)
         cli_defs+=(1 1 1 1 1)
+    else
+        cli_options+=(
+            "Developer Fonts - Miracode, FiraCode NF & Monocraft (Linux/WSL)"
+        )
+        cli_keys+=(fonts)
+        cli_defs+=(1)
     fi
 
     chosen_cli_indices=()
