@@ -55,7 +55,6 @@ jobs:
           ls -la ~/.config/starship.toml
           ls -la ~/.config/bat/config
           ls -la ~/.config/eza/theme.yml
-          ls -la ~/.config/zed/settings.json
           ls -la ~/.config/mise/config.toml
 
       - name: Verify Core CLI Tools
@@ -94,7 +93,6 @@ jobs:
           ls -la ~/.config/starship.toml
           ls -la ~/.config/bat/config
           ls -la ~/.config/eza/theme.yml
-          ls -la ~/.config/zed/settings.json
           ls -la ~/.config/mise/config.toml
 
       - name: Run Dotfiles Health Doctor

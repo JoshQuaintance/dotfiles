@@ -59,15 +59,12 @@ conf() {
     eza)
       target_file="$HOME/.config/eza/theme.yml"
       ;;
-    zed)
-      target_file="$HOME/.config/zed/keymap.json"
-      ;;
     *)
       if [ -f "$1" ] || [ -d "$1" ]; then
         target_file="$1"
       else
         echo "Unknown config target: $1"
-        echo "Usage: conf [shell|alias|functions|nvim|ghostty|bat|eza|zed|dotfiles|git|starship|<path>]"
+        echo "Usage: conf [shell|alias|functions|nvim|ghostty|bat|eza|dotfiles|git|starship|<path>]"
         return 1
       fi
       ;;
@@ -119,48 +116,113 @@ gsearch() {
   git log --all --grep="$1" --oneline
 }
 
-# Zed CLI Smart Window Wrapper (VSCode-like behavior)
-# Opens directories in a new window (-n) and files in the existing window (-e)
-zed() {
-  if [ "$#" -eq 0 ]; then
-    command zed
-    return $?
+# Git Worktree Interactive Switcher (wt)
+# Dynamically queries git worktrees in the current repo and provides an interactive fzf selector
+wt() {
+  if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+    printf "\033[31m✖ Not inside a git repository or worktree.\033[0m\n" >&2
+    return 1
   fi
 
-  local has_window_flag=false
-  local has_dir=false
+  local worktrees
+  worktrees=$(git worktree list 2>/dev/null)
 
-  for arg in "$@"; do
-    case "$arg" in
-      -n|--new|-e|--existing|-a|--add|--diff|-h|--help|-v|--version|--uninstall|--completions|--dev-server-token|--system-specs)
-        has_window_flag=true
-        break
-        ;;
-    esac
-  done
-
-  if [ "$has_window_flag" = true ]; then
-    command zed "$@"
-    return $?
+  if [ -z "$worktrees" ]; then
+    printf "\033[33m⚠ No worktrees found.\033[0m\n" >&2
+    return 1
   fi
 
-  # Check if any non-flag target argument is a directory
-  for arg in "$@"; do
-    [[ "$arg" == -* ]] && continue
-
-    local target_path="${arg%%:*}"
-    target_path="${target_path/#\~/$HOME}"
-
-    if [ -d "$target_path" ] || [[ "$arg" == */ ]]; then
-      has_dir=true
-      break
+  local query="$1"
+  if [ -n "$query" ]; then
+    local exact_matches
+    exact_matches=$(echo "$worktrees" | awk -v q="$query" 'tolower($0) ~ tolower(q) { print $1 }')
+    local match_count
+    match_count=$(echo "$exact_matches" | grep -c . || true)
+    if [ "$match_count" -eq 1 ] && [ -d "$exact_matches" ]; then
+      cd "$exact_matches"
+      return 0
     fi
-  done
+  fi
 
-  if [ "$has_dir" = true ]; then
-    command zed -n "$@"
+  if command -v fzf &>/dev/null; then
+    local selected
+    selected=$(echo "$worktrees" | fzf \
+      --height=~40% \
+      --layout=reverse \
+      --border=rounded \
+      --query="$query" \
+      --prompt="🌿 Switch Worktree > " \
+      --header="Enter: cd to worktree • Esc: cancel" \
+      --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
+      --preview='git -C {1} status -sb 2>/dev/null' \
+      --preview-window='right:50%:wrap')
+
+    if [ -n "$selected" ]; then
+      local target_dir
+      target_dir=$(echo "$selected" | awk '{print $1}')
+      if [ -n "$target_dir" ] && [ -d "$target_dir" ]; then
+        cd "$target_dir"
+      fi
+    fi
   else
-    command zed -e "$@"
+    echo "$worktrees" | awk '{printf "%2d) %s\n", NR, $0}'
+    local choice
+    printf "Select worktree number: "
+    read -r choice
+    local target_dir
+    target_dir=$(echo "$worktrees" | sed -n "${choice}p" | awk '{print $1}')
+    if [ -n "$target_dir" ] && [ -d "$target_dir" ]; then
+      cd "$target_dir"
+    fi
+  fi
+}
+
+# Yazi Shell Wrapper (changes directory on exit)
+y() {
+  local tmp
+  tmp="$(mktemp -t "yazi-cwd.XXXXXX")"
+  local cwd
+  command yazi "$@" --cwd-file="$tmp"
+  if cwd="$(command cat -- "$tmp" 2>/dev/null)" && [ -n "$cwd" ] && [ "$cwd" != "$PWD" ]; then
+    builtin cd -- "$cwd"
+  fi
+  rm -f -- "$tmp"
+}
+
+# Cross-Platform Clipboard Helpers (macOS, Linux Wayland, Linux X11, WSL)
+copy() {
+  if command -v pbcopy &>/dev/null; then
+    pbcopy "$@"
+  elif command -v wl-copy &>/dev/null; then
+    wl-copy "$@"
+  elif command -v xclip &>/dev/null; then
+    xclip -selection clipboard "$@"
+  elif command -v xsel &>/dev/null; then
+    xsel --clipboard --input "$@"
+  elif command -v clip.exe &>/dev/null; then
+    clip.exe "$@"
+  elif [ -n "$TMUX" ]; then
+    tmux load-buffer -
+  else
+    printf "\033[33mNo clipboard utility found (pbcopy, wl-copy, xclip, clip.exe)\033[0m\n" >&2
+    return 1
+  fi
+}
+
+paste() {
+  if command -v pbpaste &>/dev/null; then
+    pbpaste "$@"
+  elif command -v wl-paste &>/dev/null; then
+    wl-paste "$@"
+  elif command -v xclip &>/dev/null; then
+    xclip -selection clipboard -o "$@"
+  elif command -v xsel &>/dev/null; then
+    xsel --clipboard --output "$@"
+  elif command -v powershell.exe &>/dev/null; then
+    powershell.exe -NoProfile -Command Get-Clipboard "$@"
+  else
+    printf "\033[33mNo clipboard utility found (pbpaste, wl-paste, xclip, powershell.exe)\033[0m\n" >&2
+    return 1
   fi
 }
 
@@ -429,7 +491,7 @@ fa() {
 
   _gen_list() {
     # 1. Custom dotfiles functions
-    for fn in take groot conf clone port gsearch zed npmr bunr pnpmr dotupdate dotcheck toggle-autols acceptance fa; do
+    for fn in take groot conf clone port gsearch wt y copy paste npmr bunr pnpmr dotupdate dotcheck toggle-autols acceptance fa; do
       if (( $+functions[$fn] )); then
         printf "function\t%-18s\t(shell function)\n" "$fn"
       fi

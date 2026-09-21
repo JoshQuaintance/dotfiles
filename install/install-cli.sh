@@ -28,7 +28,7 @@ is_tool_requested() {
 if [ "$OS" = "Darwin" ]; then
     ensure_homebrew
     log "Installing / Updating CLI tools via Homebrew..."
-    for pkg in ripgrep fd fzf zoxide starship eza atuin bat; do
+    for pkg in ripgrep fd fzf zoxide starship eza atuin bat yazi dust btop fzf-tab; do
         if is_tool_requested "$pkg"; then
             if brew list "$pkg" &>/dev/null; then
                 ask_update_tool "$pkg" "$(brew info "$pkg" 2>/dev/null | head -n 1 | awk '{print $3}')" DO_UPD

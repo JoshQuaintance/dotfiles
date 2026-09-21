@@ -1,13 +1,14 @@
+# Ensure UTF-8 locale is always active for proper Unicode & multibyte rendering
+if [ "${#${:-🐧}}" -ne 1 ]; then
+    for _loc in "en_US.UTF-8" "C.UTF-8" "UTF-8" "C.utf8"; do
+        export LANG="$_loc" LC_ALL="$_loc" 2>/dev/null
+        [ "${#${:-🐧}}" -eq 1 ] && break
+    done
+fi
+
 # Startup verbose checklist & environment banner
 if [[ -o interactive ]] && [ -t 1 ] && [ "${ZSH_STARTUP_VERBOSE:-true}" = true ]; then
     _ZSH_STARTUP_VERBOSE=true
-    # Ensure UTF-8 locale is active for proper multibyte character measurement in containers
-    if [ "${#${:-🐧}}" -ne 1 ]; then
-        for _loc in "C.UTF-8" "en_US.UTF-8" "C.utf8" "UTF-8"; do
-            export LANG="$_loc" LC_ALL="$_loc" 2>/dev/null
-            [ "${#${:-🐧}}" -eq 1 ] && break
-        done
-    fi
     zmodload zsh/datetime 2>/dev/null || true
     _t_start=$EPOCHREALTIME
     _t_step=$_t_start
@@ -61,7 +62,7 @@ zstyle ':omz:update' mode reminder
 zstyle ':omz:plugins:eza' 'icons' yes
 zstyle ':omz:plugins:eza' 'git-status' yes
 zstyle ':omz:plugins:eza' 'hyperlink' yes
-plugins=(git eza starship)
+plugins=(git eza)
 
 # Compile ~/.zcompdump to bytecode ~/.zcompdump.zwc for instant load
 if [ -f "$HOME/.zcompdump" ] && [ ! -f "$HOME/.zcompdump.zwc" -o "$HOME/.zcompdump" -nt "$HOME/.zcompdump.zwc" ]; then
@@ -81,7 +82,7 @@ fi
 _step "Oh My Zsh & plugins (git, eza)"
 
 # Starship Prompt Initialization
-if command -v starship &>/dev/null; then
+if command -v starship &>/dev/null && [ "$TERM" != "dumb" ]; then
     eval "$(starship init zsh)"
 fi
 _step "Starship prompt"
@@ -155,6 +156,26 @@ command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
 if command -v fzf &>/dev/null; then
     [ -f "$HOME/.fzf.zsh" ] && source "$HOME/.fzf.zsh"
     source <(fzf --zsh 2>/dev/null) 2>/dev/null || true
+
+    # FZF-Tab (interactive completion menu)
+    for _fzf_tab in \
+        "/opt/homebrew/opt/fzf-tab/share/fzf-tab/fzf-tab.zsh" \
+        "/usr/share/fzf-tab/fzf-tab.zsh" \
+        "/home/linuxbrew/.linuxbrew/opt/fzf-tab/share/fzf-tab/fzf-tab.zsh" \
+        "${XDG_DATA_HOME:-$HOME/.local/share}/fzf-tab/fzf-tab.zsh"; do
+        if [ -f "$_fzf_tab" ]; then
+            source "$_fzf_tab"
+            if command -v eza &>/dev/null; then
+                zstyle ':fzf-tab:complete:cd:*' fzf-preview 'eza -1 --color=always $realpath 2>/dev/null'
+                zstyle ':fzf-tab:complete:z:*' fzf-preview 'eza -1 --color=always $realpath 2>/dev/null'
+            fi
+            if command -v bat &>/dev/null; then
+                zstyle ':fzf-tab:complete:*:*' fzf-preview 'if [ -f "$realpath" ]; then bat --style=plain --color=always --line-range :50 "$realpath" 2>/dev/null; elif [ -d "$realpath" ]; then eza -1 --color=always "$realpath" 2>/dev/null; fi'
+            fi
+            zstyle ':fzf-tab:*' switch-group '<' '>'
+            break
+        fi
+    done
 fi
 
 # Bat & Eza CLI themes (Catppuccin Mocha)

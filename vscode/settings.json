@@ -280,4 +280,5 @@
   },
   "editor.semanticHighlighting.enabled": true,
   "workbench.editor.labelFormat": "short",
+  "chat.viewSessions.orientation": "stacked",
 }

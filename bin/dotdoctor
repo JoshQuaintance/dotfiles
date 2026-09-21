@@ -98,8 +98,7 @@ check_link "$HOME/.config/nvim" "Neovim config" "nvim"
 check_link "$HOME/.config/ghostty/config" "Ghostty config" "ghostty/config"
 check_link "$HOME/.config/bat/config" "Bat syntax viewer config" "bat/config"
 check_link "$HOME/.config/eza/theme.yml" "Eza theme config" "eza/theme.yml"
-check_link "$HOME/.config/zed/settings.json" "Zed settings" "zed/settings.json"
-check_link "$HOME/.config/zed/keymap.json" "Zed keymap" "zed/keymap.json"
+check_link "$HOME/.config/mise/config.toml" "Mise config" "mise/config.toml"
 echo ""
 
 # 3. Core Development CLI Tools
@@ -132,7 +131,13 @@ check_tool "mise"     "Mise runtime manager""mise --version"
 check_tool "node"     "Node.js runtime"     "node -v"
 check_tool "bun"      "Bun runtime"         "bun -v"
 check_tool "nvim"     "Neovim editor"       "nvim --version"
-check_tool "gpg"      "GnuPG encryption"    "gpg --version"
+check_tool "yazi"     "Yazi file manager"   "yazi --version"
+check_tool "dust"     "dust disk analyzer"  "dust --version"
+check_tool "btop"     "btop system monitor" "btop --version"
+gpg_format="$(git config --get gpg.format 2>/dev/null || echo "openpgp")"
+if [ "$gpg_format" != "ssh" ]; then
+  check_tool "gpg"    "GnuPG encryption"    "gpg --version"
+fi
 echo ""
 
 # 4. UTF-8 Locale Health
@@ -154,8 +159,8 @@ if command -v zsh &>/dev/null; then
 fi
 echo ""
 
-# 5. Git Configuration & GPG Signing
-printf "${C_BOLD}5. Git Identity & GPG Signing${C_RESET}\n"
+# 5. Git Configuration & Signing
+printf "${C_BOLD}5. Git Identity & Commit Signing${C_RESET}\n"
 user_name="$(git config --get user.name 2>/dev/null || true)"
 user_email="$(git config --get user.email 2>/dev/null || true)"
 gpg_signing="$(git config --get commit.gpgsign 2>/dev/null || echo "false")"
@@ -173,16 +178,19 @@ else
   report_warn "Git user.email not set" "Set via: git config --global user.email 'you@example.com'"
 fi
 
-if [ -n "$GPG_TTY" ]; then
-  report_ok "GPG_TTY exported" "$GPG_TTY"
-else
-  report_warn "GPG_TTY not exported" "Add 'export GPG_TTY=\$(tty)' to ~/.zshrc"
-fi
-
 if [ "$gpg_signing" = "true" ]; then
-  report_ok "GPG commit signing" "Enabled (key: $gpg_key)"
+  if [ "$gpg_format" = "ssh" ]; then
+    report_ok "Commit signing" "Enabled via SSH (key: $gpg_key)"
+  else
+    report_ok "Commit signing" "Enabled via GPG (key: $gpg_key)"
+    if [ -n "$GPG_TTY" ]; then
+      report_ok "GPG_TTY exported" "$GPG_TTY"
+    else
+      report_warn "GPG_TTY not exported" "Add 'export GPG_TTY=\$(tty)' to ~/.zshrc"
+    fi
+  fi
 else
-  report_ok "GPG commit signing" "Disabled / manual"
+  report_ok "Commit signing" "Disabled / manual"
 fi
 echo ""
 

@@ -10,6 +10,16 @@
     autoSetupRemote = true
     followTags = true
 
+[branch]
+    sort = -committerdate
+
+[tag]
+    sort = version:refname
+
+[fetch]
+    prune = true
+    pruneTags = false
+
 [merge]
     conflictstyle = zdiff3
 
@@ -26,6 +36,12 @@
 
 [rebase]
     autoStash = true
+
+[rerere]
+    enabled = true
+
+[commit]
+    verbose = true
 
 # Local & private user credentials (name, email, signing key)
 [include]

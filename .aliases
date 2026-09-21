@@ -6,12 +6,24 @@ alias vi="nvim"
 alias vim="nvim"
 alias gi="genignore"
 alias phcpy="scrcpy --turn-screen-off --no-audio"
+alias lg="lazygit"
+if command -v btop &>/dev/null; then
+  alias top="btop"
+  alias htop="btop"
+fi
+if command -v trash &>/dev/null; then
+  alias del="trash"
+fi
 
 # Navigation & Directories
 alias cd..="cd .."
 alias codes="cd ~/Codes/"
 alias path="echo \$PATH | tr ':' '\n'"
-alias diskuse="du -sh * 2>/dev/null | sort -h"
+if command -v dust &>/dev/null; then
+  alias diskuse="dust"
+else
+  alias diskuse="du -sh * 2>/dev/null | sort -h"
+fi
 
 # Safety Defaults
 alias cp="cp -i"
