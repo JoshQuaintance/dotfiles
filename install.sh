@@ -4,19 +4,61 @@ set -e
 # Disable Zsh builtin log command if running under Zsh
 disable -r log 2>/dev/null || true
 
+# Parse options (e.g. -b/--branch, -y/--yes, etc.)
+CUSTOM_BRANCH_SPECIFIED=false
+REMAINING_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -b|--branch)
+            if [ -n "$2" ]; then
+                DOTFILES_BRANCH="$2"
+                CUSTOM_BRANCH_SPECIFIED=true
+                shift 2
+            else
+                shift
+            fi
+            ;;
+        --branch=*)
+            DOTFILES_BRANCH="${1#*=}"
+            CUSTOM_BRANCH_SPECIFIED=true
+            shift
+            ;;
+        -b=*)
+            DOTFILES_BRANCH="${1#*=}"
+            CUSTOM_BRANCH_SPECIFIED=true
+            shift
+            ;;
+        *)
+            REMAINING_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+if [ ${#REMAINING_ARGS[@]} -gt 0 ]; then
+    set -- "${REMAINING_ARGS[@]}"
+else
+    set --
+fi
+
 # Repository configuration
 DOTFILES_REPO="https://github.com/JoshQuaintance/dotfiles.git"
-DOTFILES_BRANCH="${DOTFILES_BRANCH:-main}"
-RAW_BASE_URL="https://raw.githubusercontent.com/JoshQuaintance/dotfiles/${DOTFILES_BRANCH}"
 DEFAULT_TARGET_DIR="$HOME/.dotfiles"
 
 # Determine if running from a local clone or remotely via curl
 CURRENT_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
 if [ -f "$CURRENT_SCRIPT_DIR/install/common.sh" ]; then
     DOTFILES_DIR="$CURRENT_SCRIPT_DIR"
+    if [ "$CUSTOM_BRANCH_SPECIFIED" = false ] && [ -d "$CURRENT_SCRIPT_DIR/.git" ]; then
+        DETECTED_BRANCH="$(git -C "$CURRENT_SCRIPT_DIR" branch --show-current 2>/dev/null || true)"
+        [ -n "$DETECTED_BRANCH" ] && DOTFILES_BRANCH="$DETECTED_BRANCH"
+    fi
 else
     DOTFILES_DIR="$DEFAULT_TARGET_DIR"
 fi
+
+DOTFILES_BRANCH="${DOTFILES_BRANCH:-main}"
+RAW_BASE_URL="https://raw.githubusercontent.com/JoshQuaintance/dotfiles/${DOTFILES_BRANCH}"
 
 # Load shared helpers from common.sh (locally if present, or dynamically via eval)
 if [ -f "$DOTFILES_DIR/install/common.sh" ]; then
@@ -63,6 +105,7 @@ launch_shell() {
 echo ""
 echo "================================================="
 echo "           Dotfiles Unified Installer            "
+echo "           Branch: ${DOTFILES_BRANCH}            "
 echo "================================================="
 echo "  1) Full Workstation (Mac / Linux / WSL)"
 echo "     → Full clone, all tools, Zsh, Neovim, VSCode, Mise, Astral."

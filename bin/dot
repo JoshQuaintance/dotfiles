@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -e
+
+# Unified Dotfiles CLI executable wrapper
+# Routes execution to ~/.dotfiles/.venv/bin/python with automatic bootstrapping
+
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+DOTFILES_DIR="$(cd -P "$(dirname "$SOURCE")/.." >/dev/null 2>&1 && pwd)"
+
+VENV_PYTHON="$DOTFILES_DIR/.venv/bin/python"
+
+# If the isolated Python environment is missing, bootstrap it automatically
+if [ ! -f "$VENV_PYTHON" ]; then
+    bash "$DOTFILES_DIR/install/bootstrap-python.sh"
+fi
+
+# Hand off directly to Python CLI
+export PYTHONPATH="$DOTFILES_DIR:${PYTHONPATH:-}"
+exec "$VENV_PYTHON" -m cli.main "$@"

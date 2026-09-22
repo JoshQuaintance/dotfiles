@@ -14,6 +14,11 @@
 # Neovim local lockfile
 lazy-lock.json
 
+# Python virtual environments & bytecode
+.venv/
+__pycache__/
+*.pyc
+
 # OS artifacts
 .DS_Store
 Thumbs.db

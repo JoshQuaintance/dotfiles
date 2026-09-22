@@ -35,6 +35,10 @@ jobs:
           zsh -n zsh/*.zsh
           zsh -n zsh/functions/*.zsh
 
+      - name: Validate Python CLI Syntax
+        run: |
+          python3 -m py_compile cli/*.py
+
       - name: Run Shellcheck on Core Utilities
         run: |
           shellcheck -e SC1090,SC1091 bin/dotcheck bin/dotdoctor bin/git-prompt-dir || true
@@ -94,7 +98,7 @@ jobs:
       - name: Install System Prerequisites
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y zsh
+          sudo apt-get install -y zsh python3 python3-venv
 
       - name: Run Full Dotfiles Installer
         run: |
