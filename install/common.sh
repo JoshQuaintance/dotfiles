@@ -48,6 +48,8 @@ read_input() {
 # Interactive Multiselect Checklist in Pure Bash (Bash 3.2+ and Zsh compatible)
 # Usage: multiselect "Prompt Title" "options_array_name" "defaults_array_name" "output_indices_array_name"
 multiselect() {
+    [ -n "$ZSH_VERSION" ] && setopt LOCAL_OPTIONS KSH_ARRAYS 2>/dev/null || true
+    disable -r log 2>/dev/null || true
     local prompt="$1"
     local opt_name="$2"
     local def_name="$3"

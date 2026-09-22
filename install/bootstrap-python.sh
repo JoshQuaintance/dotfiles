@@ -23,8 +23,13 @@ if [ "$(uname -s 2>/dev/null)" = "Linux" ]; then
     fi
 fi
 
-if [ -f "$VENV_DIR/bin/python" ] && "$VENV_DIR/bin/python" -c "import sys; sys.exit(0)" 2>/dev/null; then
-    exit 0
+if [ -d "$VENV_DIR" ]; then
+    if [ -f "$VENV_DIR/bin/python" ] && "$VENV_DIR/bin/python" -c "import sys; sys.exit(0)" 2>/dev/null; then
+        exit 0
+    else
+        # Incompatible or broken virtual environment (e.g. copied from different OS or architecture)
+        rm -rf "$VENV_DIR"
+    fi
 fi
 
 printf "\033[1;34m==>\033[0m Initializing isolated Python environment for dotfiles tooling...\n"
@@ -93,12 +98,12 @@ mkdir -p "$DOTFILES_DIR"
 
 if command -v uv &>/dev/null; then
     printf "  Creating virtual environment via uv...\n"
-    uv venv "$VENV_DIR" --quiet 2>/dev/null || uv venv "$VENV_DIR"
+    uv venv --clear "$VENV_DIR" --quiet 2>/dev/null || uv venv --clear "$VENV_DIR"
     printf "  Installing terminal UI dependencies into .venv...\n"
     uv pip install --python "$VENV_DIR/bin/python" "rich>=13.0.0" --quiet 2>/dev/null || true
 elif command -v python3 &>/dev/null; then
     printf "  Creating virtual environment via python3 -m venv...\n"
-    python3 -m venv "$VENV_DIR"
+    python3 -m venv --clear "$VENV_DIR"
     "$VENV_DIR/bin/python" -m pip install --quiet "rich>=13.0.0" 2>/dev/null || true
 else
     printf "\033[31m✖ Error: Failed to bootstrap Python environment. Please install Python 3 or uv.\033[0m\n" >&2

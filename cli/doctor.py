@@ -64,6 +64,10 @@ def check_repository(report: DoctorReport, dotfiles: Path):
         report.fail("Dotfiles repository not found", str(dotfiles))
         return
 
+    if not shutil.which("git"):
+        report.warn(f"Repository: {dotfiles.name}", "git binary not installed")
+        return
+
     code, branch = run_cmd(["git", "-C", str(dotfiles), "branch", "--show-current"])
     branch = branch or "detached"
     code, commit = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "--short", "HEAD"])
@@ -193,6 +197,10 @@ def check_locale(report: DoctorReport):
 
 def check_git_signing(report: DoctorReport):
     print(f"\n{C_BOLD}5. Git Identity & Commit Signing{C_RESET}")
+    if not shutil.which("git"):
+        report.warn("Git config", "git binary not installed")
+        return
+
     code, name = run_cmd(["git", "config", "--get", "user.name"])
     code, email = run_cmd(["git", "config", "--get", "user.email"])
     if name:

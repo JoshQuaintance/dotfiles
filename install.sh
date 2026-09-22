@@ -88,14 +88,17 @@ read_input() {
 launch_shell() {
     echo ""
     success "$1"
-    if [ "${CI:-false}" = "true" ] || [ "${DOTFILES_NO_EXEC:-false}" = "true" ]; then
+    if [ "${CI:-false}" = "true" ] || [ "${DOTFILES_NO_EXEC:-false}" = "true" ] || [ "${DOTFILES_UNATTENDED:-false}" = "true" ]; then
+        return 0
+    fi
+    if [ ! -t 0 ] && { [ ! -e /dev/tty ] || [ ! -r /dev/tty ] || ! (true < /dev/tty) 2>/dev/null; }; then
         return 0
     fi
     if command -v zsh &>/dev/null; then
         log "Launching your new Zsh environment..."
         if [ -e /dev/tty ] && [ -r /dev/tty ] && (true < /dev/tty) 2>/dev/null; then
             exec zsh -l < /dev/tty
-        else
+        elif [ -t 0 ]; then
             exec zsh -l
         fi
     fi

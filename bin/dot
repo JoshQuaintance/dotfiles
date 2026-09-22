@@ -15,6 +15,9 @@ while [ -L "$SOURCE" ]; do
 done
 DOTFILES_DIR="$(cd -P "$(dirname "$SOURCE")/.." >/dev/null 2>&1 && pwd)"
 
+# Ensure standard user binary paths are in PATH
+export PATH="$HOME/.local/bin:$HOME/bin:/usr/local/bin:$PATH"
+
 # Sanitize broken or missing locale on Linux containers before launching subshells or Python
 if [ "$(uname -s 2>/dev/null)" = "Linux" ]; then
     if [ -n "$LC_ALL" ] && [ "$LC_ALL" != "C" ] && [ "$LC_ALL" != "C.UTF-8" ]; then
