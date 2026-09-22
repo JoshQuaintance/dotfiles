@@ -11,6 +11,18 @@ VENV_DIR="$DOTFILES_DIR/.venv"
 # Ensure local user paths are in PATH
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:$PATH"
 
+# Sanitize broken or missing locale on Linux containers before invoking child tools
+if [ "$(uname -s 2>/dev/null)" = "Linux" ]; then
+    if [ -n "$LC_ALL" ] && [ "$LC_ALL" != "C" ] && [ "$LC_ALL" != "C.UTF-8" ]; then
+        if command -v locale >/dev/null 2>&1; then
+            if ! locale -a 2>/dev/null | grep -qi "^${LC_ALL}$"; then
+                export LC_ALL="C.UTF-8"
+                export LANG="C.UTF-8"
+            fi
+        fi
+    fi
+fi
+
 if [ -f "$VENV_DIR/bin/python" ] && "$VENV_DIR/bin/python" -c "import sys; sys.exit(0)" 2>/dev/null; then
     exit 0
 fi

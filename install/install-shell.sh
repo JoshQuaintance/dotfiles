@@ -23,6 +23,15 @@ if ! command -v zsh &>/dev/null; then
     fi
 fi
 
+# Ensure UTF-8 locale is generated on Linux if tool is present
+if [ "$OS" = "Linux" ]; then
+    if command -v locale-gen &>/dev/null; then
+        run_sudo locale-gen en_US.UTF-8 2>/dev/null || true
+    elif command -v localedef &>/dev/null; then
+        run_sudo localedef -i en_US -f UTF-8 en_US.UTF-8 2>/dev/null || true
+    fi
+fi
+
 # 2. Set Zsh as default shell if not already
 CURRENT_SHELL="$(basename "$SHELL")"
 if [ "$CURRENT_SHELL" != "zsh" ] && command -v zsh &>/dev/null; then

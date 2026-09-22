@@ -1,16 +1,31 @@
-#!/usr/bin/env bash
+#!/bin/sh
 set -e
 
 # Unified Dotfiles CLI executable wrapper
 # Routes execution to ~/.dotfiles/.venv/bin/python with automatic bootstrapping
 
-SOURCE="${BASH_SOURCE[0]}"
+SOURCE="$0"
 while [ -L "$SOURCE" ]; do
     DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
     SOURCE="$(readlink "$SOURCE")"
-    [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+    case "$SOURCE" in
+        /*) ;;
+        *) SOURCE="$DIR/$SOURCE" ;;
+    esac
 done
 DOTFILES_DIR="$(cd -P "$(dirname "$SOURCE")/.." >/dev/null 2>&1 && pwd)"
+
+# Sanitize broken or missing locale on Linux containers before launching subshells or Python
+if [ "$(uname -s 2>/dev/null)" = "Linux" ]; then
+    if [ -n "$LC_ALL" ] && [ "$LC_ALL" != "C" ] && [ "$LC_ALL" != "C.UTF-8" ]; then
+        if command -v locale >/dev/null 2>&1; then
+            if ! locale -a 2>/dev/null | grep -qi "^${LC_ALL}$"; then
+                export LC_ALL="C.UTF-8"
+                export LANG="C.UTF-8"
+            fi
+        fi
+    fi
+fi
 
 VENV_PYTHON="$DOTFILES_DIR/.venv/bin/python"
 
