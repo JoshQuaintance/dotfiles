@@ -71,7 +71,7 @@ wt() {
   fi
 }
 
-# Git Worktree Clean (gwtclean / gwtc)
+# Git Worktree Clean / Prune (gwtclean / gwtprune / gwtc)
 # Prunes worktrees whose remote upstream branch has been deleted on the remote
 gwtclean() {
   if ! git rev-parse --is-inside-work-tree &>/dev/null; then
@@ -148,39 +148,115 @@ gwtclean() {
     return 0
   fi
 
-  printf "\n\033[1;33mFound %d worktree(s) whose remote tracking branch is gone:\033[0m\n" "$count"
-  local item
-  for item in "${candidates[@]}"; do
+  local selected_candidates=()
+
+  # If force mode, select all candidates automatically
+  if [ "$force" = true ]; then
+    selected_candidates=("${candidates[@]}")
+  elif [ "$count" -eq 1 ]; then
+    local item="${candidates[1]}"
     local wt_path="${item%%|*}"
     local wt_branch="${item##*|}"
-    local status_notes=""
-
-    if [ "$PWD" = "$wt_path" ] || [[ "$PWD" == "$wt_path"/* ]]; then
-      status_notes=" \033[33m(ACTIVE: currently inside)\033[0m"
-    fi
-
-    if [ -n "$(git -C "$wt_path" status --porcelain 2>/dev/null)" ]; then
-      status_notes="${status_notes} \033[31m(DIRTY: uncommitted changes)\033[0m"
-    fi
-
-    printf "  \033[1;36m•\033[0m %-44s \033[2m[%s]\033[0m%b\n" "$wt_path" "$wt_branch" "$status_notes"
-  done
-
-  echo ""
-  if [ "$force" = false ]; then
-    printf "Remove these worktrees and delete local branches? [y/N]: "
-    local confirm
-    read -r confirm
-    case "$confirm" in
-      [yY]|[yY][eE][sS]) ;;
+    printf "\n\033[1;33mFound 1 worktree whose remote tracking branch is gone:\033[0m\n"
+    printf "  \033[1;36m•\033[0m %-40s \033[2m[%s]\033[0m\n" "$wt_path" "$wt_branch"
+    printf "\nPrune this worktree? [y/N]: "
+    local confirm_single
+    read -r confirm_single
+    case "$confirm_single" in
+      [yY]|[yY][eE][sS]) selected_candidates+=("$item") ;;
       *)
         printf "Aborted. No worktrees were removed.\n"
         return 0
         ;;
     esac
+  else
+    # Multiple candidates: Interactive Multi-Select
+    if command -v fzf &>/dev/null && [ -t 1 ]; then
+      local fzf_input=""
+      local item
+      for item in "${candidates[@]}"; do
+        local wt_path="${item%%|*}"
+        local wt_branch="${item##*|}"
+        local dirty_tag=""
+        if [ -n "$(git -C "$wt_path" status --porcelain 2>/dev/null)" ]; then
+          dirty_tag=" *dirty*"
+        fi
+        fzf_input+="${wt_path}\t[${wt_branch}]${dirty_tag}\n"
+      done
+
+      local fzf_output
+      fzf_output=$(printf "%b" "$fzf_input" | fzf \
+        --multi \
+        --height=~45% \
+        --layout=reverse \
+        --border=rounded \
+        --prompt="🗑 Select Worktrees to Prune > " \
+        --header="Tab: toggle selection • Alt-A: select all • Enter: confirm • Esc: cancel" \
+        --color="header:italic:dim,prompt:bold:red,pointer:bold:green,marker:bold:green" \
+        --preview='git -C {1} status -sb 2>/dev/null' \
+        --preview-window='right:55%:wrap')
+
+      if [ -z "$fzf_output" ]; then
+        printf "No worktrees selected. Aborted.\n"
+        return 0
+      fi
+
+      while IFS= read -r sel_line || [ -n "$sel_line" ]; do
+        local sel_path
+        sel_path=$(echo "$sel_line" | awk -F'\t' '{print $1}')
+        for item in "${candidates[@]}"; do
+          if [ "${item%%|*}" = "$sel_path" ]; then
+            selected_candidates+=("$item")
+            break
+          fi
+        done
+      done <<< "$fzf_output"
+    else
+      # Fallback text multi-select menu
+      printf "\n\033[1;33mFound %d worktrees whose remote tracking branches are gone:\033[0m\n" "$count"
+      local idx=1
+      for item in "${candidates[@]}"; do
+        local wt_path="${item%%|*}"
+        local wt_branch="${item##*|}"
+        local dirty_tag=""
+        if [ -n "$(git -C "$wt_path" status --porcelain 2>/dev/null)" ]; then
+          dirty_tag=" \033[31m(DIRTY: uncommitted changes)\033[0m"
+        fi
+        printf "  %2d) %-40s \033[2m[%s]\033[0m%b\n" "$idx" "$wt_path" "$wt_branch" "$dirty_tag"
+        ((idx++))
+      done
+
+      printf "\nEnter numbers to prune (e.g. 1,2 or 'a' for all, Enter to cancel): "
+      local input_choice
+      read -r input_choice
+      if [ -z "$input_choice" ]; then
+        printf "Aborted. No worktrees were removed.\n"
+        return 0
+      fi
+
+      if [[ "$input_choice" == "a" || "$input_choice" == "all" ]]; then
+        selected_candidates=("${candidates[@]}")
+      else
+        local clean_choices
+        clean_choices=$(echo "$input_choice" | tr ',' ' ')
+        for num in $clean_choices; do
+          if [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "$count" ]; then
+            selected_candidates+=("${candidates[$num]}")
+          fi
+        done
+      fi
+    fi
   fi
 
-  for item in "${candidates[@]}"; do
+  local num_selected="${#selected_candidates[@]}"
+  if [ "$num_selected" -eq 0 ]; then
+    printf "No valid worktrees selected. Aborted.\n"
+    return 0
+  fi
+
+  printf "\n\033[1;34m==>\033[0m Processing %d selected worktree(s)...\n" "$num_selected"
+
+  for item in "${selected_candidates[@]}"; do
     local wt_path="${item%%|*}"
     local wt_branch="${item##*|}"
 
@@ -194,13 +270,30 @@ gwtclean() {
       is_dirty=true
     fi
 
-    if [ "$is_dirty" = true ] && [ "$force" = false ]; then
-      printf "  \033[31m⚠ Skipping dirty worktree (uncommitted changes):\033[0m %s\n" "$wt_path"
-      continue
+    # If dirty, show git status -sb (gs) and prompt for explicit confirmation
+    if [ "$is_dirty" = true ]; then
+      printf "\n\033[1;33m⚠ Worktree has uncommitted changes:\033[0m \033[1m%s\033[0m \033[2m[%s]\033[0m\n" "$wt_path" "$wt_branch"
+      printf "\033[2m───────────────── Output of gs (git status -sb) ─────────────────\033[0m\n"
+      git -C "$wt_path" status -sb
+      printf "\033[2m─────────────────────────────────────────────────────────────────\033[0m\n"
+
+      if [ "$force" = false ]; then
+        printf "\033[1;31mDiscard uncommitted changes and delete this worktree?\033[0m [y/N]: "
+        local confirm_dirty
+        read -r confirm_dirty
+        case "$confirm_dirty" in
+          [yY]|[yY][eE][sS]) ;;
+          *)
+            printf "  \033[33mSkipping dirty worktree:\033[0m %s\n" "$wt_path"
+            continue
+            ;;
+        esac
+      fi
     fi
 
     printf "  Removing worktree \033[1m%s\033[0m..." "$wt_path"
     local rm_opts=()
+    [ "$is_dirty" = true ] && rm_opts+=("--force")
     [ "$force" = true ] && rm_opts+=("--force")
 
     if git worktree remove "${rm_opts[@]}" "$wt_path" 2>/dev/null; then
@@ -218,5 +311,5 @@ gwtclean() {
   done
 
   git worktree prune
-  printf "\033[32m✔ Worktree cleanup complete!\033[0m\n"
+  printf "\033[32m✔ Worktree pruning complete!\033[0m\n"
 }

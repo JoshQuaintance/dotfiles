@@ -8,30 +8,60 @@ groot() {
   cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 }
 
-# Smart Ancestor Navigation: 'up 3' or 'up src' or 'up' (defaults to 1 level up)
+# Smart Ancestor Navigation: 'up' (1 level), 'up 3' (N levels), 'up 3549' or 'up sales' (ancestor name/substring)
 up() {
   local target="${1:-1}"
+  local curr="$PWD"
 
-  # If numeric, go up N levels
-  if [[ "$target" =~ ^[0-9]+$ ]]; then
-    local path=""
-    for ((i = 0; i < target; i++)); do
-      path="../$path"
+  # 1. Pure numeric level navigation for small numbers (1..10)
+  if [[ "$target" =~ ^[0-9]+$ ]] && (( target >= 1 && target <= 10 )); then
+    # Check if there is an exact directory name matching this number first (e.g. directory named "2")
+    local p="$curr"
+    p="$(dirname "$p")"
+    while [ "$p" != "/" ] && [ -n "$p" ]; do
+      if [[ "${(L)$(basename "$p")}" == "${(L)target}" ]]; then
+        cd "$p" || return 1
+        return 0
+      fi
+      p="$(dirname "$p")"
     done
-    cd "$path" || return 1
+
+    # Ascend N levels
+    local target_path=""
+    local i
+    for ((i = 0; i < target; i++)); do
+      target_path="../$target_path"
+    done
+    cd "$target_path" || return 1
     return 0
   fi
 
-  # If string, search upward for matching ancestor directory name
-  local curr="$PWD"
-  while [ "$curr" != "/" ] && [ -n "$curr" ]; do
-    if [ "$(basename "$curr")" = "$target" ]; then
-      cd "$curr" || return 1
+  # 2. Search upward: Pass 1 - Exact match (case-insensitive)
+  local p="$curr"
+  p="$(dirname "$p")"
+  while [ "$p" != "/" ] && [ -n "$p" ]; do
+    local base_name="$(basename "$p")"
+    if [[ "${(L)base_name}" == "${(L)target}" ]]; then
+      cd "$p" || return 1
       return 0
     fi
-    curr="$(dirname "$curr")"
+    p="$(dirname "$p")"
   done
 
-  printf "\033[31m✖ No ancestor directory named '%s' found.\033[0m\n" "$target" >&2
+  # Pass 2 - Substring / Prefix match (case-insensitive)
+  p="$curr"
+  p="$(dirname "$p")"
+  while [ "$p" != "/" ] && [ -n "$p" ]; do
+    local base_name="$(basename "$p")"
+    if [[ "${(L)base_name}" == *"${(L)target}"* ]]; then
+      cd "$p" || return 1
+      return 0
+    fi
+    p="$(dirname "$p")"
+  done
+
+  # 3. Safety fallback: If target was not found as an ancestor, stay put and warn
+  printf "\033[31m✖ No ancestor directory matching '%s' found.\033[0m\n" "$target" >&2
   return 1
 }
+
