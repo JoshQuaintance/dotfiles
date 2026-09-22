@@ -6,12 +6,16 @@
 set -euo pipefail
 
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-[ -f "$DOTFILES_DIR/install/common.sh" ] && source "$DOTFILES_DIR/install/common.sh" || {
-    info() { printf "\033[38;2;137;180;250m[INFO]\033[0m %s\n" "$*"; }
-    success() { printf "\033[38;2;166;227;161m[✔]\033[0m %s\n" "$*"; }
-    warn() { printf "\033[38;2;249;226;175m[WARN]\033[0m %s\n" "$*"; }
-    error() { printf "\033[38;2;243;139;168m[ERROR]\033[0m %s\n" "$*"; }
-}
+if [ -f "$DOTFILES_DIR/install/common.sh" ]; then
+    source "$DOTFILES_DIR/install/common.sh"
+fi
+
+# Guarantee logging functions are always defined
+type info &>/dev/null || info() { printf "\033[38;2;137;180;250m==>\033[0m %s\n" "$*"; }
+type log &>/dev/null || log() { printf "\033[38;2;137;180;250m==>\033[0m %s\n" "$*"; }
+type success &>/dev/null || success() { printf "\033[38;2;166;227;161m✔\033[0m %s\n" "$*"; }
+type warn &>/dev/null || warn() { printf "\033[38;2;249;226;175m⚠\033[0m %s\n" "$*"; }
+type error &>/dev/null || error() { printf "\033[38;2;243;139;168m✖\033[0m %s\n" "$*"; }
 
 # Detect environment
 IS_MAC=false
@@ -49,6 +53,11 @@ fi
 FONT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/fonts"
 mkdir -p "$FONT_DIR/Miracode" "$FONT_DIR/FiraCode" "$FONT_DIR/Monocraft"
 
+if ! command -v curl &>/dev/null; then
+    warn "curl binary not found. Skipping font download."
+    exit 0
+fi
+
 TMP_DIR="$(mktemp -d)"
 cleanup() { rm -rf "$TMP_DIR"; }
 trap cleanup EXIT
@@ -64,8 +73,10 @@ fi
 # 2b. FiraCode Nerd Font
 info "Downloading FiraCode Nerd Font..."
 if curl -fsSL "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/FiraCode.tar.xz" -o "$TMP_DIR/FiraCode.tar.xz"; then
-    tar -xJf "$TMP_DIR/FiraCode.tar.xz" -C "$FONT_DIR/FiraCode" "*.ttf" 2>/dev/null || tar -xJf "$TMP_DIR/FiraCode.tar.xz" -C "$FONT_DIR/FiraCode"
-    success "FiraCode Nerd Font installed to $FONT_DIR/FiraCode"
+    (tar -xJf "$TMP_DIR/FiraCode.tar.xz" -C "$FONT_DIR/FiraCode" "*.ttf" 2>/dev/null || \
+     tar -xJf "$TMP_DIR/FiraCode.tar.xz" -C "$FONT_DIR/FiraCode" 2>/dev/null || \
+     warn "Could not extract FiraCode.tar.xz (xz/tar utility missing or incompatible)")
+    success "FiraCode Nerd Font processed!"
 else
     warn "Failed to download FiraCode Nerd Font, continuing..."
 fi

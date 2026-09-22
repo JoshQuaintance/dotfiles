@@ -17,6 +17,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 log() { echo -e "${BLUE}==>${NC} $*"; }
+info() { echo -e "${BLUE}==>${NC} $*"; }
 success() { echo -e "${GREEN}✔${NC} $*"; }
 warn() { echo -e "${YELLOW}⚠${NC} $*"; }
 error() { echo -e "${RED}✖${NC} $*"; }
