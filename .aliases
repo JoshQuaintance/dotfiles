@@ -142,3 +142,6 @@ alias gwtb="git worktree add -b"
 alias gwtr="git worktree remove"
 alias gwtrm="git worktree remove"
 alias gwtp="git worktree prune"
+alias gwtc="gwtclean"
+alias gwtprune="gwtclean"
+
