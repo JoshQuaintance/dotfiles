@@ -93,16 +93,28 @@ conf() {
         local candidate_pool="$matches"
         [ -z "$candidate_pool" ] && candidate_pool=$(echo "$all_candidates" | sort -u -k2,2)
 
+        local fzf_mode_flags=()
+        if [ -z "$query" ]; then
+          fzf_mode_flags=(
+            "--disabled"
+            "--bind=j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept"
+            "--bind=/:enable-search+unbind(j,k,q,g,G)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: open)"
+            "--bind=esc:disable-search+clear-query+rebind(j,k,q,g,G)+change-prompt(⚙  Edit Config > )+change-header(  j/k: navigate │ /: search │ enter: open │ q: quit)"
+          )
+        else
+          fzf_mode_flags=("--query=$query")
+        fi
+
         local selected
         selected=$(echo "$candidate_pool" | awk -F'\t' '{ printf "%-16s │ %s\t%s\n", $1, $2, $2 }' | fzf \
           --delimiter='\t' \
           --with-nth=1 \
-          --query="$query" \
+          "${fzf_mode_flags[@]}" \
           --height=~50% \
           --layout=reverse \
           --border=rounded \
           --prompt="⚙  Edit Config > " \
-          --header="Enter: open in editor • Esc: cancel" \
+          --header="  j/k: navigate │ /: search │ enter: open │ q: quit" \
           --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
           --preview='if [ -d {2} ]; then if command -v eza &>/dev/null; then eza -la --color=always {2}; else ls -la {2}; fi; elif [ -f {2} ]; then if command -v bat &>/dev/null; then bat --style=plain --color=always --line-range :60 {2}; else head -n 60 {2}; fi; fi' \
           --preview-window='right:55%:wrap')

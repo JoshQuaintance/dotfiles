@@ -23,8 +23,13 @@ scratch() {
         --height=~50% \
         --layout=reverse \
         --border=rounded \
-        --prompt="📝 Select Scratchpad > " \
-        --header="Enter: open in editor • Esc: cancel" \
+        --disabled \
+        --prompt="📝 Scratchpad > " \
+        --header="  j/k: navigate │ /: search │ enter: open │ q: quit" \
+        --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
+        --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept" \
+        --bind="/:enable-search+unbind(j,k,q,g,G)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: open)" \
+        --bind="esc:disable-search+clear-query+rebind(j,k,q,g,G)+change-prompt(📝 Scratchpad > )+change-header(  j/k: navigate │ /: search │ enter: open │ q: quit)" \
         --preview="if command -v bat &>/dev/null; then bat --style=plain --color=always '$scratch_dir/{}'; else cat '$scratch_dir/{}'; fi" \
         --preview-window='right:60%:wrap')
 

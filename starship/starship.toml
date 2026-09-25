@@ -1,107 +1,39 @@
 "$schema" = 'https://starship.rs/config-schema.json'
 
 palette = "catppuccin_mocha"
+command_timeout = 1000
 
 format = """
 $username\
 $hostname\
 $localip\
-$shlvl\
-$singularity\
-$kubernetes\
-$nats\
 ${custom.dir}\
-$vcsh\
-$fossil_branch\
-$fossil_metrics\
 $git_branch\
 $git_commit\
 $git_state\
-$git_metrics\
 $git_status\
-$hg_branch\
-$hg_state\
-$pijul_channel\
 $docker_context\
 $package\
 $bun\
-$c\
-$cmake\
-$cobol\
-$cpp\
-$daml\
-$dart\
 $deno\
-$dotnet\
-$elixir\
-$elm\
-$erlang\
-$fennel\
-$fortran\
-$gleam\
-$golang\
-$gradle\
-$haskell\
-$haxe\
-$helm\
-$java\
-$julia\
-$kotlin\
-$lua\
-$maven\
-$mojo\
-$nim\
 $nodejs\
-$ocaml\
-$odin\
-$opa\
-$perl\
-$php\
-$pulumi\
-$purescript\
 $python\
-$quarto\
-$raku\
-$rlang\
-$red\
-$ruby\
+$java\
+$gradle\
+$maven\
+$golang\
 $rust\
-$scala\
-$solidity\
-$swift\
-$terraform\
-$typst\
-$vlang\
-$vagrant\
-$xmake\
-$zig\
-$buf\
-$guix_shell\
-$nix_shell\
-$conda\
-$pixi\
-$meson\
-$spack\
-$memory_usage\
 $aws\
-$gcloud\
-$openstack\
 $azure\
-$direnv\
-$env_var\
+$gcloud\
 $mise\
-$crystal\
-$sudo\
+$direnv\
 $cmd_duration\
 $line_break\
 $jobs\
 $battery\
 $time\
 $status\
-$container\
-$netns\
-$os\
-$shell\
 $character"""
 
 [palettes.catppuccin_mocha]
@@ -189,6 +121,7 @@ command = "git-prompt-dir"
 when = "true"
 style = "blue bold"
 format = "[$output]($style) "
+ignore_timeout = true
 
 [docker_context]
 symbol = " "
@@ -226,6 +159,9 @@ style = "mauve bold"
 
 [git_commit]
 tag_symbol = '  '
+
+[git_status]
+ignore_submodules = true
 
 [golang]
 symbol = " "

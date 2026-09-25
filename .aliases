@@ -106,7 +106,7 @@ alias gpl="git pull"
 alias gpr="git pull --rebase"
 
 # History & Log
-alias gl="git log --oneline --graph --decorate"
+unalias gl 2>/dev/null || true
 alias glo="git log --oneline --graph --decorate -n 20"
 alias glog="git log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
 

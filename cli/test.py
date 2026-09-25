@@ -214,7 +214,7 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
         else:
             report.fail("Git configuration", ".gitconfig syntax error")
 
-def test_shell_runtime(report: TestReport):
+def test_shell_runtime(report: TestReport, dotfiles: Path):
     print(f"\n{C_BOLD}2. Shell Runtime & Interactive Startup{C_RESET}")
 
     if not shutil.which("zsh"):
@@ -248,7 +248,7 @@ def test_shell_runtime(report: TestReport):
 
     # Custom functions check
     func_check_code = """
-for fn in take up groot gmain conf clone port wt gwtnew gwts gwtdel gwtclean gbclean y copy paste scratch extract npmr bunr pnpmr fa toggle-autols notify; do
+for fn in take up groot gmain conf clone port wt gwtnew gwts gwtdel gwtclean gbclean y copy paste scratch extract npmr bunr pnpmr fa toggle-autols notify gl; do
     if ! (( $+functions[$fn] )); then
         echo "Missing function: $fn"
     fi
@@ -257,7 +257,7 @@ done
     code, out, err = run_cmd(["zsh", "-i", "-c", func_check_code], timeout=5)
     missing_funcs = [line.strip() for line in out.splitlines() if line.startswith("Missing function:")]
     if not missing_funcs:
-        report.ok("Custom shell functions", "All 24 functions registered in zsh")
+        report.ok("Custom shell functions", "All 25 functions registered in zsh")
     else:
         report.fail("Custom shell functions", missing_funcs[0])
 
@@ -309,16 +309,23 @@ print -l "${collisions[@]}"
         report.fail("Alias & function namespaces", f"Colliding alias/function: {', '.join(collisions)}")
 
     # Function runtime execution smoke test
-    smoke_test_code = """
+    smoke_test_code = f"""
 set -e
+# Universal functions
 up -h >/dev/null
 fa -p >/dev/null
-groot >/dev/null
-gmain >/dev/null
 take /tmp/test-smoke-take >/dev/null && cd - >/dev/null && rm -rf /tmp/test-smoke-take
 notify "test" "dottest" >/dev/null
-gwts >/dev/null
 extract >/dev/null 2>&1 || true
+
+# Git-dependent functions (must run inside git repo)
+(
+    cd "{dotfiles}"
+    groot >/dev/null
+    gmain >/dev/null
+    gwts >/dev/null
+    gl -n 1 >/dev/null
+)
 """
     code, out, err = run_cmd(["zsh", "-i", "-c", smoke_test_code], timeout=10)
     if code == 0:
@@ -397,7 +404,7 @@ def run_tests() -> int:
     print(f"{C_CYAN}╰────────────────────────────────────────────────────────╯{C_RESET}")
 
     test_parsers_and_schemas(report, dotfiles)
-    test_shell_runtime(report)
+    test_shell_runtime(report, dotfiles)
     test_syntax_and_links(report, dotfiles)
 
     print(f"\n{C_BOLD}Summary:{C_RESET} {C_GREEN}{report.passed} passed{C_RESET}, {C_YELLOW}{report.warnings} warnings{C_RESET}, {C_RED}{report.failed} failed{C_RESET}\n")

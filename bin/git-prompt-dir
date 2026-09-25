@@ -1,29 +1,33 @@
 #!/usr/bin/env bash
 set -e
 
-# Fast git worktree & repository path resolver for Starship prompt
-if git rev-parse --is-inside-work-tree &>/dev/null; then
-    common_dir="$(git rev-parse --git-common-dir 2>/dev/null)"
-    git_dir="$(git rev-parse --git-dir 2>/dev/null)"
-    toplevel="$(git rev-parse --show-toplevel 2>/dev/null)"
+# Fast zero-fork git worktree & repository path resolver for Starship prompt
+p="$PWD"
+git_item=""
+rel_path=""
 
-    pwd_p="$(pwd -P)"
-    top_p="$(cd "$toplevel" 2>/dev/null && pwd -P)"
-    rel_path="${pwd_p#$top_p}"
+while [ "$p" != "/" ] && [ -n "$p" ]; do
+    if [ -e "$p/.git" ]; then
+        git_item="$p/.git"
+        break
+    fi
+    rel_path="/${p##*/}${rel_path}"
+    p="${p%/*}"
+done
 
-    # Detect git worktree: common_dir differs from git_dir, or git_dir contains /worktrees/
-    if [ "$common_dir" != "$git_dir" ] && [[ "$git_dir" == *"worktrees"* ]]; then
-        common_base="$(basename "$common_dir")"
-        if [ "$common_base" = ".git" ] || [ "$common_base" = ".bare" ]; then
-            main_repo="$(basename "$(cd "$common_dir/.." 2>/dev/null && pwd -P)")"
-        else
-            main_repo="${common_base%.git}"
-        fi
-        wt_name="$(basename "$top_p")"
+if [ -n "$git_item" ]; then
+    top_dir="$p"
+    if [ -f "$git_item" ]; then
+        # Git worktree: .git file contains 'gitdir: /path/to/main_repo/.bare/worktrees/<wt_name>'
+        read -r gitdir_line < "$git_item"
+        common_bare="${gitdir_line#gitdir: }"
+        bare_dir="${common_bare%/worktrees/*}"
+        main_repo_dir="${bare_dir%/*}"
+        main_repo="${main_repo_dir##*/}"
+        wt_name="${top_dir##*/}"
         dir_display="${main_repo}/${wt_name}${rel_path}"
     else
-        repo_name="$(basename "$top_p")"
-        repo_name="${repo_name%.git}"
+        repo_name="${top_dir##*/}"
         dir_display="${repo_name}${rel_path}"
     fi
 else

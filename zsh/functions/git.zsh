@@ -10,6 +10,119 @@ gsearch() {
   git log --all --grep="$1" --oneline
 }
 
+# Interactive Git Graph & Diff Browser (gl)
+# Browses the commit graph interactively with live side-by-side diff previews.
+# Supports Enter (pager diff), Ctrl-V (Neovim Diffview), Ctrl-Y (copy hash), and Tab (range diff).
+gl() {
+  if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+    printf "\033[31m✖ Not inside a git repository or worktree.\033[0m\n" >&2
+    return 1
+  fi
+
+  # Fall back to standard git log if stdout is not a TTY or if flags starting with '-' are passed
+  local has_flags=0
+  for arg in "$@"; do
+    if [[ "$arg" == -* ]]; then
+      has_flags=1
+      break
+    fi
+  done
+
+  if [ ! -t 1 ] || [ $has_flags -eq 1 ] || ! command -v fzf &>/dev/null; then
+    git log --oneline --graph --decorate "$@"
+    return $?
+  fi
+
+  local git_log_cmd
+  if [ $# -gt 0 ]; then
+    git_log_cmd="git log --graph --color=always --format='%C(auto)%h%d %s %C(dim white)%cr %C(dim cyan)<%an>%Creset' \"$@\""
+  else
+    git_log_cmd="git log --graph --color=always --format='%C(auto)%h%d %s %C(dim white)%cr %C(dim cyan)<%an>%Creset' --exclude='refs/heads/dura/*' --all"
+  fi
+
+  local preview_cmd='h=$(echo {} | grep -oE "[a-f0-9]{7,40}" | head -n1); [ -n "$h" ] && git show --color=always --stat -p "$h"'
+
+  selection=$(eval "$git_log_cmd" | fzf \
+    --ansi \
+    --multi \
+    --layout=reverse \
+    --border=rounded \
+    --disabled \
+    --prompt="📜 Git Graph > " \
+    --header="j/k: move • /: search • Enter: diff • Ctrl-V: nvim diffview • Ctrl-Y: copy hash • q: quit" \
+    --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
+    --bind="start:unbind(esc)" \
+    --bind="j:down,k:up,q:abort,g:first,G:last" \
+    --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,/)+change-prompt(🔍 Search > )+rebind(esc)" \
+    --bind="esc:disable-search+rebind(j,k,q,g,G,/)+change-prompt(📜 Git Graph > )+unbind(esc)" \
+    --bind="ctrl-/:toggle-preview,ctrl-d:preview-page-down,ctrl-u:preview-page-up" \
+    --preview="$preview_cmd" \
+    --preview-window="right:60%:wrap" \
+    --expect="ctrl-v,ctrl-y")
+
+  local exit_code=$?
+  [ $exit_code -ne 0 ] && return 0
+  [ -z "$selection" ] && return 0
+
+  local key
+  key=$(echo "$selection" | head -n1)
+  local selected_lines
+  selected_lines=$(echo "$selection" | sed '1d')
+
+  [ -z "$selected_lines" ] && return 0
+
+  local hashes=()
+  while IFS= read -r line; do
+    local h
+    h=$(echo "$line" | grep -oE "[a-f0-9]{7,40}" | head -n1)
+    [ -n "$h" ] && hashes+=("$h")
+  done <<< "$selected_lines"
+
+  [ ${#hashes[@]} -eq 0 ] && return 0
+
+  case "$key" in
+    ctrl-y)
+      local joined_hashes="${(j: :)hashes}"
+      if command -v pbcopy &>/dev/null; then
+        echo -n "$joined_hashes" | pbcopy
+        printf "\033[32m✔ Copied hash(es) to clipboard: %s\033[0m\n" "$joined_hashes"
+      elif command -v wl-copy &>/dev/null; then
+        echo -n "$joined_hashes" | wl-copy
+        printf "\033[32m✔ Copied hash(es) to clipboard: %s\033[0m\n" "$joined_hashes"
+      elif command -v xclip &>/dev/null; then
+        echo -n "$joined_hashes" | xclip -selection clipboard
+        printf "\033[32m✔ Copied hash(es) to clipboard: %s\033[0m\n" "$joined_hashes"
+      else
+        printf "%s\n" "$joined_hashes"
+      fi
+      ;;
+    ctrl-v)
+      if command -v nvim &>/dev/null; then
+        if [ ${#hashes[@]} -ge 2 ]; then
+          local from="${hashes[-1]}"
+          local to="${hashes[1]}"
+          nvim -c "DiffviewOpen ${from}~1..${to}"
+        else
+          local commit="${hashes[1]}"
+          nvim -c "DiffviewOpen ${commit}~1..${commit}"
+        fi
+      else
+        printf "\033[31m✖ Neovim (nvim) is not installed.\033[0m\n" >&2
+      fi
+      ;;
+    *)
+      if [ ${#hashes[@]} -ge 2 ]; then
+        local from="${hashes[-1]}"
+        local to="${hashes[1]}"
+        git diff "${from}~1..${to}"
+      else
+        local commit="${hashes[1]}"
+        git show --stat -p "$commit"
+      fi
+      ;;
+  esac
+}
+
 # Git Worktree Interactive Switcher (wt)
 # Dynamically queries git worktrees in the current repo and provides an interactive fzf selector
 wt() {
@@ -39,14 +152,26 @@ wt() {
   fi
 
   if command -v fzf &>/dev/null; then
+    local fzf_mode_flags=()
+    if [ -z "$query" ]; then
+      fzf_mode_flags=(
+        "--disabled"
+        "--bind=j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept"
+        "--bind=/:enable-search+unbind(j,k,q,g,G)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: cd)"
+        "--bind=esc:disable-search+clear-query+rebind(j,k,q,g,G)+change-prompt(🌿 Worktree > )+change-header(  j/k: navigate │ /: search │ enter: cd │ q: quit)"
+      )
+    else
+      fzf_mode_flags=("--query=$query")
+    fi
+
     local selected
     selected=$(echo "$worktrees" | fzf \
       --height=~40% \
       --layout=reverse \
       --border=rounded \
-      --query="$query" \
-      --prompt="🌿 Switch Worktree > " \
-      --header="Enter: cd to worktree • Esc: cancel" \
+      "${fzf_mode_flags[@]}" \
+      --prompt="🌿 Worktree > " \
+      --header="  j/k: navigate │ /: search │ enter: cd │ q: quit" \
       --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
       --preview='git -C {1} status -sb 2>/dev/null' \
       --preview-window='right:50%:wrap')
@@ -372,9 +497,13 @@ gwtdel() {
       --height=~40% \
       --layout=reverse \
       --border=rounded \
+      --disabled \
       --prompt="🗑 Delete Worktree > " \
-      --header="Enter: choose worktree to delete • Esc: cancel" \
+      --header="  j/k: navigate │ /: search │ enter: select to delete │ q: quit" \
       --color="header:italic:dim,prompt:bold:red,pointer:bold:red" \
+      --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept" \
+      --bind="/:enable-search+unbind(j,k,q,g,G)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: select)" \
+      --bind="esc:disable-search+clear-query+rebind(j,k,q,g,G)+change-prompt(🗑 Delete Worktree > )+change-header(  j/k: navigate │ /: search │ enter: select to delete │ q: quit)" \
       --preview='git -C {3} status -sb 2>/dev/null' \
       --preview-window='right:55%:wrap')
 

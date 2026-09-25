@@ -195,7 +195,8 @@ if command -v fzf &>/dev/null; then
     --border=rounded \
     --prompt='❯ ' \
     --pointer='◆ ' \
-    --marker='✓ '"
+    --marker='✓ ' \
+    --bind='ctrl-j:down,ctrl-k:up,ctrl-d:half-page-down,ctrl-u:half-page-up'"
 
     # Fast file discovery via fd (includes hidden files, excludes .git)
     if command -v fd &>/dev/null; then
