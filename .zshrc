@@ -264,6 +264,9 @@ _dot_dir="${DOTFILES_DIR:-$HOME/.dotfiles}"
 [ -f "$_dot_dir/.aliases" ] && [ ! -f "$HOME/.aliases" ] && source "$_dot_dir/.aliases"
 _step "Dotfiles aliases & functions"
 
+# Vi-Mode Command Line Editing (Vim keybindings, dynamic cursor shape, Neovim 'v' integration)
+[ -f "$_dot_dir/zsh/vi-mode.zsh" ] && source "$_dot_dir/zsh/vi-mode.zsh"
+
 # Startup Summary Card & Rotating Tips
 [ -f "$_dot_dir/zsh/banner.zsh" ] && source "$_dot_dir/zsh/banner.zsh"
 
