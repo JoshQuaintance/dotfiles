@@ -71,6 +71,156 @@ wt() {
   fi
 }
 
+# Git Worktree New / Create (gwtnew / gwtn)
+# Creates a new worktree from an existing remote branch or a new branch
+gwtnew() {
+  if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+    printf "\033[31m✖ Not inside a git repository or worktree.\033[0m\n" >&2
+    return 1
+  fi
+
+  local common_dir
+  common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+  local main_root
+  if [ -n "$common_dir" ]; then
+    main_root="$(cd "$common_dir/.." && pwd)"
+  else
+    main_root="$(git rev-parse --show-toplevel)"
+  fi
+
+  # Determine default base branch (develop if exists, otherwise main or master)
+  local base_branch="main"
+  if git show-ref --verify --quiet refs/heads/develop || git show-ref --verify --quiet refs/remotes/origin/develop; then
+    base_branch="develop"
+  elif git show-ref --verify --quiet refs/heads/master || git show-ref --verify --quiet refs/remotes/origin/master; then
+    base_branch="master"
+  fi
+
+  local target_input="$1"
+
+  # If no argument given, offer interactive FZF selection of remote branches
+  if [ -z "$target_input" ]; then
+    if ! command -v fzf &>/dev/null; then
+      printf "Usage: gwtnew <branch-name-or-ticket>\n" >&2
+      return 1
+    fi
+
+    printf "\033[1;34m==>\033[0m Fetching remote branches...\n"
+    git fetch --prune 2>/dev/null || true
+
+    # Collect existing active worktree branches to exclude
+    local existing_wts
+    existing_wts=$(git worktree list 2>/dev/null | awk '{print $3}' | tr -d '[]')
+
+    # Get remote branches excluding HEAD and already checked-out branches
+    local remote_branches=()
+    while IFS= read -r b; do
+      local b_clean="${b#origin/}"
+      [[ "$b_clean" == "HEAD"* ]] && continue
+      if echo "$existing_wts" | grep -qx "$b_clean"; then
+        continue
+      fi
+      remote_branches+=("$b_clean")
+    done < <(git branch -r 2>/dev/null | sed 's/^[ *]*//')
+
+    if [ "${#remote_branches[@]}" -eq 0 ]; then
+      printf "\033[33mNo unattached remote branches found. Provide a branch name to create a new one.\033[0m\n"
+      printf "Usage: gwtnew <new-branch-name>\n"
+      return 0
+    fi
+
+    target_input=$(printf "%s\n" "${remote_branches[@]}" | fzf \
+      --height=~45% \
+      --layout=reverse \
+      --border=rounded \
+      --prompt="🌱 New Worktree from Branch > " \
+      --header="Enter: create worktree • Esc: cancel" \
+      --color="header:italic:dim,prompt:bold:green,pointer:bold:green" \
+      --preview='git log -n 10 --oneline --color=always "origin/{}" 2>/dev/null' \
+      --preview-window='right:55%:wrap')
+
+    if [ -z "$target_input" ]; then
+      return 0
+    fi
+  fi
+
+  # Resolve branch and directory name
+  local target_branch="$target_input"
+  local target_folder=""
+
+  # Check if target_input matches an existing remote branch (e.g. "3549" -> "origin/feat/SALES-3549/...")
+  local matched_remote
+  matched_remote=$(git branch -r 2>/dev/null | sed 's/^[ *]*//' | grep -v 'HEAD' | grep -i "${target_input}" | head -n 1)
+
+  if [ -n "$matched_remote" ]; then
+    target_branch="${matched_remote#origin/}"
+  fi
+
+  # If purely numeric, format as ticket branch default if not matched
+  if [[ "$target_branch" =~ ^[0-9]+$ ]]; then
+    target_branch="feat/SALES-${target_branch}"
+  fi
+
+  # Determine folder name: extract Jira ticket key (e.g. SALES-3549) if present
+  if [[ "$target_branch" =~ ([A-Za-z]+-[0-9]+) ]]; then
+    target_folder="${match[1]:u}"
+  else
+    target_folder="$(basename "$target_branch")"
+  fi
+
+  local target_wt_path="$main_root/$target_folder"
+
+  # Check if worktree directory already exists
+  if [ -d "$target_wt_path" ]; then
+    printf "\033[33m⚠ Directory already exists:\033[0m %s\n" "$target_wt_path"
+    if git worktree list 2>/dev/null | grep -q "^$target_wt_path"; then
+      printf "Switching to existing worktree...\n"
+      cd "$target_wt_path" || return 1
+      return 0
+    fi
+  fi
+
+  # Check if branch exists locally or on remote
+  local branch_exists=false
+  if git show-ref --verify --quiet "refs/heads/$target_branch" || git show-ref --verify --quiet "refs/remotes/origin/$target_branch"; then
+    branch_exists=true
+  fi
+
+  if [ "$branch_exists" = true ]; then
+    printf "\033[1;34m==>\033[0m Creating worktree \033[1m%s\033[0m tracking branch \033[1;36m%s\033[0m...\n" "$target_folder" "$target_branch"
+    if git worktree add "$target_wt_path" "$target_branch"; then
+      printf "\033[32m✔ Worktree created successfully!\033[0m\n"
+      cd "$target_wt_path" || return 1
+      return 0
+    else
+      printf "\033[31m✖ Failed to create worktree.\033[0m\n" >&2
+      return 1
+    fi
+  else
+    # New branch: ask or create off base branch
+    printf "\033[1;34m==>\033[0m Branch \033[1;36m%s\033[0m does not exist yet.\n" "$target_branch"
+    printf "Create new branch \033[1;36m%s\033[0m off \033[1m%s\033[0m in worktree \033[1m%s\033[0m? [Y/n]: " "$target_branch" "$base_branch" "$target_folder"
+    local confirm_new
+    read -r confirm_new
+    case "$confirm_new" in
+      [nN]|[nN][oO])
+        printf "Aborted.\n"
+        return 0
+        ;;
+      *)
+        if git worktree add -b "$target_branch" "$target_wt_path" "$base_branch"; then
+          printf "\033[32m✔ Worktree created successfully with new branch '%s'!\033[0m\n" "$target_branch"
+          cd "$target_wt_path" || return 1
+          return 0
+        else
+          printf "\033[31m✖ Failed to create worktree.\033[0m\n" >&2
+          return 1
+        fi
+        ;;
+    esac
+  fi
+}
+
 # Git Worktree Clean / Prune (gwtclean / gwtprune / gwtc)
 # Prunes worktrees whose remote upstream branch has been deleted on the remote
 gwtclean() {
@@ -313,3 +463,26 @@ gwtclean() {
   git worktree prune
   printf "\033[32m✔ Worktree pruning complete!\033[0m\n"
 }
+
+# Tab completion for wt: list active worktree names
+_wt() {
+  local -a wts
+  while IFS= read -r line; do
+    local p="$(echo "$line" | awk '{print $1}')"
+    local b="$(basename "$p")"
+    [[ "$b" != ".bare" && "$b" != ".git" ]] && wts+=("$b")
+  done < <(git worktree list 2>/dev/null)
+  _describe 'worktree' wts
+}
+(( $+functions[compdef] )) && compdef _wt wt
+
+# Tab completion for gwtnew: list available remote branches
+_gwtnew() {
+  local -a branches
+  while IFS= read -r b; do
+    local b_clean="${b#origin/}"
+    [[ "$b_clean" != "HEAD"* ]] && branches+=("$b_clean")
+  done < <(git branch -r 2>/dev/null | sed 's/^[ *]*//')
+  _describe 'remote branch' branches
+}
+(( $+functions[compdef] )) && compdef _gwtnew gwtnew

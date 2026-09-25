@@ -117,6 +117,9 @@ else
     setopt PROMPT_SUBST
     PROMPT='%F{cyan}%~%F{yellow}${vcs_info_msg_0_}%F{reset} %# '
 fi
+
+# Disable Oh My Zsh's AUTO_CD (prevents jumping into folders named like commands e.g. 'gradle', 'dist', 'test')
+unsetopt auto_cd
 _step "Oh My Zsh & plugins (git)"
 
 # Starship Prompt Initialization
