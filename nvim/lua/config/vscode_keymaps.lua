@@ -28,6 +28,12 @@ keymap("n", "<leader>Q", vsc("workbench.action.closeAllEditors"), { desc = "Clos
 keymap("n", "<leader>e", vsc("workbench.view.explorer"), { desc = "Toggle File Explorer" })
 keymap("n", "<leader>o", vsc("workbench.files.action.focusFilesExplorer"), { desc = "Focus File Explorer" })
 
+-- System Clipboard (<leader>y, <leader>Y, <leader>p, <leader>P)
+keymap({ "n", "v" }, "<leader>y", [["+y]], { desc = "Yank to OS clipboard" })
+keymap("n", "<leader>Y", [["+Y]], { desc = "Yank line to OS clipboard" })
+keymap({ "n", "v" }, "<leader>p", [["+p]], { desc = "Paste from OS clipboard" })
+keymap({ "n", "v" }, "<leader>P", [["+P]], { desc = "Paste before from OS clipboard" })
+
 -------------------------------------------------------------------------------
 -- 2. Find & Navigation (<leader>f...)
 -------------------------------------------------------------------------------
@@ -77,6 +83,8 @@ keymap("n", "<leader>ba", vsc("workbench.action.closeOtherEditors"), { desc = "C
 keymap("n", "<leader>gd", vsc("git.openChange"), { desc = "Git Diff" })
 keymap("n", "<leader>gD", vsc("workbench.action.closeActiveEditor"), { desc = "Close Diff" })
 keymap("n", "<leader>gs", vsc("workbench.view.scm"), { desc = "Git Source Control" })
+keymap("n", "<leader>gl", vsc("gitlens.showGraphPage"), { desc = "Git Graph" })
+keymap("n", "<leader>gh", vsc("gitlens.showQuickFileHistory"), { desc = "File History" })
 keymap("n", "<leader>hp", vsc("workbench.action.editor.nextChange"), { desc = "Next Git Change / Hunk" })
 keymap("n", "<leader>hP", vsc("workbench.action.editor.previousChange"), { desc = "Previous Git Change / Hunk" })
 keymap("n", "<leader>hb", vsc("gitlens.toggleFileBlame"), { desc = "Toggle Git Blame (GitLens)" })

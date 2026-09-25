@@ -36,6 +36,34 @@
         "command": "workbench.files.action.focusFilesExplorer"
       },
       {
+        "key": "y",
+        "name": "Yank to OS Clipboard",
+        "type": "command",
+        "command": "vscode-neovim.send",
+        "args": "\"+y"
+      },
+      {
+        "key": "Y",
+        "name": "Yank Line to OS Clipboard",
+        "type": "command",
+        "command": "vscode-neovim.send",
+        "args": "\"+Y"
+      },
+      {
+        "key": "p",
+        "name": "Paste from OS Clipboard",
+        "type": "command",
+        "command": "vscode-neovim.send",
+        "args": "\"+p"
+      },
+      {
+        "key": "P",
+        "name": "Paste Before from OS Clipboard",
+        "type": "command",
+        "command": "vscode-neovim.send",
+        "args": "\"+P"
+      },
+      {
         "key": "f",
         "name": "+Find / Navigation",
         "type": "bindings",
@@ -96,7 +124,9 @@
         "bindings": [
           { "key": "d", "name": "Git Diff", "type": "command", "command": "git.openChange" },
           { "key": "D", "name": "Close Diff", "type": "command", "command": "workbench.action.closeActiveEditor" },
-          { "key": "s", "name": "Git Source Control", "type": "command", "command": "workbench.view.scm" }
+          { "key": "s", "name": "Git Source Control", "type": "command", "command": "workbench.view.scm" },
+          { "key": "l", "name": "Git Graph", "type": "command", "command": "gitlens.showGraphPage" },
+          { "key": "h", "name": "File History", "type": "command", "command": "gitlens.showQuickFileHistory" }
         ]
       },
       {
@@ -135,6 +165,27 @@
     "command": "whichkey.show",
     "when": "editorTextFocus && neovim.init && neovim.mode == visual",
     "args": [
+      {
+        "key": "y",
+        "name": "Yank to OS Clipboard",
+        "type": "command",
+        "command": "vscode-neovim.send",
+        "args": "\"+y"
+      },
+      {
+        "key": "p",
+        "name": "Paste from OS Clipboard",
+        "type": "command",
+        "command": "vscode-neovim.send",
+        "args": "\"+p"
+      },
+      {
+        "key": "P",
+        "name": "Paste Before from OS Clipboard",
+        "type": "command",
+        "command": "vscode-neovim.send",
+        "args": "\"+P"
+      },
       {
         "key": "c",
         "name": "+Code / LSP",
