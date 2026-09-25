@@ -248,7 +248,7 @@ def test_shell_runtime(report: TestReport):
 
     # Custom functions check
     func_check_code = """
-for fn in take up groot gmain conf clone port wt gwtnew gwtclean y copy paste scratch extract npmr bunr pnpmr fa toggle-autols; do
+for fn in take up groot gmain conf clone port wt gwtnew gwts gwtdel gwtclean gbclean y copy paste scratch extract npmr bunr pnpmr fa toggle-autols notify; do
     if ! (( $+functions[$fn] )); then
         echo "Missing function: $fn"
     fi
@@ -257,13 +257,13 @@ done
     code, out, err = run_cmd(["zsh", "-i", "-c", func_check_code], timeout=5)
     missing_funcs = [line.strip() for line in out.splitlines() if line.startswith("Missing function:")]
     if not missing_funcs:
-        report.ok("Custom shell functions", "All 20 functions registered in zsh")
+        report.ok("Custom shell functions", "All 24 functions registered in zsh")
     else:
         report.fail("Custom shell functions", missing_funcs[0])
 
     # Completions engine
     comp_check_code = """
-for comp in _git _uv _fzf_complete; do
+for comp in _git _uv _fzf_complete _up _wt _gwtnew _gwtdel; do
     if ! (( $+functions[$comp] )); then
         echo "Missing completion: $comp"
     fi
@@ -272,9 +272,59 @@ done
     code, out, err = run_cmd(["zsh", "-i", "-c", comp_check_code], timeout=5)
     missing_comps = [line.strip() for line in out.splitlines() if line.startswith("Missing completion:")]
     if not missing_comps:
-        report.ok("Completions engine", "_git, _uv, and _fzf_complete active")
+        report.ok("Completions engine", "All completions active (_git, _uv, _fzf, _up, _wt, _gwtn, _gwtdel)")
     else:
         report.fail("Completions engine", missing_comps[0])
+
+    # Shell reload / re-source test (guards against alias-function collisions on reload)
+    reload_code = """
+source ~/.zshrc
+"""
+    code, out, err = run_cmd(["zsh", "-i", "-c", reload_code], timeout=10, env={"ZSH_STARTUP_VERBOSE": "false"})
+    reload_errors = []
+    for line in err.splitlines():
+        line_clean = line.strip()
+        if re.search(r"command not found|parse error|syntax error|defining function based on alias", line_clean, re.IGNORECASE):
+            reload_errors.append(line_clean)
+    if not reload_errors:
+        report.ok("Shell reload / re-source", "0 errors on reload (source ~/.zshrc)")
+    else:
+        report.fail("Shell reload / re-source", reload_errors[0])
+
+    # Alias & function namespace collision check
+    collision_check_code = """
+local -a collisions
+for a in ${(k)aliases}; do
+    if (( $+functions[$a] )); then
+        collisions+=("$a")
+    fi
+done
+print -l "${collisions[@]}"
+"""
+    code, out, err = run_cmd(["zsh", "-i", "-c", collision_check_code], timeout=5)
+    collisions = [line.strip() for line in out.splitlines() if line.strip()]
+    if not collisions:
+        report.ok("Alias & function namespaces", "Clean separation (0 colliding names)")
+    else:
+        report.fail("Alias & function namespaces", f"Colliding alias/function: {', '.join(collisions)}")
+
+    # Function runtime execution smoke test
+    smoke_test_code = """
+set -e
+up -h >/dev/null
+fa -p >/dev/null
+groot >/dev/null
+gmain >/dev/null
+take /tmp/test-smoke-take >/dev/null && cd - >/dev/null && rm -rf /tmp/test-smoke-take
+notify "test" "dottest" >/dev/null
+gwts >/dev/null
+extract >/dev/null 2>&1 || true
+"""
+    code, out, err = run_cmd(["zsh", "-i", "-c", smoke_test_code], timeout=10)
+    if code == 0:
+        report.ok("Function runtime execution", "Core custom functions run cleanly (smoke test)")
+    else:
+        report.fail("Function runtime execution", f"Smoke test failed (exit {code}): {err.strip()}")
 
 def test_syntax_and_links(report: TestReport, dotfiles: Path):
     print(f"\n{C_BOLD}3. Script Syntax & Link Integrity{C_RESET}")

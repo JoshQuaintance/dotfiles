@@ -19,7 +19,7 @@ fa() {
 
   _gen_list() {
     # 1. Custom dotfiles functions
-    for fn in take up groot gmain conf clone port gsearch wt gwtnew gwtclean y copy paste scratch extract npmr bunr pnpmr toggle-autols fa; do
+    for fn in take up groot gmain conf clone port gsearch wt gwtnew gwts gwtdel gwtclean gbclean y copy paste scratch extract npmr bunr pnpmr toggle-autols fa notify; do
       if (( $+functions[$fn] )); then
         printf "function\t%-18s\t(shell function)\n" "$fn"
       fi

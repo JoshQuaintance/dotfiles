@@ -86,3 +86,46 @@ extract() {
       ;;
   esac
 }
+
+# Cross-Platform Desktop & Terminal Notification
+# Usage:
+#   notify "Build finished!"
+#   notify "Tests failed!" "Test Suite"
+#   npm run build && notify "Build succeeded!" || notify "Build failed!" "Error"
+notify() {
+  local msg="${1:-Command finished}"
+  local title="${2:-Terminal}"
+
+  # 1. macOS: Native Notification Center banner + subtle glass chime
+  if [[ "$OSTYPE" == darwin* ]] || [ "$(uname -s 2>/dev/null)" = "Darwin" ]; then
+    osascript -e "display notification \"$msg\" with title \"$title\"" 2>/dev/null
+    if [ -f "/System/Library/Sounds/Glass.aiff" ]; then
+      afplay "/System/Library/Sounds/Glass.aiff" &>/dev/null &!
+    fi
+
+  # 2. Linux: Desktop notification daemon (libnotify / notify-send)
+  elif command -v notify-send &>/dev/null; then
+    notify-send "$title" "$msg" 2>/dev/null
+
+  # 3. WSL: Native Windows 10/11 Toast Notification via PowerShell
+  elif command -v powershell.exe &>/dev/null; then
+    powershell.exe -NoProfile -Command "
+      [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > \$null
+      \$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+      \$xml = [xml]\$template.GetXml()
+      \$xml.GetElementsByTagName('text')[0].AppendChild(\$xml.CreateTextNode('$title')) > \$null
+      \$xml.GetElementsByTagName('text')[1].AppendChild(\$xml.CreateTextNode('$msg')) > \$null
+      \$toast = [Windows.UI.Notifications.ToastNotification]::new(\$template)
+      [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Terminal').Show(\$toast)
+    " 2>/dev/null || true
+
+  # 4. Universal Fallback: ASCII Terminal Bell
+  else
+    printf "\a"
+  fi
+
+  # Terminal status output
+  if [ -t 1 ]; then
+    printf "\033[1;38;2;203;166;247m󰂚 [%s]\033[0m %s\n" "$title" "$msg"
+  fi
+}

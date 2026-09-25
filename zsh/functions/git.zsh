@@ -221,6 +221,232 @@ gwtnew() {
   fi
 }
 
+# Git Worktree Fleet Status Dashboard (gwts / gwtstatus)
+# Scans all worktrees in the current repo and prints aligned status, branch, and sync state
+gwts() {
+  if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+    printf "\033[31m✖ Not inside a git repository or worktree.\033[0m\n" >&2
+    return 1
+  fi
+
+  local active_wt
+  active_wt="$(git rev-parse --show-toplevel 2>/dev/null)"
+  local wt_path wt_branch marker is_active status_out status_str
+  local staged unstaged untracked ahead behind upstream_count sync_str
+  local wt_name wt_display_branch
+  local -a parts
+
+  printf "\n\033[1;38;2;203;166;247m%-3s %-14s %-38s %-16s %s\033[0m\n" "" "WORKTREE" "BRANCH" "SYNC" "WORKING TREE"
+  printf "\033[38;2;108;112;134m%s\033[0m\n" "────────────────────────────────────────────────────────────────────────────────────────"
+
+  while IFS= read -r line; do
+    wt_path=$(echo "$line" | awk '{print $1}')
+    wt_branch=$(echo "$line" | awk '{print $3}' | tr -d '[]')
+    [[ "$wt_branch" == "(bare)" || -z "$wt_branch" ]] && continue
+
+    marker="  "
+    is_active=false
+    if [ "$wt_path" = "$active_wt" ]; then
+      marker="\033[1;32m➜ \033[0m"
+      is_active=true
+    fi
+
+    status_out=$(git -C "$wt_path" status --porcelain 2>/dev/null)
+    status_str=""
+    if [ -z "$status_out" ]; then
+      status_str="\033[32m✔ clean\033[0m"
+    else
+      staged=$(echo "$status_out" | grep -c '^[MADRC]' || true)
+      unstaged=$(echo "$status_out" | grep -c '^.[MD]' || true)
+      untracked=$(echo "$status_out" | grep -c '^\?\?' || true)
+      parts=()
+      (( staged > 0 )) && parts+=("${staged} staged")
+      (( unstaged > 0 )) && parts+=("${unstaged} modified")
+      (( untracked > 0 )) && parts+=("${untracked} untracked")
+      status_str="\033[1;33m●\033[0m \033[33m${(j:, :)parts}\033[0m"
+    fi
+
+    sync_str=""
+    upstream_count=$(git -C "$wt_path" rev-list --left-right --count HEAD...@{u} 2>/dev/null || true)
+    if [ -n "$upstream_count" ]; then
+      ahead=$(echo "$upstream_count" | awk '{print $1}')
+      behind=$(echo "$upstream_count" | awk '{print $2}')
+      if (( ahead > 0 && behind > 0 )); then
+        sync_str="\033[33m↑${ahead} ↓${behind}\033[0m"
+      elif (( ahead > 0 )); then
+        sync_str="\033[32m↑${ahead}\033[0m"
+      elif (( behind > 0 )); then
+        sync_str="\033[31m↓${behind}\033[0m"
+      else
+        sync_str="\033[32m✔ synced\033[0m"
+      fi
+    else
+      sync_str="\033[38;2;108;112;134m(no upstream)\033[0m"
+    fi
+
+    wt_name="$(basename "$wt_path")"
+    local wt_display_branch="$wt_branch"
+    if [ "${#wt_display_branch}" -gt 36 ]; then
+      wt_display_branch="${wt_display_branch:0:33}..."
+    fi
+
+    if [ "$is_active" = true ]; then
+      printf "%b\033[1;32m%-14s\033[0m \033[1;36m%-38s\033[0m %-26b %b\n" "$marker" "$wt_name" "$wt_display_branch" "$sync_str" "$status_str"
+    else
+      printf "%b%-14s \033[2m%-38s\033[0m %-26b %b\n" "$marker" "$wt_name" "$wt_display_branch" "$sync_str" "$status_str"
+    fi
+  done < <(git worktree list 2>/dev/null)
+  printf "\n"
+}
+
+# Git Worktree Delete (gwtdel / gwtrm)
+# Safely removes an individual worktree and optionally deletes its local branch
+gwtdel() {
+  if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+    printf "\033[31m✖ Not inside a git repository or worktree.\033[0m\n" >&2
+    return 1
+  fi
+
+  local active_wt target_input="$1" target_wt="" target_branch=""
+  local p b br bname item fzf_lines="" selected wt_name is_dirty=false
+  local confirm_dirty confirm_del confirm_br
+  local -a eligible rm_opts
+  active_wt="$(git rev-parse --show-toplevel 2>/dev/null)"
+
+  # Collect eligible worktrees (exclude active worktree, bare repo, and protected branches)
+  while IFS= read -r line; do
+    p="$(echo "$line" | awk '{print $1}')"
+    b="$(echo "$line" | awk '{print $3}' | tr -d '[]')"
+    [[ "$b" == "(bare)" || -z "$b" ]] && continue
+    # Skip currently active worktree
+    [[ "$p" == "$active_wt" ]] && continue
+    # Skip protected branches
+    [[ "$b" =~ ^(main|master|develop|qa|stage|staging)$ ]] && continue
+    eligible+=("${p}|${b}")
+  done < <(git worktree list 2>/dev/null)
+
+  if [ "${#eligible[@]}" -eq 0 ]; then
+    printf "\033[33mNo disposable worktrees found (excluding active worktree and protected branches).\033[0m\n"
+    return 0
+  fi
+
+  if [ -n "$target_input" ]; then
+    for item in "${eligible[@]}"; do
+      p="${item%%|*}"
+      bname="$(basename "$p")"
+      br="${item##*|}"
+      if [[ "${(L)bname}" == *"${(L)target_input}"* ]] || [[ "${(L)br}" == *"${(L)target_input}"* ]]; then
+        target_wt="$p"
+        target_branch="$br"
+        break
+      fi
+    done
+
+    if [ -z "$target_wt" ]; then
+      if [[ "${(L)$(basename "$active_wt")}" == *"${(L)target_input}"* ]]; then
+        printf "\033[31m✖ Cannot delete the active worktree (%s). cd to another directory first.\033[0m\n" "$(basename "$active_wt")" >&2
+        return 1
+      fi
+      printf "\033[31m✖ No disposable worktree matching '%s' found.\033[0m\n" "$target_input" >&2
+      return 1
+    fi
+  else
+    if ! command -v fzf &>/dev/null; then
+      printf "Usage: gwtdel <worktree-name>\n" >&2
+      return 1
+    fi
+
+    for item in "${eligible[@]}"; do
+      p="${item%%|*}"
+      br="${item##*|}"
+      bname="$(basename "$p")"
+      local dirty_flag=""
+      [ -n "$(git -C "$p" status --porcelain 2>/dev/null)" ] && dirty_flag=" *dirty*"
+      fzf_lines+="${bname}\t[${br}]${dirty_flag}\t${p}\n"
+    done
+
+    local selected
+    selected=$(printf "%b" "$fzf_lines" | fzf \
+      --delimiter=$'\t' \
+      --with-nth=1,2 \
+      --height=~40% \
+      --layout=reverse \
+      --border=rounded \
+      --prompt="🗑 Delete Worktree > " \
+      --header="Enter: choose worktree to delete • Esc: cancel" \
+      --color="header:italic:dim,prompt:bold:red,pointer:bold:red" \
+      --preview='git -C {3} status -sb 2>/dev/null' \
+      --preview-window='right:55%:wrap')
+
+    [ -z "$selected" ] && return 0
+    target_wt=$(echo "$selected" | awk -F'\t' '{print $3}')
+    for item in "${eligible[@]}"; do
+      if [ "${item%%|*}" = "$target_wt" ]; then
+        target_branch="${item##*|}"
+        break
+      fi
+    done
+  fi
+
+  local wt_name="$(basename "$target_wt")"
+  local is_dirty=false
+  [ -n "$(git -C "$target_wt" status --porcelain 2>/dev/null)" ] && is_dirty=true
+
+  if [ "$is_dirty" = true ]; then
+    printf "\n\033[1;33m⚠ Worktree has uncommitted changes:\033[0m \033[1m%s\033[0m \033[2m[%s]\033[0m\n" "$target_wt" "$target_branch"
+    printf "\033[2m───────────────── Output of gs (git status -sb) ─────────────────\033[0m\n"
+    git -C "$target_wt" status -sb
+    printf "\033[2m─────────────────────────────────────────────────────────────────\033[0m\n"
+    printf "\033[1;31mDiscard uncommitted changes and delete this worktree?\033[0m [y/N]: "
+    local confirm_dirty
+    read -r confirm_dirty
+    case "$confirm_dirty" in
+      [yY]|[yY][eE][sS]) ;;
+      *)
+        printf "Aborted. Worktree preserved.\n"
+        return 0
+        ;;
+    esac
+  else
+    printf "Delete worktree \033[1m%s\033[0m \033[2m[%s]\033[0m? [y/N]: " "$wt_name" "$target_branch"
+    local confirm_del
+    read -r confirm_del
+    case "$confirm_del" in
+      [yY]|[yY][eE][sS]) ;;
+      *)
+        printf "Aborted.\n"
+        return 0
+        ;;
+    esac
+  fi
+
+  local rm_opts=()
+  [ "$is_dirty" = true ] && rm_opts+=("--force")
+
+  printf "Removing worktree \033[1m%s\033[0m..." "$wt_name"
+  if git worktree remove "${rm_opts[@]}" "$target_wt" 2>/dev/null; then
+    printf " \033[32m✔\033[0m\n"
+    if [ -n "$target_branch" ]; then
+      printf "Delete local branch \033[1m%s\033[0m? [Y/n]: " "$target_branch"
+      local confirm_br
+      read -r confirm_br
+      case "$confirm_br" in
+        [nN]|[nN][oO]) ;;
+        *)
+          if git branch -d "$target_branch" 2>/dev/null || git branch -D "$target_branch" 2>/dev/null; then
+            printf "  \033[32m✔\033[0m Deleted local branch %s\n" "$target_branch"
+          fi
+          ;;
+      esac
+    fi
+    git worktree prune 2>/dev/null
+    printf "\033[32m✔ Worktree '%s' removed successfully!\033[0m\n" "$wt_name"
+  else
+    printf " \033[31m✖ Failed to remove worktree.\033[0m\n" >&2
+    return 1
+  fi
+}
+
 # Git Worktree Clean / Prune (gwtclean / gwtprune / gwtc)
 # Prunes worktrees whose remote upstream branch has been deleted on the remote
 gwtclean() {
@@ -464,6 +690,72 @@ gwtclean() {
   printf "\033[32m✔ Worktree pruning complete!\033[0m\n"
 }
 
+# Git Local Merged Branch Cleaner (gbclean)
+# Safely deletes local branches that are already merged into develop or main
+gbclean() {
+  if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+    printf "\033[31m✖ Not inside a git repository or worktree.\033[0m\n" >&2
+    return 1
+  fi
+
+  local base="main"
+  if git show-ref --verify --quiet refs/heads/develop || git show-ref --verify --quiet refs/remotes/origin/develop; then
+    base="develop"
+  elif git show-ref --verify --quiet refs/heads/master || git show-ref --verify --quiet refs/remotes/origin/master; then
+    base="master"
+  fi
+
+  # Active worktree branches should never be deleted
+  local active_branches
+  active_branches=$(git worktree list 2>/dev/null | awk '{print $3}' | tr -d '[]')
+
+  local merged_branches=()
+  while IFS= read -r b; do
+    local b_clean="$(echo "$b" | sed 's/^[ *+]*//')"
+    [[ -z "$b_clean" ]] && continue
+    # Protect main, master, develop, qa, stage, staging
+    [[ "$b_clean" =~ ^(main|master|develop|qa|stage|staging|HEAD)$ ]] && continue
+    # Protect branches checked out in any active worktree
+    if echo "$active_branches" | grep -qx "$b_clean"; then
+      continue
+    fi
+    merged_branches+=("$b_clean")
+  done < <(git branch --merged "$base" 2>/dev/null)
+
+  if [ "${#merged_branches[@]}" -eq 0 ]; then
+    printf "\033[32m✔ No merged local branches to clean (compared to %s).\033[0m\n" "$base"
+    return 0
+  fi
+
+  printf "\n\033[1;33mFound %d local branch(es) merged into %s:\033[0m\n" "${#merged_branches[@]}" "$base"
+  local b
+  for b in "${merged_branches[@]}"; do
+    printf "  • %s\n" "$b"
+  done
+
+  printf "\nDelete these merged branches? [Y/n]: "
+  local confirm
+  read -r confirm
+  case "$confirm" in
+    [nN]|[nN][oO])
+      printf "Aborted. No branches deleted.\n"
+      return 0
+      ;;
+    *)
+      local count=0
+      for b in "${merged_branches[@]}"; do
+        if git branch -d "$b" 2>/dev/null; then
+          printf "  \033[32m✔\033[0m Deleted %s\n" "$b"
+          ((count++))
+        else
+          printf "  \033[31m✖\033[0m Could not delete %s\n" "$b"
+        fi
+      done
+      printf "\033[32m✔ Cleaned %d merged branch(es)!\033[0m\n" "$count"
+      ;;
+  esac
+}
+
 # Tab completion for wt: list active worktree names
 _wt() {
   local -a wts
@@ -486,3 +778,19 @@ _gwtnew() {
   _describe 'remote branch' branches
 }
 (( $+functions[compdef] )) && compdef _gwtnew gwtnew
+
+# Tab completion for gwtdel: list disposable worktrees
+_gwtdel() {
+  local -a wts
+  local active_wt="$(git rev-parse --show-toplevel 2>/dev/null)"
+  while IFS= read -r line; do
+    local p="$(echo "$line" | awk '{print $1}')"
+    local b="$(basename "$p")"
+    local br="$(echo "$line" | awk '{print $3}' | tr -d '[]')"
+    [[ "$b" == ".bare" || "$b" == ".git" || "$p" == "$active_wt" ]] && continue
+    [[ "$br" =~ ^(main|master|develop|qa|stage|staging)$ ]] && continue
+    wts+=("$b")
+  done < <(git worktree list 2>/dev/null)
+  _describe 'worktree to delete' wts
+}
+(( $+functions[compdef] )) && compdef _gwtdel gwtdel

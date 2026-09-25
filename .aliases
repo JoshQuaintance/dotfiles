@@ -58,6 +58,7 @@ alias npmi-clean="rm -rf node_modules package-lock.json && npm install"
 alias sz="source ~/.zshrc && echo '✔ ~/.zshrc sourced!'"
 alias src="source ~/.zshrc && echo '✔ ~/.zshrc sourced!'"
 alias reload="exec zsh -l"
+alias alert="notify"
 alias myip="curl -s https://icanhazip.com"
 alias localip="ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print \$1}'"
 
@@ -132,18 +133,17 @@ alias grss="git restore --staged"
 
 # Branch Maintenance
 alias gprune="git fetch --prune"
-alias gbclean="git branch --merged | grep -Ev '(\*|master|main|develop|staging)' | xargs -r git branch -d 2>/dev/null || git branch --merged | grep -Ev '(\*|master|main|develop|staging)' | xargs git branch -d"
 
 # Git Worktrees
 alias gwt="git worktree"
 alias gwtl="git worktree list"
+alias gwtstatus="gwts"
 alias gwta="git worktree add"
 alias gwtb="git worktree add -b"
 alias gwtr="git worktree remove"
-alias gwtrm="git worktree remove"
+alias gwtrm="gwtdel"
 alias gwtp="git worktree prune"
 alias gwtc="gwtclean"
 alias gwtprune="gwtclean"
 alias gwtn="gwtnew"
-alias gwtnew="gwtnew"
 
