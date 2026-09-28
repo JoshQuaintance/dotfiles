@@ -123,6 +123,57 @@ gl() {
   esac
 }
 
+# Interactive Git Checkout / Branch Switcher (gco)
+# When run with arguments: passes directly to git checkout "$@"
+# When run without arguments: opens interactive branch switcher with vim motions & log preview
+gco() {
+  if [ $# -gt 0 ] || [ ! -t 1 ] || ! command -v fzf &>/dev/null; then
+    git checkout "$@"
+    return $?
+  fi
+
+  if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+    git checkout
+    return $?
+  fi
+
+  local current_branch
+  current_branch="$(git branch --show-current 2>/dev/null)"
+
+  local branches=()
+  while IFS= read -r b; do
+    local b_clean="$(echo "$b" | sed 's/^[ *+]*//')"
+    [[ -z "$b_clean" || "$b_clean" == "$current_branch" || "$b_clean" == "HEAD"* ]] && continue
+    branches+=("$b_clean")
+  done < <(git branch --format='%(refname:short)' 2>/dev/null)
+
+  if [ "${#branches[@]}" -eq 0 ]; then
+    printf "\033[33mNo other local branches found to switch to.\033[0m\n"
+    return 0
+  fi
+
+  local target
+  target=$(printf "%s\n" "${branches[@]}" | fzf \
+    --height=~45% \
+    --layout=reverse \
+    --border=rounded \
+    --disabled \
+    --pointer="❯ " \
+    --prompt="🌿 Checkout Branch > " \
+    --header="  j/k: navigate │ /: search │ enter: checkout │ q: quit" \
+    --color="header:italic:dim,prompt:bold:cyan,pointer:bold:cyan" \
+    --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept" \
+    --bind="/:enable-search+unbind(j,k,q,g,G)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: checkout)+rebind(esc)" \
+    --bind="esc:disable-search+clear-query+rebind(j,k,q,g,G)+change-prompt(🌿 Checkout Branch > )+change-header(  j/k: navigate │ /: search │ enter: checkout │ q: quit)+unbind(esc)" \
+    --bind="start:unbind(esc)" \
+    --preview='git log -n 10 --oneline --color=always {} 2>/dev/null' \
+    --preview-window='right:55%:wrap')
+
+  if [ -n "$target" ]; then
+    git checkout "$target"
+  fi
+}
+
 # Git Worktree Interactive Switcher (wt)
 # Dynamically queries git worktrees in the current repo and provides an interactive fzf selector
 wt() {
@@ -258,9 +309,15 @@ gwtnew() {
       --height=~45% \
       --layout=reverse \
       --border=rounded \
+      --disabled \
+      --pointer="❯ " \
       --prompt="🌱 New Worktree from Branch > " \
-      --header="Enter: create worktree • Esc: cancel" \
+      --header="  j/k: navigate │ /: search │ enter: create worktree │ q: quit" \
       --color="header:italic:dim,prompt:bold:green,pointer:bold:green" \
+      --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept" \
+      --bind="/:enable-search+unbind(j,k,q,g,G)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: create)+rebind(esc)" \
+      --bind="esc:disable-search+clear-query+rebind(j,k,q,g,G)+change-prompt(🌱 New Worktree from Branch > )+change-header(  j/k: navigate │ /: search │ enter: create worktree │ q: quit)+unbind(esc)" \
+      --bind="start:unbind(esc)" \
       --preview='git log -n 10 --oneline --color=always "origin/{}" 2>/dev/null' \
       --preview-window='right:55%:wrap')
 
@@ -658,7 +715,55 @@ gwtclean() {
   # If force mode, select all candidates automatically
   if [ "$force" = true ]; then
     selected_candidates=("${candidates[@]}")
+  elif command -v fzf &>/dev/null && [ -t 1 ]; then
+    local fzf_input=""
+    local item
+    for item in "${candidates[@]}"; do
+      local wt_path="${item%%|*}"
+      local wt_branch="${item##*|}"
+      local dirty_tag=""
+      if [ -n "$(git -C "$wt_path" status --porcelain 2>/dev/null)" ]; then
+        dirty_tag=" *dirty*"
+      fi
+      fzf_input+="${wt_path}\t[${wt_branch}]${dirty_tag}\n"
+    done
+
+    local fzf_output
+    fzf_output=$(printf "%b" "$fzf_input" | fzf \
+      --multi \
+      --height=~45% \
+      --layout=reverse \
+      --border=rounded \
+      --disabled \
+      --pointer="❯ " \
+      --marker="✔ " \
+      --prompt="🗑 Select Worktrees to Prune > " \
+      --header="  j/k: navigate │ space/tab: toggle │ a: toggle all │ /: search │ enter: confirm │ q: abort" \
+      --color="header:italic:dim,prompt:bold:red,pointer:bold:red,marker:bold:green" \
+      --bind="j:down,k:up,g:first,G:last,space:toggle+down,tab:toggle+down,btab:toggle+up,a:toggle-all,q:abort,ctrl-c:abort,enter:accept" \
+      --bind="/:enable-search+unbind(j,k,q,g,G,space,a)+change-prompt(🔍 Search > )+change-header(  type to filter │ tab: toggle │ esc: normal mode │ enter: confirm)+rebind(esc)" \
+      --bind="esc:disable-search+clear-query+rebind(j,k,q,g,G,space,a)+change-prompt(🗑 Select Worktrees to Prune > )+change-header(  j/k: navigate │ space/tab: toggle │ a: toggle all │ /: search │ enter: confirm │ q: abort)+unbind(esc)" \
+      --bind="start:unbind(esc)" \
+      --preview='git -C {1} status -sb 2>/dev/null; echo ""; git -C {1} log -n 5 --oneline --color=always 2>/dev/null' \
+      --preview-window='right:55%:wrap')
+
+    if [ -z "$fzf_output" ]; then
+      printf "No worktrees selected. Aborted.\n"
+      return 0
+    fi
+
+    while IFS= read -r sel_line || [ -n "$sel_line" ]; do
+      local sel_path
+      sel_path=$(echo "$sel_line" | awk -F'\t' '{print $1}')
+      for item in "${candidates[@]}"; do
+        if [ "${item%%|*}" = "$sel_path" ]; then
+          selected_candidates+=("$item")
+          break
+        fi
+      done
+    done <<< "$fzf_output"
   elif [ "$count" -eq 1 ]; then
+    # Fallback for single candidate without fzf/TTY
     local item="${candidates[1]}"
     local wt_path="${item%%|*}"
     local wt_branch="${item##*|}"
@@ -675,50 +780,8 @@ gwtclean() {
         ;;
     esac
   else
-    # Multiple candidates: Interactive Multi-Select
-    if command -v fzf &>/dev/null && [ -t 1 ]; then
-      local fzf_input=""
-      local item
-      for item in "${candidates[@]}"; do
-        local wt_path="${item%%|*}"
-        local wt_branch="${item##*|}"
-        local dirty_tag=""
-        if [ -n "$(git -C "$wt_path" status --porcelain 2>/dev/null)" ]; then
-          dirty_tag=" *dirty*"
-        fi
-        fzf_input+="${wt_path}\t[${wt_branch}]${dirty_tag}\n"
-      done
-
-      local fzf_output
-      fzf_output=$(printf "%b" "$fzf_input" | fzf \
-        --multi \
-        --height=~45% \
-        --layout=reverse \
-        --border=rounded \
-        --prompt="🗑 Select Worktrees to Prune > " \
-        --header="Tab: toggle selection • Alt-A: select all • Enter: confirm • Esc: cancel" \
-        --color="header:italic:dim,prompt:bold:red,pointer:bold:green,marker:bold:green" \
-        --preview='git -C {1} status -sb 2>/dev/null' \
-        --preview-window='right:55%:wrap')
-
-      if [ -z "$fzf_output" ]; then
-        printf "No worktrees selected. Aborted.\n"
-        return 0
-      fi
-
-      while IFS= read -r sel_line || [ -n "$sel_line" ]; do
-        local sel_path
-        sel_path=$(echo "$sel_line" | awk -F'\t' '{print $1}')
-        for item in "${candidates[@]}"; do
-          if [ "${item%%|*}" = "$sel_path" ]; then
-            selected_candidates+=("$item")
-            break
-          fi
-        done
-      done <<< "$fzf_output"
-    else
-      # Fallback text multi-select menu
-      printf "\n\033[1;33mFound %d worktrees whose remote tracking branches are gone:\033[0m\n" "$count"
+    # Fallback text multi-select menu without fzf/TTY
+    printf "\n\033[1;33mFound %d worktrees whose remote tracking branches are gone:\033[0m\n" "$count"
       local idx=1
       for item in "${candidates[@]}"; do
         local wt_path="${item%%|*}"
@@ -751,7 +814,6 @@ gwtclean() {
         done
       fi
     fi
-  fi
 
   local num_selected="${#selected_candidates[@]}"
   if [ "$num_selected" -eq 0 ]; then
@@ -856,33 +918,66 @@ gbclean() {
     return 0
   fi
 
-  printf "\n\033[1;33mFound %d local branch(es) merged into %s:\033[0m\n" "${#merged_branches[@]}" "$base"
-  local b
-  for b in "${merged_branches[@]}"; do
-    printf "  • %s\n" "$b"
-  done
+  local selected_branches=()
+  if command -v fzf &>/dev/null && [ -t 1 ]; then
+    local fzf_output
+    fzf_output=$(printf "%s\n" "${merged_branches[@]}" | fzf \
+      --multi \
+      --height=~45% \
+      --layout=reverse \
+      --border=rounded \
+      --disabled \
+      --pointer="❯ " \
+      --marker="✔ " \
+      --prompt="🗑 Select Merged Branches to Delete > " \
+      --header="  j/k: navigate │ space/tab: toggle │ a: toggle all │ /: search │ enter: delete │ q: abort" \
+      --color="header:italic:dim,prompt:bold:red,pointer:bold:red,marker:bold:green" \
+      --bind="j:down,k:up,g:first,G:last,space:toggle+down,tab:toggle+down,btab:toggle+up,a:toggle-all,q:abort,ctrl-c:abort,enter:accept" \
+      --bind="/:enable-search+unbind(j,k,q,g,G,space,a)+change-prompt(🔍 Search > )+change-header(  type to filter │ tab: toggle │ esc: normal mode │ enter: delete)+rebind(esc)" \
+      --bind="esc:disable-search+clear-query+rebind(j,k,q,g,G,space,a)+change-prompt(🗑 Select Merged Branches to Delete > )+change-header(  j/k: navigate │ space/tab: toggle │ a: toggle all │ /: search │ enter: delete │ q: abort)+unbind(esc)" \
+      --bind="start:unbind(esc)" \
+      --preview='git log -n 10 --oneline --color=always {} 2>/dev/null' \
+      --preview-window='right:55%:wrap')
 
-  printf "\nDelete these merged branches? [Y/n]: "
-  local confirm
-  read -r confirm
-  case "$confirm" in
-    [nN]|[nN][oO])
-      printf "Aborted. No branches deleted.\n"
+    if [ -z "$fzf_output" ]; then
+      printf "No branches selected. Aborted.\n"
       return 0
-      ;;
-    *)
-      local count=0
-      for b in "${merged_branches[@]}"; do
-        if git branch -d "$b" 2>/dev/null; then
-          printf "  \033[32m✔\033[0m Deleted %s\n" "$b"
-          ((count++))
-        else
-          printf "  \033[31m✖\033[0m Could not delete %s\n" "$b"
-        fi
-      done
-      printf "\033[32m✔ Cleaned %d merged branch(es)!\033[0m\n" "$count"
-      ;;
-  esac
+    fi
+
+    while IFS= read -r b || [ -n "$b" ]; do
+      selected_branches+=("$b")
+    done <<< "$fzf_output"
+  else
+    printf "\n\033[1;33mFound %d local branch(es) merged into %s:\033[0m\n" "${#merged_branches[@]}" "$base"
+    local b
+    for b in "${merged_branches[@]}"; do
+      printf "  • %s\n" "$b"
+    done
+
+    printf "\nDelete these merged branches? [Y/n]: "
+    local confirm
+    read -r confirm
+    case "$confirm" in
+      [nN]|[nN][oO])
+        printf "Aborted. No branches deleted.\n"
+        return 0
+        ;;
+      *)
+        selected_branches=("${merged_branches[@]}")
+        ;;
+    esac
+  fi
+
+  local count=0
+  for b in "${selected_branches[@]}"; do
+    if git branch -d "$b" 2>/dev/null; then
+      printf "  \033[32m✔\033[0m Deleted %s\n" "$b"
+      ((count++))
+    else
+      printf "  \033[31m✖\033[0m Could not delete %s\n" "$b"
+    fi
+  done
+  printf "\033[32m✔ Cleaned %d merged branch(es)!\033[0m\n" "$count"
 }
 
 # Tab completion for wt: list active worktree names

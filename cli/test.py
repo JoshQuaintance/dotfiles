@@ -248,7 +248,7 @@ def test_shell_runtime(report: TestReport, dotfiles: Path):
 
     # Custom functions check
     func_check_code = """
-for fn in take up groot gmain conf clone port wt gwtnew gwts gwtdel gwtclean gbclean y copy paste scratch extract npmr bunr pnpmr fa toggle-autols notify gl; do
+for fn in take up groot gmain conf clone port wt gwtnew gwts gwtdel gwtclean gbclean y copy paste scratch extract npmr bunr pnpmr fa toggle-autols notify gl gco; do
     if ! (( $+functions[$fn] )); then
         echo "Missing function: $fn"
     fi
@@ -257,7 +257,7 @@ done
     code, out, err = run_cmd(["zsh", "-i", "-c", func_check_code], timeout=5)
     missing_funcs = [line.strip() for line in out.splitlines() if line.startswith("Missing function:")]
     if not missing_funcs:
-        report.ok("Custom shell functions", "All 25 functions registered in zsh")
+        report.ok("Custom shell functions", "All 26 functions registered in zsh")
     else:
         report.fail("Custom shell functions", missing_funcs[0])
 

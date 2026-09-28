@@ -19,7 +19,7 @@ fa() {
 
   _gen_list() {
     # 1. Custom dotfiles functions
-    for fn in take up groot gmain conf clone port gsearch wt gwtnew gwts gwtdel gwtclean gbclean y copy paste scratch extract npmr bunr pnpmr toggle-autols fa notify; do
+    for fn in take up groot gmain conf clone port gsearch wt gwtnew gwts gwtdel gwtclean gbclean y copy paste scratch extract npmr bunr pnpmr toggle-autols fa notify gl gco; do
       if (( $+functions[$fn] )); then
         printf "function\t%-18s\t(shell function)\n" "$fn"
       fi
@@ -50,18 +50,38 @@ fa() {
       _gen_list
     fi
   elif command -v fzf &>/dev/null; then
-    # Interactive FZF browser: searches ONLY command name (--nth=2) by default
+    local fzf_mode_flags=()
+    if [ -z "$query" ]; then
+      fzf_mode_flags=(
+        "--disabled"
+        "--bind=j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept"
+        "--bind=/:enable-search+unbind(j,k,q,g,G)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: paste)+rebind(esc)"
+        "--bind=esc:disable-search+clear-query+rebind(j,k,q,g,G)+change-prompt(⚡ Aliases & Functions > )+change-header(  j/k: navigate │ /: search │ enter: paste │ q: quit)+unbind(esc)"
+        "--bind=start:unbind(esc)"
+        "--header=  j/k: navigate │ /: search │ enter: paste │ q: quit"
+        "--prompt=⚡ Aliases & Functions > "
+      )
+    else
+      fzf_mode_flags=(
+        "--query=$query"
+        "--header=  enter: paste │ esc: quit"
+        "--prompt=🔍 Search Aliases & Functions > "
+      )
+    fi
+
     local selected
     selected=$(_gen_list | fzf \
       --delimiter='\t' \
       --nth=2 \
       --with-nth=1,2,3 \
-      --query="$query" \
-      --bind='ctrl-j:down,ctrl-k:up,alt-j:down,alt-k:up,ctrl-d:preview-down,ctrl-u:preview-up,shift-down:preview-down,shift-up:preview-up,ctrl-s:change-nth(2|2,3)' \
+      --height=~45% \
+      --layout=reverse \
+      --border=rounded \
+      --pointer="❯ " \
+      --color="header:italic:dim,prompt:bold:magenta,pointer:bold:magenta" \
+      "${fzf_mode_flags[@]}" \
       --preview='which {2} 2>/dev/null | if command -v bat &>/dev/null; then bat -l zsh --color=always --style=plain; else cat; fi' \
-      --preview-window='right:55%:wrap' \
-      --header='Ctrl-j/k to navigate • Ctrl-s toggle search target (name vs all) • Enter to paste • Esc to quit' \
-      --prompt='🔍 Search Aliases & Functions > ')
+      --preview-window='right:55%:wrap')
 
     if [ -n "$selected" ]; then
       local cmd

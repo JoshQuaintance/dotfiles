@@ -93,7 +93,7 @@ alias gb="git branch"
 alias gba="git branch -a"
 alias gbd="git branch -d"
 alias gbD="git branch -D"
-alias gco="git checkout"
+unalias gco 2>/dev/null || true
 alias gcb="git checkout -b"
 alias gsw="git switch"
 alias gswc="git switch -c"
