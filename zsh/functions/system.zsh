@@ -96,9 +96,16 @@ notify() {
   local msg="${1:-Command finished}"
   local title="${2:-Terminal}"
 
+  # Terminal emulator desktop notification (Ghostty, WezTerm, Kitty, iTerm2 via OSC 777 & OSC 9)
+  if [ -t 1 ]; then
+    printf '\e]777;notify;%s;%s\e\\' "$title" "$msg" 2>/dev/null
+    printf '\e]9;%s\a' "$msg" 2>/dev/null
+  fi
+
   # 1. macOS: Native Notification Center banner + subtle glass chime
   if [[ "$OSTYPE" == darwin* ]] || [ "$(uname -s 2>/dev/null)" = "Darwin" ]; then
-    osascript -e "display notification \"$msg\" with title \"$title\"" 2>/dev/null
+    osascript -e "display notification \"$msg\" with title \"$title\" sound name \"Glass\"" 2>/dev/null || \
+      osascript -e "display notification \"$msg\" with title \"$title\"" 2>/dev/null
     if [ -f "/System/Library/Sounds/Glass.aiff" ]; then
       afplay "/System/Library/Sounds/Glass.aiff" &>/dev/null &!
     fi
