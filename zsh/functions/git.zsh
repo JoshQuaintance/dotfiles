@@ -53,8 +53,9 @@ gl() {
     --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
     --bind="start:unbind(esc)" \
     --bind="j:down,k:up,q:abort,g:first,G:last" \
-    --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,/)+change-prompt(🔍 Search > )+rebind(esc)" \
-    --bind="esc:disable-search+rebind(j,k,q,g,G,/)+change-prompt(📜 Git Graph > )+unbind(esc)" \
+    --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: diff)+rebind(esc)" \
+    --bind="i:enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: diff)+rebind(esc)" \
+    --bind="esc:disable-search+rebind(j,k,q,g,G,i,/)+change-prompt(📜 Git Graph > )+change-header(j/k: move • /: search • Enter: diff • Ctrl-V: nvim diffview • Ctrl-Y: copy hash • q: quit)+unbind(esc)" \
     --bind="ctrl-/:toggle-preview,ctrl-d:preview-page-down,ctrl-u:preview-page-up" \
     --preview="$preview_cmd" \
     --preview-window="right:60%:wrap" \
@@ -163,8 +164,9 @@ gco() {
     --header="  j/k: navigate │ /: search │ enter: checkout │ q: quit" \
     --color="header:italic:dim,prompt:bold:cyan,pointer:bold:cyan" \
     --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept" \
-    --bind="/:enable-search+unbind(j,k,q,g,G)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: checkout)+rebind(esc)" \
-    --bind="esc:disable-search+clear-query+rebind(j,k,q,g,G)+change-prompt(🌿 Checkout Branch > )+change-header(  j/k: navigate │ /: search │ enter: checkout │ q: quit)+unbind(esc)" \
+    --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: checkout)+rebind(esc)" \
+    --bind="i:enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: checkout)+rebind(esc)" \
+    --bind="esc:disable-search+rebind(j,k,q,g,G,i,/)+change-prompt(🌿 Checkout Branch > )+change-header(  j/k: navigate │ /: search │ enter: checkout │ q: quit)+unbind(esc)" \
     --bind="start:unbind(esc)" \
     --preview='git log -n 10 --oneline --color=always {} 2>/dev/null' \
     --preview-window='right:55%:wrap')
@@ -208,8 +210,10 @@ wt() {
       fzf_mode_flags=(
         "--disabled"
         "--bind=j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept"
-        "--bind=/:enable-search+unbind(j,k,q,g,G)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: cd)"
-        "--bind=esc:disable-search+clear-query+rebind(j,k,q,g,G)+change-prompt(🌿 Worktree > )+change-header(  j/k: navigate │ /: search │ enter: cd │ q: quit)"
+        "--bind=/:clear-query+enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: cd)+rebind(esc)"
+        "--bind=i:enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: cd)+rebind(esc)"
+        "--bind=esc:disable-search+rebind(j,k,q,g,G,i,/)+change-prompt(🌿 Worktree > )+change-header(  j/k: navigate │ /: search │ enter: cd │ q: quit)+unbind(esc)"
+        "--bind=start:unbind(esc)"
       )
     else
       fzf_mode_flags=("--query=$query")
@@ -305,23 +309,35 @@ gwtnew() {
       return 0
     fi
 
-    target_input=$(printf "%s\n" "${remote_branches[@]}" | fzf \
+    local fzf_raw
+    fzf_raw=$(printf "%s\n" "${remote_branches[@]}" | fzf \
+      --print-query \
       --height=~45% \
       --layout=reverse \
       --border=rounded \
       --disabled \
       --pointer="❯ " \
       --prompt="🌱 New Worktree from Branch > " \
-      --header="  j/k: navigate │ /: search │ enter: create worktree │ q: quit" \
+      --header="  j/k: navigate │ /: search / type new branch │ enter: select or create │ q: quit" \
       --color="header:italic:dim,prompt:bold:green,pointer:bold:green" \
       --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept" \
-      --bind="/:enable-search+unbind(j,k,q,g,G)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: create)+rebind(esc)" \
-      --bind="esc:disable-search+clear-query+rebind(j,k,q,g,G)+change-prompt(🌱 New Worktree from Branch > )+change-header(  j/k: navigate │ /: search │ enter: create worktree │ q: quit)+unbind(esc)" \
+      --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search / New Branch > )+change-header(  type branch name │ esc: normal mode │ enter: select or create)+rebind(esc)" \
+      --bind="i:enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search / New Branch > )+change-header(  type branch name │ esc: normal mode │ enter: select or create)+rebind(esc)" \
+      --bind="esc:disable-search+rebind(j,k,q,g,G,i,/)+change-prompt(🌱 New Worktree from Branch > )+change-header(  j/k: navigate │ /: search / type new branch │ enter: select or create │ q: quit)+unbind(esc)" \
       --bind="start:unbind(esc)" \
       --preview='git log -n 10 --oneline --color=always "origin/{}" 2>/dev/null' \
       --preview-window='right:55%:wrap')
 
-    if [ -z "$target_input" ]; then
+    local query_line selected_line
+    query_line=$(echo "$fzf_raw" | sed -n '1p')
+    selected_line=$(echo "$fzf_raw" | sed -n '2p')
+
+    # If an existing branch was selected from the list, use it; otherwise use the typed new branch name
+    if [ -n "$selected_line" ]; then
+      target_input="$selected_line"
+    elif [ -n "$query_line" ]; then
+      target_input="$query_line"
+    else
       return 0
     fi
   fi
@@ -559,8 +575,10 @@ gwtdel() {
       --header="  j/k: navigate │ /: search │ enter: select to delete │ q: quit" \
       --color="header:italic:dim,prompt:bold:red,pointer:bold:red" \
       --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept" \
-      --bind="/:enable-search+unbind(j,k,q,g,G)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: select)" \
-      --bind="esc:disable-search+clear-query+rebind(j,k,q,g,G)+change-prompt(🗑 Delete Worktree > )+change-header(  j/k: navigate │ /: search │ enter: select to delete │ q: quit)" \
+      --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: select)+rebind(esc)" \
+      --bind="i:enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: select)+rebind(esc)" \
+      --bind="esc:disable-search+rebind(j,k,q,g,G,i,/)+change-prompt(🗑 Delete Worktree > )+change-header(  j/k: navigate │ /: search │ enter: select to delete │ q: quit)+unbind(esc)" \
+      --bind="start:unbind(esc)" \
       --preview='git -C {3} status -sb 2>/dev/null' \
       --preview-window='right:55%:wrap')
 
@@ -741,8 +759,9 @@ gwtclean() {
       --header="  j/k: navigate │ space/tab: toggle │ a: toggle all │ /: search │ enter: confirm │ q: abort" \
       --color="header:italic:dim,prompt:bold:red,pointer:bold:red,marker:bold:green" \
       --bind="j:down,k:up,g:first,G:last,space:toggle+down,tab:toggle+down,btab:toggle+up,a:toggle-all,q:abort,ctrl-c:abort,enter:accept" \
-      --bind="/:enable-search+unbind(j,k,q,g,G,space,a)+change-prompt(🔍 Search > )+change-header(  type to filter │ tab: toggle │ esc: normal mode │ enter: confirm)+rebind(esc)" \
-      --bind="esc:disable-search+clear-query+rebind(j,k,q,g,G,space,a)+change-prompt(🗑 Select Worktrees to Prune > )+change-header(  j/k: navigate │ space/tab: toggle │ a: toggle all │ /: search │ enter: confirm │ q: abort)+unbind(esc)" \
+      --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,space,a,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ tab: toggle │ esc: normal mode │ enter: confirm)+rebind(esc)" \
+      --bind="i:enable-search+unbind(j,k,q,g,G,space,a,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ tab: toggle │ esc: normal mode │ enter: confirm)+rebind(esc)" \
+      --bind="esc:disable-search+rebind(j,k,q,g,G,space,a,i,/)+change-prompt(🗑 Select Worktrees to Prune > )+change-header(  j/k: navigate │ space/tab: toggle │ a: toggle all │ /: search │ enter: confirm │ q: abort)+unbind(esc)" \
       --bind="start:unbind(esc)" \
       --preview='git -C {1} status -sb 2>/dev/null; echo ""; git -C {1} log -n 5 --oneline --color=always 2>/dev/null' \
       --preview-window='right:55%:wrap')
@@ -933,8 +952,9 @@ gbclean() {
       --header="  j/k: navigate │ space/tab: toggle │ a: toggle all │ /: search │ enter: delete │ q: abort" \
       --color="header:italic:dim,prompt:bold:red,pointer:bold:red,marker:bold:green" \
       --bind="j:down,k:up,g:first,G:last,space:toggle+down,tab:toggle+down,btab:toggle+up,a:toggle-all,q:abort,ctrl-c:abort,enter:accept" \
-      --bind="/:enable-search+unbind(j,k,q,g,G,space,a)+change-prompt(🔍 Search > )+change-header(  type to filter │ tab: toggle │ esc: normal mode │ enter: delete)+rebind(esc)" \
-      --bind="esc:disable-search+clear-query+rebind(j,k,q,g,G,space,a)+change-prompt(🗑 Select Merged Branches to Delete > )+change-header(  j/k: navigate │ space/tab: toggle │ a: toggle all │ /: search │ enter: delete │ q: abort)+unbind(esc)" \
+      --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,space,a,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ tab: toggle │ esc: normal mode │ enter: delete)+rebind(esc)" \
+      --bind="i:enable-search+unbind(j,k,q,g,G,space,a,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ tab: toggle │ esc: normal mode │ enter: delete)+rebind(esc)" \
+      --bind="esc:disable-search+rebind(j,k,q,g,G,space,a,i,/)+change-prompt(🗑 Select Merged Branches to Delete > )+change-header(  j/k: navigate │ space/tab: toggle │ a: toggle all │ /: search │ enter: delete │ q: abort)+unbind(esc)" \
       --bind="start:unbind(esc)" \
       --preview='git log -n 10 --oneline --color=always {} 2>/dev/null' \
       --preview-window='right:55%:wrap')
@@ -1001,7 +1021,7 @@ _gwtnew() {
   done < <(git branch -r 2>/dev/null | sed 's/^[ *]*//')
   _describe 'remote branch' branches
 }
-(( $+functions[compdef] )) && compdef _gwtnew gwtnew
+(( $+functions[compdef] )) && compdef _gwtnew gwtnew gwtn
 
 # Tab completion for gwtdel: list disposable worktrees
 _gwtdel() {

@@ -28,8 +28,10 @@ scratch() {
         --header="  j/k: navigate │ /: search │ enter: open │ q: quit" \
         --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
         --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept" \
-        --bind="/:enable-search+unbind(j,k,q,g,G)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: open)" \
-        --bind="esc:disable-search+clear-query+rebind(j,k,q,g,G)+change-prompt(📝 Scratchpad > )+change-header(  j/k: navigate │ /: search │ enter: open │ q: quit)" \
+        --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: open)+rebind(esc)" \
+        --bind="i:enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: open)+rebind(esc)" \
+        --bind="esc:disable-search+rebind(j,k,q,g,G,i,/)+change-prompt(📝 Scratchpad > )+change-header(  j/k: navigate │ /: search │ enter: open │ q: quit)+unbind(esc)" \
+        --bind="start:unbind(esc)" \
         --preview="if command -v bat &>/dev/null; then bat --style=plain --color=always '$scratch_dir/{}'; else cat '$scratch_dir/{}'; fi" \
         --preview-window='right:60%:wrap')
 

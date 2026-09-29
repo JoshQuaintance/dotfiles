@@ -98,8 +98,10 @@ conf() {
           fzf_mode_flags=(
             "--disabled"
             "--bind=j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept"
-            "--bind=/:enable-search+unbind(j,k,q,g,G)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: open)"
-            "--bind=esc:disable-search+clear-query+rebind(j,k,q,g,G)+change-prompt(⚙  Edit Config > )+change-header(  j/k: navigate │ /: search │ enter: open │ q: quit)"
+            "--bind=/:clear-query+enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: open)+rebind(esc)"
+            "--bind=i:enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: open)+rebind(esc)"
+            "--bind=esc:disable-search+rebind(j,k,q,g,G,i,/)+change-prompt(⚙  Edit Config > )+change-header(  j/k: navigate │ /: search │ enter: open │ q: quit)+unbind(esc)"
+            "--bind=start:unbind(esc)"
           )
         else
           fzf_mode_flags=("--query=$query")

@@ -92,8 +92,10 @@ _pkg_script_select() {
     --header="  j/k: navigate │ /: search │ enter: run │ q: quit" \
     --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
     --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,ctrl-j:down,ctrl-k:up,ctrl-n:down,ctrl-p:up,down:down,up:up,enter:accept" \
-    --bind="/:enable-search+unbind(j,k,q,g,G)+change-prompt(🔍 filter > )+change-header(  type to filter │ esc: normal mode │ enter: run)" \
-    --bind="esc:disable-search+clear-query+rebind(j,k,q,g,G)+change-prompt(⚡ $runner run > )+change-header(  j/k: navigate │ /: search │ enter: run │ q: quit)")
+    --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 filter > )+change-header(  type to filter │ esc: normal mode │ enter: run)+rebind(esc)" \
+    --bind="i:enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 filter > )+change-header(  type to filter │ esc: normal mode │ enter: run)+rebind(esc)" \
+    --bind="esc:disable-search+rebind(j,k,q,g,G,i,/)+change-prompt(⚡ $runner run > )+change-header(  j/k: navigate │ /: search │ enter: run │ q: quit)+unbind(esc)" \
+    --bind="start:unbind(esc)")
 
   local selected
   selected=$(echo "$selection" | awk -F'\t' '{print $2}')

@@ -55,8 +55,9 @@ fa() {
       fzf_mode_flags=(
         "--disabled"
         "--bind=j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept"
-        "--bind=/:enable-search+unbind(j,k,q,g,G)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: paste)+rebind(esc)"
-        "--bind=esc:disable-search+clear-query+rebind(j,k,q,g,G)+change-prompt(⚡ Aliases & Functions > )+change-header(  j/k: navigate │ /: search │ enter: paste │ q: quit)+unbind(esc)"
+        "--bind=/:clear-query+enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: paste)+rebind(esc)"
+        "--bind=i:enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: paste)+rebind(esc)"
+        "--bind=esc:disable-search+rebind(j,k,q,g,G,i,/)+change-prompt(⚡ Aliases & Functions > )+change-header(  j/k: navigate │ /: search │ enter: paste │ q: quit)+unbind(esc)"
         "--bind=start:unbind(esc)"
         "--header=  j/k: navigate │ /: search │ enter: paste │ q: quit"
         "--prompt=⚡ Aliases & Functions > "
