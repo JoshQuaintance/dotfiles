@@ -203,7 +203,7 @@ if [[ "$CHOICE" == "2" || "$CHOICE" == "--server" || "$CHOICE" == "--minimal" ]]
 
     git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
     cd "$DOTFILES_DIR"
-    git sparse-checkout set nvim bin install starship
+    git sparse-checkout set config/nvim config/spaceship config/starship config/bat config/eza config/mise config/git zsh bin cli install
     source "$DOTFILES_DIR/install/common.sh"
 
     "$DOTFILES_DIR/install/install-cli.sh"

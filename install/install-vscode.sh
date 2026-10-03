@@ -55,30 +55,30 @@ fi
 mkdir -p "$VSCODE_USER_DIR"
 
 # 3. Backup & Symlink settings.json
-if [ -f "$DOTFILES_DIR/vscode/settings.json" ]; then
+if [ -f "$DOTFILES_DIR/config/vscode/settings.json" ]; then
     if [ -f "$VSCODE_USER_DIR/settings.json" ] && [ ! -L "$VSCODE_USER_DIR/settings.json" ]; then
         log "Backing up existing VSCode settings.json to settings.json.bak..."
         cp "$VSCODE_USER_DIR/settings.json" "$VSCODE_USER_DIR/settings.json.bak"
     fi
-    ln -sfn "$DOTFILES_DIR/vscode/settings.json" "$VSCODE_USER_DIR/settings.json"
+    ln -sfn "$DOTFILES_DIR/config/vscode/settings.json" "$VSCODE_USER_DIR/settings.json"
     success "Linked VSCode settings.json"
 fi
 
 # 4. Backup & Symlink keybindings.json
-if [ -f "$DOTFILES_DIR/vscode/keybindings.json" ]; then
+if [ -f "$DOTFILES_DIR/config/vscode/keybindings.json" ]; then
     if [ -f "$VSCODE_USER_DIR/keybindings.json" ] && [ ! -L "$VSCODE_USER_DIR/keybindings.json" ]; then
         cp "$VSCODE_USER_DIR/keybindings.json" "$VSCODE_USER_DIR/keybindings.json.bak"
     fi
-    ln -sfn "$DOTFILES_DIR/vscode/keybindings.json" "$VSCODE_USER_DIR/keybindings.json"
+    ln -sfn "$DOTFILES_DIR/config/vscode/keybindings.json" "$VSCODE_USER_DIR/keybindings.json"
     success "Linked VSCode keybindings.json"
 fi
 
 # 5. Backup & Symlink snippets directory
-if [ -d "$DOTFILES_DIR/vscode/snippets" ]; then
+if [ -d "$DOTFILES_DIR/config/vscode/snippets" ]; then
     if [ -d "$VSCODE_USER_DIR/snippets" ] && [ ! -L "$VSCODE_USER_DIR/snippets" ]; then
         cp -r "$VSCODE_USER_DIR/snippets" "$VSCODE_USER_DIR/snippets.bak"
     fi
-    ln -sfn "$DOTFILES_DIR/vscode/snippets" "$VSCODE_USER_DIR/snippets"
+    ln -sfn "$DOTFILES_DIR/config/vscode/snippets" "$VSCODE_USER_DIR/snippets"
     success "Linked VSCode snippets directory"
 fi
 

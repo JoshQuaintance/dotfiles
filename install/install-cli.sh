@@ -200,58 +200,63 @@ elif [ "$OS" = "Linux" ]; then
     fi
 fi
 
-# Symlink Starship prompt configuration with backup
+# Symlink Spaceship & Starship prompt configurations with backup
+mkdir -p "$HOME/.config"
+if [ -f "$DOTFILES_DIR/config/spaceship/spaceship.zsh" ]; then
+    ln -sfn "$DOTFILES_DIR/config/spaceship/spaceship.zsh" "$HOME/.config/spaceship.zsh"
+    success "Linked ~/.config/spaceship.zsh -> $DOTFILES_DIR/config/spaceship/spaceship.zsh"
+fi
+
 if is_tool_requested "starship"; then
-    mkdir -p "$HOME/.config"
-    if [ -f "$DOTFILES_DIR/starship/starship.toml" ]; then
+    if [ -f "$DOTFILES_DIR/config/starship/starship.toml" ]; then
         if [ -f "$HOME/.config/starship.toml" ] && [ ! -L "$HOME/.config/starship.toml" ]; then
             BACKUP_STARSHIP="$HOME/.config/starship.toml.bak"
             [ -e "$BACKUP_STARSHIP" ] && BACKUP_STARSHIP="$HOME/.config/starship.toml.bak.$(date +%Y%m%d%H%M%S)"
             cp "$HOME/.config/starship.toml" "$BACKUP_STARSHIP"
         fi
-        ln -sfn "$DOTFILES_DIR/starship/starship.toml" "$HOME/.config/starship.toml"
-        success "Linked ~/.config/starship.toml -> $DOTFILES_DIR/starship/starship.toml"
+        ln -sfn "$DOTFILES_DIR/config/starship/starship.toml" "$HOME/.config/starship.toml"
+        success "Linked ~/.config/starship.toml -> $DOTFILES_DIR/config/starship/starship.toml"
     fi
 fi
 
 # Symlink Ghostty configuration
-if [ -f "$DOTFILES_DIR/ghostty/config" ]; then
+if [ -f "$DOTFILES_DIR/config/ghostty/config" ]; then
     mkdir -p "$HOME/.config/ghostty"
-    ln -sfn "$DOTFILES_DIR/ghostty/config" "$HOME/.config/ghostty/config"
-    success "Linked ~/.config/ghostty/config -> $DOTFILES_DIR/ghostty/config"
+    ln -sfn "$DOTFILES_DIR/config/ghostty/config" "$HOME/.config/ghostty/config"
+    success "Linked ~/.config/ghostty/config -> $DOTFILES_DIR/config/ghostty/config"
 
     if [ "$OS" = "Darwin" ]; then
         mkdir -p "$HOME/Library/Application Support/com.mitchellh.ghostty"
-        ln -sfn "$DOTFILES_DIR/ghostty/config" "$HOME/Library/Application Support/com.mitchellh.ghostty/config"
-        ln -sfn "$DOTFILES_DIR/ghostty/config" "$HOME/Library/Application Support/com.mitchellh.ghostty/config.ghostty"
+        ln -sfn "$DOTFILES_DIR/config/ghostty/config" "$HOME/Library/Application Support/com.mitchellh.ghostty/config"
+        ln -sfn "$DOTFILES_DIR/config/ghostty/config" "$HOME/Library/Application Support/com.mitchellh.ghostty/config.ghostty"
     fi
 fi
 
 # Symlink bat configuration
-if [ -f "$DOTFILES_DIR/bat/config" ]; then
+if [ -f "$DOTFILES_DIR/config/bat/config" ]; then
     mkdir -p "$HOME/.config/bat"
-    ln -sfn "$DOTFILES_DIR/bat/config" "$HOME/.config/bat/config"
-    success "Linked ~/.config/bat/config -> $DOTFILES_DIR/bat/config"
+    ln -sfn "$DOTFILES_DIR/config/bat/config" "$HOME/.config/bat/config"
+    success "Linked ~/.config/bat/config -> $DOTFILES_DIR/config/bat/config"
 fi
 
 # Symlink eza theme configuration
-if [ -f "$DOTFILES_DIR/eza/theme.yml" ]; then
+if [ -f "$DOTFILES_DIR/config/eza/theme.yml" ]; then
     mkdir -p "$HOME/.config/eza"
-    ln -sfn "$DOTFILES_DIR/eza/theme.yml" "$HOME/.config/eza/theme.yml"
-    success "Linked ~/.config/eza/theme.yml -> $DOTFILES_DIR/eza/theme.yml"
+    ln -sfn "$DOTFILES_DIR/config/eza/theme.yml" "$HOME/.config/eza/theme.yml"
+    success "Linked ~/.config/eza/theme.yml -> $DOTFILES_DIR/config/eza/theme.yml"
 
     if [ "$OS" = "Darwin" ]; then
         mkdir -p "$HOME/Library/Application Support/eza"
-        ln -sfn "$DOTFILES_DIR/eza/theme.yml" "$HOME/Library/Application Support/eza/theme.yml"
-        success "Linked ~/Library/Application Support/eza/theme.yml -> $DOTFILES_DIR/eza/theme.yml"
+        ln -sfn "$DOTFILES_DIR/config/eza/theme.yml" "$HOME/Library/Application Support/eza/theme.yml"
+        success "Linked ~/Library/Application Support/eza/theme.yml -> $DOTFILES_DIR/config/eza/theme.yml"
     fi
 fi
 
 # Symlink yazi configuration
-if [ -d "$DOTFILES_DIR/yazi" ]; then
+if [ -d "$DOTFILES_DIR/config/yazi" ]; then
     mkdir -p "$HOME/.config"
-    ln -sfn "$DOTFILES_DIR/yazi" "$HOME/.config/yazi"
-    success "Linked ~/.config/yazi -> $DOTFILES_DIR/yazi"
+    ln -sfn "$DOTFILES_DIR/config/yazi" "$HOME/.config/yazi"
+    success "Linked ~/.config/yazi -> $DOTFILES_DIR/config/yazi"
 fi
 
 # Symlink standalone bin utilities (dotupdate, dotcheck, dotdoctor, git-prompt-dir, esdiff, killport)

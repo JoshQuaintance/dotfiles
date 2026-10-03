@@ -23,6 +23,7 @@ alias ....="cd ../../.."
 alias codes="cd ~/Codes/"
 alias path="echo \$PATH | tr ':' '\n'"
 alias x="extract"
+alias strdiff="sdiff"
 if command -v dust &>/dev/null; then
   alias diskuse="dust"
 else
@@ -66,6 +67,8 @@ alias localip="ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | a
 alias .doctor="dotdoctor"
 alias .check="dotcheck"
 alias .update="dotupdate"
+alias .branch="dotbranch"
+alias .b="dotbranch"
 
 # ==========================================
 # Git Shortcuts

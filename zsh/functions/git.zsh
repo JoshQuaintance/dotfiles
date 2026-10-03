@@ -144,7 +144,7 @@ gco() {
   local branches=()
   while IFS= read -r b; do
     local b_clean="$(echo "$b" | sed 's/^[ *+]*//')"
-    [[ -z "$b_clean" || "$b_clean" == "$current_branch" || "$b_clean" == "HEAD"* ]] && continue
+    [[ -z "$b_clean" || "$b_clean" == "$current_branch" || "$b_clean" == "HEAD"* || "$b_clean" == dura/* ]] && continue
     branches+=("$b_clean")
   done < <(git branch --format='%(refname:short)' 2>/dev/null)
 
@@ -277,6 +277,8 @@ gwtnew() {
   fi
 
   local target_input="$1"
+  target_input="${target_input#"${target_input%%[![:space:]]*}"}"
+  target_input="${target_input%"${target_input##*[![:space:]]}"}"
 
   # If no argument given, offer interactive FZF selection of remote branches
   if [ -z "$target_input" ]; then
@@ -338,6 +340,14 @@ gwtnew() {
     elif [ -n "$query_line" ]; then
       target_input="$query_line"
     else
+      return 0
+    fi
+
+    # Strip leading and trailing whitespace
+    target_input="${target_input#"${target_input%%[![:space:]]*}"}"
+    target_input="${target_input%"${target_input##*[![:space:]]}"}"
+
+    if [ -z "$target_input" ]; then
       return 0
     fi
   fi

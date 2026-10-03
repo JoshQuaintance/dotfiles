@@ -240,7 +240,6 @@
   "[svelte]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode",
   },
-  "jdk.telemetry.enabled": false,
   "hexeditor.columnWidth": 12,
   "hexeditor.showDecodedText": true,
   "hexeditor.defaultEndianness": "little",
@@ -252,8 +251,12 @@
   "liveServer.settings.cors": true,
   "workbench.browser.openLocalhostLinks": false,
   "flow-icons.licenseKey": "FLOW-TTWQT1-SMEPBK-2258XZ-XK83KU",
+  "flow-icons.files.replacements": {
+    "java": "java-alt",
+    "java-class": "java-class-alt",
+  },
   "chat.titleBar.openInAgentsWindow.enabled": false,
-  "workbench.colorTheme": "Bearded Theme Arc Blueberry",
+  "workbench.colorTheme": "Bearded Theme Arc",
   "sonarlint.connectedMode.connections.sonarqube": [
     {
       "serverUrl": "https://sonarqube.winsupply.com",
@@ -281,4 +284,9 @@
   "editor.semanticHighlighting.enabled": true,
   "workbench.editor.labelFormat": "short",
   "chat.viewSessions.orientation": "stacked",
+  "jdk.telemetry.enabled": false,
+  "filesize.useDecimal": true,
+  "filesize.showRawInBytes": true,
+  "filesize.showGzipInStatusBar": true,
+  "filesize.displayInfoOnTheRightSideOfStatusBar": true,
 }

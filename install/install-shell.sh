@@ -52,41 +52,41 @@ if [ -d "$HOME/.oh-my-zsh/.git" ]; then
 fi
 
 # 4. Symlink .zshrc with .bak backup
-if [ -f "$DOTFILES_DIR/.zshrc" ]; then
+if [ -f "$DOTFILES_DIR/zsh/.zshrc" ]; then
     if [ -e "$HOME/.zshrc" ] || [ -L "$HOME/.zshrc" ]; then
-        if [ "$(readlink "$HOME/.zshrc" 2>/dev/null)" != "$DOTFILES_DIR/.zshrc" ]; then
+        if [ "$(readlink "$HOME/.zshrc" 2>/dev/null)" != "$DOTFILES_DIR/zsh/.zshrc" ]; then
             log "Backing up existing ~/.zshrc to ~/.zshrc.bak..."
             cp -L "$HOME/.zshrc" "$HOME/.zshrc.bak" 2>/dev/null || mv "$HOME/.zshrc" "$HOME/.zshrc.bak"
             success "Created backup at ~/.zshrc.bak"
         fi
     fi
 
-    ln -sfn "$DOTFILES_DIR/.zshrc" "$HOME/.zshrc"
-    success "Linked ~/.zshrc -> $DOTFILES_DIR/.zshrc"
+    ln -sfn "$DOTFILES_DIR/zsh/.zshrc" "$HOME/.zshrc"
+    success "Linked ~/.zshrc -> $DOTFILES_DIR/zsh/.zshrc"
 fi
 
 # Symlink .zshenv for global environment & UTF-8 consistency
-if [ -f "$DOTFILES_DIR/.zshenv" ]; then
-    ln -sfn "$DOTFILES_DIR/.zshenv" "$HOME/.zshenv"
-    success "Linked ~/.zshenv -> $DOTFILES_DIR/.zshenv"
+if [ -f "$DOTFILES_DIR/zsh/.zshenv" ]; then
+    ln -sfn "$DOTFILES_DIR/zsh/.zshenv" "$HOME/.zshenv"
+    success "Linked ~/.zshenv -> $DOTFILES_DIR/zsh/.zshenv"
 fi
 
 # 5. Symlink .aliases with .bak backup
-if [ -f "$DOTFILES_DIR/.aliases" ]; then
+if [ -f "$DOTFILES_DIR/zsh/.aliases" ]; then
     if [ -e "$HOME/.aliases" ] || [ -L "$HOME/.aliases" ]; then
-        if [ "$(readlink "$HOME/.aliases" 2>/dev/null)" != "$DOTFILES_DIR/.aliases" ]; then
+        if [ "$(readlink "$HOME/.aliases" 2>/dev/null)" != "$DOTFILES_DIR/zsh/.aliases" ]; then
             log "Backing up existing ~/.aliases to ~/.aliases.bak..."
             cp -L "$HOME/.aliases" "$HOME/.aliases.bak" 2>/dev/null || mv "$HOME/.aliases" "$HOME/.aliases.bak"
             success "Created backup at ~/.aliases.bak"
         fi
     fi
 
-    ln -sfn "$DOTFILES_DIR/.aliases" "$HOME/.aliases"
-    success "Linked ~/.aliases -> $DOTFILES_DIR/.aliases"
+    ln -sfn "$DOTFILES_DIR/zsh/.aliases" "$HOME/.aliases"
+    success "Linked ~/.aliases -> $DOTFILES_DIR/zsh/.aliases"
 fi
 
 # 6. Global Git Configuration & Identity Migration
-if [ -f "$DOTFILES_DIR/.gitconfig" ]; then
+if [ -f "$DOTFILES_DIR/config/git/.gitconfig" ]; then
     if [ -f "$HOME/.gitconfig" ] && [ ! -L "$HOME/.gitconfig" ]; then
         if [ ! -f "$HOME/.gitconfig.local" ]; then
             log "Migrating personal Git credentials to ~/.gitconfig.local..."
@@ -97,17 +97,17 @@ if [ -f "$DOTFILES_DIR/.gitconfig" ]; then
         cp -L "$HOME/.gitconfig" "$HOME/.gitconfig.bak" 2>/dev/null || mv "$HOME/.gitconfig" "$HOME/.gitconfig.bak"
     fi
 
-    ln -sfn "$DOTFILES_DIR/.gitconfig" "$HOME/.gitconfig"
-    success "Linked ~/.gitconfig -> $DOTFILES_DIR/.gitconfig"
+    ln -sfn "$DOTFILES_DIR/config/git/.gitconfig" "$HOME/.gitconfig"
+    success "Linked ~/.gitconfig -> $DOTFILES_DIR/config/git/.gitconfig"
 fi
 
 # 7. Global Git Ignore
-if [ -f "$DOTFILES_DIR/.gitignore_global" ]; then
+if [ -f "$DOTFILES_DIR/config/git/.gitignore_global" ]; then
     if [ -f "$HOME/.gitignore_global" ] && [ ! -L "$HOME/.gitignore_global" ]; then
         cp -L "$HOME/.gitignore_global" "$HOME/.gitignore_global.bak" 2>/dev/null || true
     fi
-    ln -sfn "$DOTFILES_DIR/.gitignore_global" "$HOME/.gitignore_global"
-    success "Linked ~/.gitignore_global -> $DOTFILES_DIR/.gitignore_global"
+    ln -sfn "$DOTFILES_DIR/config/git/.gitignore_global" "$HOME/.gitignore_global"
+    success "Linked ~/.gitignore_global -> $DOTFILES_DIR/config/git/.gitignore_global"
 fi
 
 success "Zsh shell and Git environment setup complete!"

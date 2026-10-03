@@ -23,15 +23,17 @@ _conf_candidates() {
   [ -d "$dot_dir" ] && printf "dots\t%s\n" "$dot_dir"
   [ -d "${SCRATCH_DIR:-$HOME/.scratch}" ] && printf "scratch\t%s\n" "${SCRATCH_DIR:-$HOME/.scratch}"
 
-  # 2. Dynamic discovery in ~/.config
-  if [ -d "$cfg_dir" ]; then
-    for item in "$cfg_dir"/*(N); do
+  # 2. Dynamic discovery in ~/.dotfiles/config and ~/.config
+  local search_dir
+  for search_dir in "$dot_dir/config" "$cfg_dir"; do
+    [ -d "$search_dir" ] || continue
+    for item in "$search_dir"/*(N); do
       local bname="$(basename "$item")"
       [[ "$bname" == .* ]] && continue
 
       if [ -d "$item" ]; then
         local primary=""
-        for sub in "$item"/config*(N) "$item"/settings.json(N) "$item"/theme.yml(N) "$item"/init.lua(N); do
+        for sub in "$item"/config*(N) "$item"/spaceship.zsh(N) "$item"/starship.toml(N) "$item"/settings.json(N) "$item"/theme.yml(N) "$item"/init.lua(N) "$item"/.gitconfig(N); do
           if [ -f "$sub" ]; then
             primary="$sub"
             break
@@ -47,7 +49,7 @@ _conf_candidates() {
         printf "%s\t%s\n" "$stripped" "$item"
       fi
     done
-  fi
+  done
 
   # 3. Modular dotfiles functions
   if [ -d "$dot_dir/zsh/functions" ]; then
@@ -148,7 +150,7 @@ conf() {
 
   # Determine if target is a shell rc file that should trigger auto-reloading
   case "$target_file" in
-    *"/.zshrc"|*"/.aliases"|*"/zsh/functions.zsh"|*"/zsh/functions/"*)
+    *"/.zshrc"|*"/.aliases"|*"/zsh/functions.zsh"|*"/zsh/functions/"*|*"/spaceship.zsh")
       is_shell_rc=true
       ;;
   esac
@@ -183,3 +185,163 @@ conf() {
     echo "No changes made."
   fi
 }
+
+# Dotfiles Branch Switcher (dotbranch / .branch / .b)
+# Switch active ~/.dotfiles branch from anywhere and immediately reload the shell.
+# Usage:
+#   .branch              -> Interactive Vim-modal FZF branch picker for ~/.dotfiles
+#   .branch -            -> Toggle back to previous dotfiles branch (e.g. main <-> testing)
+#   .branch <name>       -> Switch to matching dotfiles branch (e.g. .branch main, .branch async)
+#   .branch -b <new>     -> Create and switch to a new dotfiles branch
+#   .branch -s           -> Show current active dotfiles branch & status
+dotbranch() {
+  local dot_dir="${DOTFILES_DIR:-$HOME/.dotfiles}"
+  if [ ! -d "$dot_dir/.git" ] && ! git -C "$dot_dir" rev-parse --git-dir &>/dev/null; then
+    printf "\033[31m✖ Dotfiles git repository not found at %s\033[0m\n" "$dot_dir" >&2
+    return 1
+  fi
+
+  local current_branch
+  current_branch=$(git -C "$dot_dir" branch --show-current 2>/dev/null)
+
+  case "$1" in
+    -h|--help)
+      printf "\033[1;38;2;203;166;247mdotbranch\033[0m (aliases: \033[1m.branch\033[0m, \033[1m.b\033[0m) — Switch active ~/.dotfiles branch & reload shell\n\n"
+      printf "  Current branch: \033[1;38;2;166;227;161m%s\033[0m\n\n" "${current_branch:-detached}"
+      printf "\033[1mUsage:\033[0m\n"
+      printf "  .branch              Interactive Vim-modal branch selector\n"
+      printf "  .branch -            Toggle between current and previous branch (e.g. stable <-> testing)\n"
+      printf "  .branch <query>      Switch to matching branch (e.g. .branch main, .branch async)\n"
+      printf "  .branch -b <name>    Create & switch to a new dotfiles branch\n"
+      printf "  .branch -s           Show current dotfiles branch and status\n"
+      return 0
+      ;;
+    -s|--status)
+      printf "\033[1;38;2;203;166;247m⚙ Dotfiles (%s)\033[0m on \033[1;38;2;166;227;161m %s\033[0m\n" "$dot_dir" "${current_branch:-detached}"
+      git -C "$dot_dir" status -sb
+      return 0
+      ;;
+    -b|--create)
+      if [ -z "$2" ]; then
+        printf "\033[33mUsage: .branch -b <new-branch-name>\033[0m\n" >&2
+        return 1
+      fi
+      if git -C "$dot_dir" checkout -b "$2"; then
+        _dotbranch_reload "$dot_dir" "$2"
+        return 0
+      fi
+      return 1
+      ;;
+  esac
+
+  local target="$1"
+
+  # Toggle to previous branch with `.branch -`
+  if [ "$target" = "-" ]; then
+    if git -C "$dot_dir" checkout -; then
+      local new_br
+      new_br=$(git -C "$dot_dir" branch --show-current 2>/dev/null)
+      _dotbranch_reload "$dot_dir" "$new_br"
+      return 0
+    fi
+    return 1
+  fi
+
+  # Collect local and remote branches (deduplicated, excluding current branch & HEAD)
+  local branches=()
+  local b
+  while IFS= read -r b; do
+    [[ -z "$b" || "$b" == "$current_branch" || "$b" == dura/* ]] && continue
+    branches+=("$b")
+  done < <(
+    {
+      git -C "$dot_dir" for-each-ref --sort=-committerdate --format='%(refname:short)' refs/heads/ 2>/dev/null
+      git -C "$dot_dir" for-each-ref --sort=-committerdate --format='%(refname:lstrip=3)' refs/remotes/origin/ 2>/dev/null | grep -v '^HEAD$'
+    } | awk '!seen[$0]++'
+  )
+
+  if [ -n "$target" ]; then
+    # Exact match check first
+    if git -C "$dot_dir" show-ref --verify --quiet "refs/heads/$target" || \
+       git -C "$dot_dir" show-ref --verify --quiet "refs/remotes/origin/$target"; then
+      if git -C "$dot_dir" checkout "$target"; then
+        _dotbranch_reload "$dot_dir" "$target"
+        return 0
+      fi
+      return 1
+    fi
+
+    # Fuzzy match against branch list
+    local matched
+    matched=$(printf "%s\n" "${branches[@]}" | grep -i "$target" | head -n 1)
+    if [ -n "$matched" ]; then
+      if git -C "$dot_dir" checkout "$matched"; then
+        _dotbranch_reload "$dot_dir" "$matched"
+        return 0
+      fi
+      return 1
+    else
+      printf "\033[31m✖ No dotfiles branch matching '%s'. Use '.branch -b %s' to create it.\033[0m\n" "$target" "$target" >&2
+      return 1
+    fi
+  fi
+
+  if [ "${#branches[@]}" -eq 0 ]; then
+    printf "\033[33mOnly one branch ('%s') exists in ~/.dotfiles. Use '.branch -b <name>' to create one.\033[0m\n" "$current_branch"
+    return 0
+  fi
+
+  if ! command -v fzf &>/dev/null; then
+    printf "Current dotfiles branch: %s\nAvailable branches:\n" "$current_branch"
+    printf "  %s\n" "${branches[@]}"
+    return 0
+  fi
+
+  target=$(printf "%s\n" "${branches[@]}" | fzf \
+    --height=~45% \
+    --layout=reverse \
+    --border=rounded \
+    --disabled \
+    --pointer="❯ " \
+    --prompt="⚙ Dotfiles Branch [current: ${current_branch}] > " \
+    --header="  j/k: navigate │ /: search │ enter: switch & reload │ q: quit" \
+    --color="header:italic:dim,prompt:bold:magenta,pointer:bold:green" \
+    --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept" \
+    --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: switch & reload)+rebind(esc)" \
+    --bind="i:enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: switch & reload)+rebind(esc)" \
+    --bind="esc:disable-search+rebind(j,k,q,g,G,i,/)+change-prompt(⚙ Dotfiles Branch [current: ${current_branch}] > )+change-header(  j/k: navigate │ /: search │ enter: switch & reload │ q: quit)+unbind(esc)" \
+    --bind="start:unbind(esc)" \
+    --preview="git -C '$dot_dir' log -n 12 --oneline --graph --decorate --color=always {} 2>/dev/null" \
+    --preview-window='right:55%:wrap')
+
+  if [ -n "$target" ]; then
+    if git -C "$dot_dir" checkout "$target"; then
+      _dotbranch_reload "$dot_dir" "$target"
+    fi
+  fi
+}
+
+_dotbranch_reload() {
+  local dot_dir="$1"
+  local branch_name="$2"
+
+  # Auto-heal symlinks for the target branch's directory layout
+  if [ -x "$dot_dir/bin/dot" ]; then
+    "$dot_dir/bin/dot" doctor --fix >/dev/null 2>&1 || true
+  fi
+
+  # Cleanly tear down both Spaceship and Starship prompt hooks before re-sourcing ~/.zshrc
+  autoload -Uz add-zsh-hook
+  (( $+functions[async_stop_worker] )) && async_stop_worker "spaceship" "spaceship_1" "spaceship_2" "spaceship_3" 2>/dev/null || true
+  add-zsh-hook -d precmd prompt_spaceship_precmd 2>/dev/null || true
+  add-zsh-hook -d preexec prompt_spaceship_preexec 2>/dev/null || true
+  add-zsh-hook -d chpwd prompt_spaceship_chpwd 2>/dev/null || true
+  add-zsh-hook -d precmd prompt_starship_precmd 2>/dev/null || true
+  add-zsh-hook -d preexec prompt_starship_preexec 2>/dev/null || true
+  RPROMPT=""
+  [[ -t 1 && ! -t 2 ]] && exec 2>&1
+
+  ZSH_STARTUP_VERBOSE=false source "$HOME/.zshrc"
+  printf "\033[1;32m✔\033[0m Active dotfiles branch switched to \033[1;38;2;203;166;247m%s\033[0m and shell reloaded!\n" "$branch_name"
+}
+

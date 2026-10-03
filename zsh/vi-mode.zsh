@@ -32,27 +32,50 @@ bindkey -M viins '^U' backward-kill-line
 bindkey -M viins '^W' backward-kill-word
 
 # 6. Re-bind Atuin or FZF interactive history search in viins
+# bindkey -v above resets the viins keymap, wiping all bindings registered by
+# atuin init zsh — restore them explicitly here.
 if (( $+widgets[atuin-search-viins] )); then
-  bindkey -M viins '^r' atuin-search-viins
-  bindkey -M vicmd '/' atuin-search
+  bindkey -M viins '^r'    atuin-search-viins
+  bindkey -M viins '^[[A'  atuin-up-search-viins
+  bindkey -M viins '^[OA'  atuin-up-search-viins
+  bindkey -M vicmd '/'     atuin-search-vicmd
+  bindkey -M vicmd '^[[A'  atuin-up-search-vicmd
+  bindkey -M vicmd '^[OA'  atuin-up-search-vicmd
+  bindkey -M vicmd 'k'     atuin-up-search-vicmd
 elif (( $+widgets[fzf-history-widget] )); then
-  bindkey -M viins '^r' fzf-history-widget
-  bindkey -M vicmd '/' fzf-history-widget
+  bindkey -M viins '^r'   fzf-history-widget
+  bindkey -M vicmd '/'    fzf-history-widget
 fi
 
-# 7. Dynamic cursor shape for modern terminals (beam in insert, block in normal)
+# 7. Dynamic cursor shape & Spaceship char symbol for modern terminals (beam in insert, block in normal)
+function _vi_mode_sync_spaceship_char() {
+  (( $+functions[spaceship::core::refresh_section] )) || return 0
+  local sym="❯ "
+  [[ "$KEYMAP" == "vicmd" ]] && sym="❮ "
+  if [[ "$SPACESHIP_CHAR_SYMBOL_SUCCESS" != "$sym" ]]; then
+    SPACESHIP_CHAR_SYMBOL="$sym"
+    SPACESHIP_CHAR_SYMBOL_SUCCESS="$sym"
+    SPACESHIP_CHAR_SYMBOL_FAILURE="$sym"
+    spaceship::core::refresh_section --sync char
+    spaceship::populate
+  fi
+}
+
 function _vi_mode_cursor_shape() {
   case "$KEYMAP" in
     vicmd)      print -n '\e[2 q' ;; # Block cursor in normal mode
     viins|main) print -n '\e[5 q' ;; # Beam cursor in insert mode
   esac
+  _vi_mode_sync_spaceship_char
   zle reset-prompt 2>/dev/null || true
 }
 zle -N zle-keymap-select _vi_mode_cursor_shape
 
 function _vi_mode_line_init() {
-  zle -K viins
+  [[ "$KEYMAP" == "vicmd" ]] && zle -K viins
   print -n '\e[5 q'
+  _vi_mode_sync_spaceship_char
+  zle reset-prompt 2>/dev/null || true
 }
 zle -N zle-line-init _vi_mode_line_init
 

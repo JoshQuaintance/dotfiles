@@ -31,8 +31,8 @@ fi
 
 # 2. Symlink Mise Configuration
 mkdir -p "$HOME/.config/mise"
-if [ -f "$DOTFILES_DIR/mise/config.toml" ]; then
-    ln -sfn "$DOTFILES_DIR/mise/config.toml" "$HOME/.config/mise/config.toml"
+if [ -f "$DOTFILES_DIR/config/mise/config.toml" ]; then
+    ln -sfn "$DOTFILES_DIR/config/mise/config.toml" "$HOME/.config/mise/config.toml"
     success "Linked ~/.config/mise/config.toml"
 fi
 

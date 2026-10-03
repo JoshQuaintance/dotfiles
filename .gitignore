@@ -10,6 +10,7 @@
 
 # Shell dumps and cache
 .zcompdump*
+*.zwc
 
 # Neovim local lockfile
 lazy-lock.json

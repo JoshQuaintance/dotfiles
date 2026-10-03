@@ -122,25 +122,63 @@ fi
 unsetopt auto_cd
 _step "Oh My Zsh & plugins (git)"
 
-# Starship Prompt Initialization
-if command -v starship &>/dev/null && [ "$TERM" != "dumb" ]; then
-    eval "$(starship init zsh)"
-fi
-_step "Starship prompt"
-
 # ==========================================
 # User Configuration & Tools
 # ==========================================
 
-# Mise (Polyglot Runtime & Node 24 Manager)
+# Mise (Polyglot Runtime & Node 24 Manager — loaded before prompt so PATH is ready)
 if command -v mise &>/dev/null; then
     eval "$(mise activate zsh)"
 fi
 _step "Mise polyglot runtime"
 
-# NVM (Lazy-loaded fallback — saves ~800-1200ms on startup)
+# Spaceship Prompt Initialization (native Zsh async section streaming, with Starship fallback)
+if [ "$TERM" != "dumb" ]; then
+    export SPACESHIP_CONFIG="${DOTFILES_DIR:-$HOME/.dotfiles}/config/spaceship/spaceship.zsh"
+    _spaceship_entry=""
+    for _sp_candidate in \
+        "/opt/homebrew/opt/spaceship/spaceship.zsh" \
+        "/home/linuxbrew/.linuxbrew/opt/spaceship/spaceship.zsh" \
+        "/usr/local/opt/spaceship/spaceship.zsh" \
+        "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/spaceship-prompt/spaceship.zsh" \
+        "$HOME/.spaceship-prompt/spaceship.zsh"; do
+        if [ -f "$_sp_candidate" ]; then
+            _spaceship_entry="$_sp_candidate"
+            break
+        fi
+    done
+
+    if [ -n "$_spaceship_entry" ]; then
+        # Ensure Homebrew's extracted .zwc bytecode is newer than .zsh so spaceship::precompile is 0ms
+        if [ ! "${_spaceship_entry}.zwc" -nt "$_spaceship_entry" ]; then
+            chmod -R u+w "${_spaceship_entry:h}" 2>/dev/null || true
+            zcompile -R -- "${_spaceship_entry}.zwc" "$_spaceship_entry" 2>/dev/null || true
+        fi
+        # Clean up any running/orphaned Spaceship async workers before (re-)sourcing
+        if (( $+functions[async_stop_worker] )); then
+            async_stop_worker "spaceship" "spaceship_1" "spaceship_2" "spaceship_3" 2>/dev/null || true
+        fi
+        source "$_spaceship_entry"
+    elif command -v starship &>/dev/null; then
+        eval "$(starship init zsh)"
+    fi
+    unset _spaceship_entry _sp_candidate
+
+    # Guard against zsh-async zpty bug (mafredri/zsh-async#35): if a zpty worker
+    # collides on a name whose child already exited, zsh runs _async_worker in the
+    # parent shell and redirects fd 2 (stderr) to /dev/null, breaking Atuin & git hooks.
+    [[ -t 1 && ! -t 2 ]] && exec 2>&1
+    _heal_stderr_precmd() {
+        [[ -t 1 && ! -t 2 ]] && exec 2>&1
+    }
+    autoload -Uz add-zsh-hook
+    add-zsh-hook precmd _heal_stderr_precmd
+fi
+_step "Spaceship prompt (async)"
+
+# NVM (Lazy-loaded fallback when Mise is not installed — saves ~800-1200ms on startup)
 export NVM_DIR="$HOME/.nvm"
-if [ -s "$NVM_DIR/nvm.sh" ]; then
+if ! command -v mise &>/dev/null && [ -s "$NVM_DIR/nvm.sh" ]; then
     nvm() {
         unset -f nvm node npm npx yarn 2>/dev/null
         [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
@@ -261,7 +299,7 @@ _dot_dir="${DOTFILES_DIR:-$HOME/.dotfiles}"
 
 [ -f "$_dot_dir/zsh/functions.zsh" ] && source "$_dot_dir/zsh/functions.zsh"
 [ -f "$HOME/.aliases" ] && source "$HOME/.aliases"
-[ -f "$_dot_dir/.aliases" ] && [ ! -f "$HOME/.aliases" ] && source "$_dot_dir/.aliases"
+[ -f "$_dot_dir/zsh/.aliases" ] && [ ! -f "$HOME/.aliases" ] && source "$_dot_dir/zsh/.aliases"
 _step "Dotfiles aliases & functions"
 
 # Vi-Mode Command Line Editing (Vim keybindings, dynamic cursor shape, Neovim 'v' integration)

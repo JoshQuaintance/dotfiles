@@ -115,7 +115,7 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
     print(f"\n{C_BOLD}1. Configuration & Runtime Parsers{C_RESET}")
 
     # VS Code JSONC
-    vscode_settings = dotfiles / "vscode" / "settings.json"
+    vscode_settings = dotfiles / "config" / "vscode" / "settings.json"
     if vscode_settings.exists():
         try:
             data = parse_jsonc(vscode_settings)
@@ -127,7 +127,7 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
         report.warn("VS Code settings (JSONC)", "File missing in repo")
 
     # Windows Terminal settings.json
-    wt_settings = dotfiles / "windows-terminal" / "settings.json"
+    wt_settings = dotfiles / "config" / "windows-terminal" / "settings.json"
     if wt_settings.exists():
         try:
             json.loads(wt_settings.read_text(encoding="utf-8"))
@@ -136,8 +136,8 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
             report.fail("Windows Terminal configuration", f"Invalid JSON: {e}")
 
     # Yazi TOML validation
-    yazi_toml = dotfiles / "yazi" / "yazi.toml"
-    theme_toml = dotfiles / "yazi" / "theme.toml"
+    yazi_toml = dotfiles / "config" / "yazi" / "yazi.toml"
+    theme_toml = dotfiles / "config" / "yazi" / "theme.toml"
     if yazi_toml.exists() and theme_toml.exists():
         if tomllib:
             try:
@@ -173,8 +173,16 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
     else:
         report.warn("Neovim headless initialization", "nvim binary not found (skipped)")
 
-    # Starship config validation
-    starship_toml = dotfiles / "starship" / "starship.toml"
+    # Spaceship & Starship prompt config validation
+    spaceship_cfg = dotfiles / "config" / "spaceship" / "spaceship.zsh"
+    if spaceship_cfg.exists() and shutil.which("zsh"):
+        code, out, err = run_cmd(["zsh", "-n", str(spaceship_cfg)])
+        if code == 0:
+            report.ok("Spaceship prompt configuration", "config/spaceship/spaceship.zsh valid Zsh")
+        else:
+            report.fail("Spaceship prompt configuration", err.splitlines()[0] if err else "Syntax error")
+
+    starship_toml = dotfiles / "config" / "starship" / "starship.toml"
     if starship_toml.exists() and tomllib:
         try:
             tomllib.loads(starship_toml.read_text(encoding="utf-8"))
@@ -183,7 +191,7 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
             report.fail("Starship prompt configuration", f"Invalid TOML: {e}")
 
     # Bat syntax viewer config
-    bat_config = dotfiles / "bat" / "config"
+    bat_config = dotfiles / "config" / "bat" / "config"
     if bat_config.exists():
         content = bat_config.read_text(encoding="utf-8")
         if "Catppuccin Mocha" in content:
@@ -192,21 +200,21 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
             report.ok("Bat syntax viewer theme", "Config present")
 
     # Eza theme configuration
-    eza_theme = dotfiles / "eza" / "theme.yml"
+    eza_theme = dotfiles / "config" / "eza" / "theme.yml"
     if eza_theme.exists():
-        report.ok("Eza theme configuration", "eza/theme.yml present")
+        report.ok("Eza theme configuration", "config/eza/theme.yml present")
 
     # Mise config validation
-    mise_toml = dotfiles / "mise" / "config.toml"
+    mise_toml = dotfiles / "config" / "mise" / "config.toml"
     if mise_toml.exists() and tomllib:
         try:
             tomllib.loads(mise_toml.read_text(encoding="utf-8"))
-            report.ok("Mise runtime configuration", "mise/config.toml valid TOML")
+            report.ok("Mise runtime configuration", "config/mise/config.toml valid TOML")
         except Exception as e:
             report.fail("Mise runtime configuration", f"Invalid TOML: {e}")
 
     # Git config syntax validation
-    gitconfig = dotfiles / ".gitconfig"
+    gitconfig = dotfiles / "config" / "git" / ".gitconfig"
     if gitconfig.exists():
         code, out, err = run_cmd(["git", "config", "-f", str(gitconfig), "--list"])
         if code == 0:
@@ -248,7 +256,7 @@ def test_shell_runtime(report: TestReport, dotfiles: Path):
 
     # Custom functions check
     func_check_code = """
-for fn in take up groot gmain conf clone port wt gwtnew gwts gwtdel gwtclean gbclean y copy paste scratch extract npmr bunr pnpmr fa toggle-autols notify gl gco; do
+for fn in take up groot gmain conf dotbranch clone port wt gwtnew gwts gwtdel gwtclean gbclean y copy paste scratch extract npmr bunr pnpmr fa toggle-autols notify gl gco sdiff; do
     if ! (( $+functions[$fn] )); then
         echo "Missing function: $fn"
     fi
@@ -257,7 +265,7 @@ done
     code, out, err = run_cmd(["zsh", "-i", "-c", func_check_code], timeout=5)
     missing_funcs = [line.strip() for line in out.splitlines() if line.startswith("Missing function:")]
     if not missing_funcs:
-        report.ok("Custom shell functions", "All 26 functions registered in zsh")
+        report.ok("Custom shell functions", "All 28 functions registered in zsh")
     else:
         report.fail("Custom shell functions", missing_funcs[0])
 
@@ -317,6 +325,10 @@ fa -p >/dev/null
 take /tmp/test-smoke-take >/dev/null && cd - >/dev/null && rm -rf /tmp/test-smoke-take
 notify "test" "dottest" >/dev/null
 extract >/dev/null 2>&1 || true
+sdiff -h >/dev/null
+sdiff "feat/SALES-1234/my-branch" "feat/SALES-1235/my_branch " >/dev/null
+dotbranch -h >/dev/null
+dotbranch -s >/dev/null
 
 # Git-dependent functions (must run inside git repo)
 (
@@ -363,7 +375,7 @@ def test_syntax_and_links(report: TestReport, dotfiles: Path):
 
     # Zsh scripts syntax (zsh -n)
     if shutil.which("zsh"):
-        zsh_scripts = [dotfiles / ".zshrc", dotfiles / ".zshenv", dotfiles / ".aliases"]
+        zsh_scripts = [dotfiles / "zsh" / ".zshrc", dotfiles / "zsh" / ".zshenv", dotfiles / "zsh" / ".aliases"]
         zsh_scripts.extend((dotfiles / "zsh").glob("*.zsh"))
         zsh_scripts.extend((dotfiles / "zsh" / "functions").glob("*.zsh"))
 

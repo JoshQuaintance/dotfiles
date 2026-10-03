@@ -29,9 +29,9 @@ jobs:
 
       - name: Validate Zsh Configuration Syntax
         run: |
-          zsh -n .zshrc
-          zsh -n .zshenv
-          zsh -n .aliases
+          zsh -n zsh/.zshrc
+          zsh -n zsh/.zshenv
+          zsh -n zsh/.aliases
           zsh -n zsh/*.zsh
           zsh -n zsh/functions/*.zsh
 
