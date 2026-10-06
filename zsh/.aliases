@@ -81,7 +81,8 @@ alias gdw="git diff --word-diff"
 alias gshow="git show --stat"
 
 # Add & Commit
-alias ga="git add"
+unalias ga 2>/dev/null || true
+alias gadd="ga"
 alias gaa="git add --all"
 alias gap="git add --patch"
 alias gc="git commit"

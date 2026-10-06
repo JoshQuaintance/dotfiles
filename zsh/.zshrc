@@ -162,6 +162,16 @@ if [ "$TERM" != "dumb" ]; then
             async_stop_worker "spaceship" "spaceship_1" "spaceship_2" "spaceship_3" 2>/dev/null || true
         fi
         source "$_spaceship_entry"
+        # Harden prompt_spaceship_chpwd so 'cd' inside subshells or under 'set -e' never fails
+        if (( $+functions[prompt_spaceship_chpwd] )); then
+            prompt_spaceship_chpwd() {
+                setopt localoptions noerrexit
+                (( ZSH_SUBSHELL == 0 )) && [[ -o zle ]] || return 0
+                spaceship::worker::init
+                spaceship::worker::eval builtin cd -q "$PWD"
+                spaceship_exec_time_start
+            }
+        fi
     elif command -v starship &>/dev/null; then
         eval "$(starship init zsh)"
     fi
@@ -172,7 +182,7 @@ if [ "$TERM" != "dumb" ]; then
     # parent shell and redirects fd 2 (stderr) to /dev/null, breaking Atuin & git hooks.
     [[ -t 1 && ! -t 2 ]] && exec 2>&1
     _heal_stderr_precmd() {
-        [[ -t 1 && ! -t 2 ]] && exec 2>&1
+        [[ -t 1 && ! -t 2 ]] && exec 2>&1 || true
     }
     autoload -Uz add-zsh-hook
     add-zsh-hook precmd _heal_stderr_precmd

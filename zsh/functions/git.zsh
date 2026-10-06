@@ -40,7 +40,7 @@ gl() {
     git_log_cmd="git log --graph --color=always --format='%C(auto)%h%d %s %C(dim white)%cr %C(dim cyan)<%an>%Creset' --exclude='refs/heads/dura/*' --all"
   fi
 
-  local preview_cmd='h=$(echo {} | grep -oE "[a-f0-9]{7,40}" | head -n1); [ -n "$h" ] && git show --color=always --stat -p "$h"'
+  local preview_cmd='h=$(echo {} | grep -oE "[a-f0-9]{7,40}" | head -n1); if [ -n "$h" ]; then if command -v delta &>/dev/null; then git show --stat -p "$h" 2>/dev/null | delta --paging=never --width="${FZF_PREVIEW_COLUMNS:-80}"; else git show --color=always --stat -p "$h" 2>/dev/null; fi; fi'
 
   selection=$(eval "$git_log_cmd" | fzf \
     --ansi \
@@ -230,7 +230,7 @@ gstash() {
     --bind="i:enable-search+unbind(j,k,q,g,G,space,i,/)+change-prompt(🔍 Search Stashes > )+change-header(  type to filter │ esc: normal mode │ enter: apply)+rebind(esc)" \
     --bind="esc:disable-search+rebind(j,k,q,g,G,space,i,/)+change-prompt(📦 Git Stashes > )+change-header(  j/k: navigate │ /: search │ enter: apply │ p: pop │ space+x: drop │ q: quit)+unbind(esc)" \
     --bind="ctrl-/:toggle-preview,ctrl-d:preview-page-down,ctrl-u:preview-page-up" \
-    --preview='s=$(echo {} | grep -oE "stash@\{[0-9]+\}" | head -n1); [ -n "$s" ] && git stash show --color=always --stat -p "$s" 2>/dev/null' \
+    --preview='s=$(echo {} | grep -oE "stash@\{[0-9]+\}" | head -n1); if [ -n "$s" ]; then if command -v delta &>/dev/null; then git stash show --stat -p "$s" 2>/dev/null | delta --paging=never --width="${FZF_PREVIEW_COLUMNS:-80}"; else git stash show --color=always --stat -p "$s" 2>/dev/null; fi; fi' \
     --preview-window="right:60%:wrap" \
     --expect="p,x")
 
@@ -265,6 +265,141 @@ gstash() {
       ;;
     *)
       git stash apply "${refs[1]}"
+      ;;
+  esac
+}
+
+# Interactive Git File Stage / Unstage / Discard Picker (ga / gadd)
+# When run with arguments: passes directly to git add "$@"
+# When run without arguments: opens modal-Vim FZF picker for modified/staged/untracked files
+unalias ga 2>/dev/null || true
+
+ga() {
+  if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    printf "\033[1;38;2;203;166;247mga\033[0m (alias: \033[1mgadd\033[0m) — Interactive modal-Vim Git stage / unstage / discard picker\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  ga                 Open interactive file picker (enter: stage, u: unstage, x: discard, e: edit)\n"
+    printf "  ga <files...>      Pass arguments directly to 'git add <files...>'\n"
+    return 0
+  fi
+
+  if [ $# -gt 0 ]; then
+    git add "$@"
+    return $?
+  fi
+
+  if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+    printf "\033[31m✖ Not inside a git repository or worktree.\033[0m\n" >&2
+    return 1
+  fi
+
+  local status_lines
+  status_lines="$(git -c color.status=always status --short 2>/dev/null)"
+  if [ -z "$status_lines" ]; then
+    printf "\033[32m✔ Working tree is clean — nothing to stage or unstage.\033[0m\n"
+    return 0
+  fi
+
+  if [ ! -t 1 ] || ! command -v fzf &>/dev/null; then
+    git status -sb
+    return 0
+  fi
+
+  local preview_cmd='
+    clean=$(echo {} | sed "s/\x1b\[[0-9;]*m//g")
+    st="${clean:0:2}"
+    f=$(echo "$clean" | sed -E "s/^.. //; s/.* -> //; s/^\"(.*)\"$/\1/")
+    if [ "$st" = "??" ]; then
+      if [ -d "$f" ]; then
+        if command -v eza &>/dev/null; then eza --tree --level=2 --icons --color=always "$f"; else ls -la "$f"; fi
+      elif command -v bat &>/dev/null; then
+        bat --color=always --style=numbers --line-range :300 "$f" 2>/dev/null
+      else
+        cat "$f" 2>/dev/null
+      fi
+    elif command -v delta &>/dev/null; then
+      { git diff -- "$f" 2>/dev/null; git diff --staged -- "$f" 2>/dev/null; } | delta --paging=never --width="${FZF_PREVIEW_COLUMNS:-80}"
+    else
+      git diff --color=always -- "$f" 2>/dev/null
+      git diff --staged --color=always -- "$f" 2>/dev/null
+    fi
+  '
+
+  local selection
+  selection=$(printf "%s\n" "$status_lines" | fzf \
+    --ansi \
+    --multi \
+    --height=~55% \
+    --layout=reverse \
+    --border=rounded \
+    --disabled \
+    --pointer="❯ " \
+    --marker="✓ " \
+    --prompt="📂 Git Stage/Unstage > " \
+    --header="  j/k: move │ space: select │ enter: stage │ u: unstage │ x: discard │ e: edit │ /: search │ q: quit" \
+    --color="header:italic:dim,prompt:bold:green,pointer:bold:cyan,marker:bold:yellow" \
+    --bind="start:unbind(esc)" \
+    --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,space:toggle+down" \
+    --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,space,u,x,e,i,/)+change-prompt(🔍 Search Files > )+change-header(  type to filter │ esc: normal mode │ enter: stage)+rebind(esc)" \
+    --bind="i:enable-search+unbind(j,k,q,g,G,space,u,x,e,i,/)+change-prompt(🔍 Search Files > )+change-header(  type to filter │ esc: normal mode │ enter: stage)+rebind(esc)" \
+    --bind="esc:disable-search+rebind(j,k,q,g,G,space,u,x,e,i,/)+change-prompt(📂 Git Stage/Unstage > )+change-header(  j/k: move │ space: select │ enter: stage │ u: unstage │ x: discard │ e: edit │ /: search │ q: quit)+unbind(esc)" \
+    --bind="ctrl-/:toggle-preview,ctrl-d:preview-page-down,ctrl-u:preview-page-up" \
+    --preview="$preview_cmd" \
+    --preview-window="right:60%:wrap" \
+    --expect="u,x,e")
+
+  [ -z "$selection" ] && return 0
+
+  local key
+  key=$(echo "$selection" | head -n1)
+  local selected_lines
+  selected_lines=$(echo "$selection" | sed '1d')
+  [ -z "$selected_lines" ] && return 0
+
+  local -a files untracked_files tracked_files
+  while IFS= read -r line; do
+    local clean_line st fpath
+    clean_line=$(printf "%s" "$line" | sed $'s/\x1b\\[[0-9;]*m//g')
+    st="${clean_line:0:2}"
+    fpath=$(printf "%s" "$clean_line" | sed -E 's/^.. //; s/.* -> //; s/^"(.*)"$/\1/')
+    if [ -n "$fpath" ]; then
+      files+=("$fpath")
+      if [ "$st" = "??" ]; then
+        untracked_files+=("$fpath")
+      else
+        tracked_files+=("$fpath")
+      fi
+    fi
+  done <<< "$selected_lines"
+
+  [ ${#files[@]} -eq 0 ] && return 0
+
+  case "$key" in
+    u)
+      git restore --staged -- "${files[@]}"
+      printf "\033[33m↺ Unstaged %d file(s):\033[0m %s\n" "${#files[@]}" "${(j:, :)files}"
+      git status -sb
+      ;;
+    x)
+      printf "\033[1;31m⚠ Discard working-tree changes to %d file(s) (%s)? [y/N]: \033[0m" "${#files[@]}" "${(j:, :)files}"
+      local confirm=""
+      read -r confirm
+      if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        [ ${#tracked_files[@]} -gt 0 ] && git checkout -- "${tracked_files[@]}"
+        [ ${#untracked_files[@]} -gt 0 ] && rm -rf -- "${untracked_files[@]}"
+        printf "\033[32m✔ Discarded changes to %d file(s).\033[0m\n" "${#files[@]}"
+        git status -sb
+      else
+        printf "\033[2mCancelled.\033[0m\n"
+      fi
+      ;;
+    e)
+      "${EDITOR:-nvim}" "${files[@]}"
+      ;;
+    *)
+      git add -- "${files[@]}"
+      printf "\033[32m✔ Staged %d file(s):\033[0m %s\n" "${#files[@]}" "${(j:, :)files}"
+      git status -sb
       ;;
   esac
 }

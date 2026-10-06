@@ -230,14 +230,14 @@ notify() {
   # 1. macOS: Native Notification Center banner + subtle glass chime
   if [[ "$OSTYPE" == darwin* ]] || [ "$(uname -s 2>/dev/null)" = "Darwin" ]; then
     osascript -e "display notification \"$msg\" with title \"$title\" sound name \"Glass\"" 2>/dev/null || \
-      osascript -e "display notification \"$msg\" with title \"$title\"" 2>/dev/null
-    if [ -f "/System/Library/Sounds/Glass.aiff" ]; then
+      osascript -e "display notification \"$msg\" with title \"$title\"" 2>/dev/null || true
+    if [ -t 1 ] && [ -f "/System/Library/Sounds/Glass.aiff" ]; then
       afplay "/System/Library/Sounds/Glass.aiff" &>/dev/null &!
     fi
 
   # 2. Linux: Desktop notification daemon (libnotify / notify-send)
   elif command -v notify-send &>/dev/null; then
-    notify-send "$title" "$msg" 2>/dev/null
+    notify-send "$title" "$msg" 2>/dev/null || true
 
   # 3. WSL: Native Windows 10/11 Toast Notification via PowerShell
   elif command -v powershell.exe &>/dev/null; then
