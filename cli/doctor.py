@@ -151,6 +151,7 @@ def check_cli_tools(report: DoctorReport):
     print(f"\n{C_BOLD}3. Core CLI & Runtime Tools{C_RESET}")
     tools = [
         ("git", "Git version control", ["git", "--version"]),
+        ("delta", "git-delta syntax diff pager", ["delta", "--version"]),
         ("zsh", "Zsh shell", ["zsh", "--version"]),
         ("rg", "ripgrep search", ["rg", "--version"]),
         ("fd", "fd file finder", ["fd", "--version"]),
@@ -192,18 +193,35 @@ def check_cli_tools(report: DoctorReport):
     else:
         report.warn("Spaceship Zsh prompt", "spaceship.zsh not found (using Starship fallback)")
 
-    # Check fzf-tab Zsh plugin installation
-    fzf_tab_candidates = [
-        Path("/opt/homebrew/opt/fzf-tab/share/fzf-tab/fzf-tab.zsh"),
-        Path("/usr/share/fzf-tab/fzf-tab.zsh"),
-        Path("/home/linuxbrew/.linuxbrew/opt/fzf-tab/share/fzf-tab/fzf-tab.zsh"),
-        home / ".local" / "share" / "fzf-tab" / "fzf-tab.zsh",
+    # Check Zsh plugins (fzf-tab, zsh-autosuggestions, zsh-syntax-highlighting)
+    zsh_plugins = [
+        ("fzf-tab completion menu", "fzf-tab.zsh", [
+            Path("/opt/homebrew/opt/fzf-tab/share/fzf-tab/fzf-tab.zsh"),
+            Path("/usr/share/fzf-tab/fzf-tab.zsh"),
+            Path("/home/linuxbrew/.linuxbrew/opt/fzf-tab/share/fzf-tab/fzf-tab.zsh"),
+            home / ".local" / "share" / "fzf-tab" / "fzf-tab.zsh",
+        ]),
+        ("zsh-autosuggestions", "zsh-autosuggestions.zsh", [
+            Path("/opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh"),
+            Path("/home/linuxbrew/.linuxbrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh"),
+            Path("/usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh"),
+            Path("/usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"),
+            home / ".local" / "share" / "zsh-autosuggestions" / "zsh-autosuggestions.zsh",
+        ]),
+        ("zsh-syntax-highlighting", "zsh-syntax-highlighting.zsh", [
+            Path("/opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"),
+            Path("/home/linuxbrew/.linuxbrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"),
+            Path("/usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"),
+            Path("/usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"),
+            home / ".local" / "share" / "zsh-syntax-highlighting" / "zsh-syntax-highlighting.zsh",
+        ]),
     ]
-    ft_found = next((p for p in fzf_tab_candidates if p.is_file()), None)
-    if ft_found:
-        report.ok("fzf-tab completion menu", str(ft_found).replace(str(home), "~")[:38])
-    else:
-        report.warn("fzf-tab completion menu", "fzf-tab.zsh not found")
+    for plugin_label, plugin_file, candidates in zsh_plugins:
+        found = next((p for p in candidates if p.is_file()), None)
+        if found:
+            report.ok(plugin_label, str(found).replace(str(home), "~")[:38])
+        else:
+            report.warn(plugin_label, f"{plugin_file} not found")
 
 def check_locale(report: DoctorReport):
     print(f"\n{C_BOLD}4. Locale & Multibyte Support{C_RESET}")

@@ -26,11 +26,14 @@ brew "yazi"         # Terminal file manager
 brew "btop"         # Resource monitor (CPU, memory, disks, network)
 brew "dust"         # More intuitive du in Rust
 brew "fzf-tab"      # Interactive zsh completion menu
+brew "zsh-autosuggestions"     # Fish-like fast/unobtrusive autosuggestions for zsh
+brew "zsh-syntax-highlighting" # Fish-like syntax highlighting for zsh
 
 # ----------------------------------------------------------------------
 # Git & Version Control
 # ----------------------------------------------------------------------
 brew "git"          # Fast distributed version control
+brew "git-delta"    # Syntax-highlighting pager for git, diff, and grep output
 brew "lazygit"      # Terminal UI for git
 brew "dura"         # Background automated snapshot daemon for git
 brew "neovim"       # Extensible text editor

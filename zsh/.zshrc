@@ -311,6 +311,43 @@ _step "Dotfiles aliases & functions"
 # Vi-Mode Command Line Editing (Vim keybindings, dynamic cursor shape, Neovim 'v' integration)
 [ -f "$_dot_dir/zsh/vi-mode.zsh" ] && source "$_dot_dir/zsh/vi-mode.zsh"
 
+# Zsh Autosuggestions & Syntax Highlighting (macOS Homebrew, Linuxbrew, apt/dnf/pacman, ~/.local/share)
+for _zsh_autosug in \
+    "/opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh" \
+    "/home/linuxbrew/.linuxbrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh" \
+    "/usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh" \
+    "/usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" \
+    "${XDG_DATA_HOME:-$HOME/.local/share}/zsh-autosuggestions/zsh-autosuggestions.zsh"; do
+    if [ -f "$_zsh_autosug" ]; then
+        if [ ! "${_zsh_autosug}.zwc" -nt "$_zsh_autosug" ]; then
+            zcompile -R -- "${_zsh_autosug}.zwc" "$_zsh_autosug" 2>/dev/null || true
+        fi
+        ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#6c7086"
+        ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+        ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=20
+        source "$_zsh_autosug"
+        break
+    fi
+done
+unset _zsh_autosug
+
+for _zsh_synhl in \
+    "/opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" \
+    "/home/linuxbrew/.linuxbrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" \
+    "/usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" \
+    "/usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" \
+    "${XDG_DATA_HOME:-$HOME/.local/share}/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"; do
+    if [ -f "$_zsh_synhl" ]; then
+        if [ ! "${_zsh_synhl}.zwc" -nt "$_zsh_synhl" ]; then
+            zcompile -R -- "${_zsh_synhl}.zwc" "$_zsh_synhl" 2>/dev/null || true
+        fi
+        ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets)
+        source "$_zsh_synhl"
+        break
+    fi
+done
+unset _zsh_synhl
+
 # Startup Summary Card & Rotating Tips
 [ -f "$_dot_dir/zsh/banner.zsh" ] && source "$_dot_dir/zsh/banner.zsh"
 

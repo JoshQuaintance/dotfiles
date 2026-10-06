@@ -1,7 +1,132 @@
-# System & Shell Productivity Helpers
-
+# Interactive TCP Port Inspector & Killer (port)
+# Usage:
+#   port             -> Interactive modal-Vim FZF browser of all listening TCP ports (Enter/x to kill)
+#   port <number>    -> Inspect process listening on <number>
+#   port -k <number> -> Kill process listening on <number>
 port() {
-  lsof -i :"$1"
+  if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    printf "\033[1;38;2;137;180;250mport\033[0m — Inspect or kill processes listening on TCP ports (macOS & Linux)\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  port               Interactive modal-Vim FZF browser of listening ports\n"
+    printf "  port <port>        Show process bound to <port>\n"
+    printf "  port -k <port>     Terminate process bound to <port>\n"
+    return 0
+  fi
+
+  local kill_mode=false
+  if [ "$1" = "-k" ] || [ "$1" = "--kill" ]; then
+    kill_mode=true
+    shift
+  fi
+
+  # Helper to list listening ports across macOS (lsof) and Linux (lsof or ss)
+  _list_listening_ports() {
+    if command -v lsof &>/dev/null; then
+      lsof -iTCP -sTCP:LISTEN -P -n 2>/dev/null | awk 'NR>1 {
+        split($9, a, ":");
+        p = a[length(a)];
+        key = p ":" $2;
+        if (!seen[key]++) {
+          printf "%-8s\t%-8s\t%-18s\t%s\n", p, $2, $1, $9
+        }
+      }' | sort -n -k1,1
+    elif command -v ss &>/dev/null; then
+      ss -tlnp 2>/dev/null | awk 'NR>1 {
+        split($4, a, ":");
+        p = a[length(a)];
+        pid = "-"; proc = "-";
+        if (match($0, /pid=[0-9]+/)) {
+          pid = substr($0, RSTART+4, RLENGTH-4);
+        }
+        if (match($0, /\("[^"]+"/)) {
+          proc = substr($0, RSTART+2, RLENGTH-3);
+        }
+        key = p ":" pid;
+        if (!seen[key]++) {
+          printf "%-8s\t%-8s\t%-18s\t%s\n", p, pid, proc, $4
+        }
+      }' | sort -n -k1,1
+    fi
+  }
+
+  # Direct port argument provided
+  if [ -n "$1" ]; then
+    local target_port="${1#:}"
+    if [ "$kill_mode" = true ]; then
+      local pids=()
+      if command -v lsof &>/dev/null; then
+        pids=($(lsof -t -i :"$target_port" 2>/dev/null))
+      elif command -v fuser &>/dev/null; then
+        pids=($(fuser "${target_port}/tcp" 2>/dev/null))
+      fi
+      if [ "${#pids[@]}" -eq 0 ]; then
+        printf "\033[33mNo process found listening on port %s.\033[0m\n" "$target_port"
+        return 1
+      fi
+      kill -15 "${pids[@]}" 2>/dev/null || kill -9 "${pids[@]}" 2>/dev/null
+      printf "\033[32m✔ Terminated process(es) on port %s (PID: %s)\033[0m\n" "$target_port" "${pids[*]}"
+      return 0
+    fi
+
+    if command -v lsof &>/dev/null; then
+      lsof -i :"$target_port" -P -n
+    elif command -v ss &>/dev/null; then
+      ss -tlnp "sport = :$target_port"
+    else
+      printf "\033[31m✖ Neither lsof nor ss is installed.\033[0m\n" >&2
+      return 1
+    fi
+    return $?
+  fi
+
+  # No port specified: non-TTY or missing fzf prints table
+  local rows
+  rows="$(_list_listening_ports)"
+  if [ -z "$rows" ]; then
+    printf "\033[33mNo listening TCP ports found.\033[0m\n"
+    return 0
+  fi
+
+  if [ ! -t 1 ] || ! command -v fzf &>/dev/null; then
+    printf "\033[1;38;2;137;180;250m%-8s\t%-8s\t%-18s\t%s\033[0m\n" "PORT" "PID" "PROCESS" "ADDRESS"
+    printf "%s\n" "$rows"
+    return 0
+  fi
+
+  local selected
+  selected=$(printf "%s\n" "$rows" | fzf \
+    --delimiter='\t' \
+    --multi \
+    --height=~50% \
+    --layout=reverse \
+    --border=rounded \
+    --disabled \
+    --pointer="❯ " \
+    --marker="✓ " \
+    --prompt="🔌 Listening Ports > " \
+    --header=$'  j/k: navigate │ space: select │ /: search │ enter/x: kill process │ q: quit\n  PORT    \tPID     \tPROCESS           \tADDRESS' \
+    --color="header:italic:dim,prompt:bold:cyan,pointer:bold:red,marker:bold:red" \
+    --bind="start:unbind(esc)" \
+    --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,space:toggle+down,x:accept" \
+    --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,space,x,i,/)+change-prompt(🔍 Search Ports > )+change-header(  type to filter │ esc: normal mode │ enter: kill)+rebind(esc)" \
+    --bind="i:enable-search+unbind(j,k,q,g,G,space,x,i,/)+change-prompt(🔍 Search Ports > )+change-header(  type to filter │ esc: normal mode │ enter: kill)+rebind(esc)" \
+    --bind=$'esc:disable-search+rebind(j,k,q,g,G,space,x,i,/)+change-prompt(🔌 Listening Ports > )+change-header(  j/k: navigate │ space: select │ /: search │ enter/x: kill process │ q: quit\n  PORT    \tPID     \tPROCESS           \tADDRESS)+unbind(esc)' \
+    --preview='pid=$(echo {2} | tr -d " "); if [ -n "$pid" ] && [ "$pid" != "-" ]; then ps -p "$pid" -o pid,ppid,user,%cpu,%mem,etime,command 2>/dev/null; echo ""; lsof -p "$pid" -iTCP -P -n 2>/dev/null | head -n 20; fi' \
+    --preview-window='right:55%:wrap')
+
+  [ -z "$selected" ] && return 0
+
+  while IFS=$'\t' read -r p_col pid_col proc_col addr_col; do
+    local p_clean="${p_col// /}"
+    local pid_clean="${pid_col// /}"
+    if [ -n "$pid_clean" ] && [ "$pid_clean" != "-" ]; then
+      if kill -15 "$pid_clean" 2>/dev/null || kill -9 "$pid_clean" 2>/dev/null; then
+        printf "  \033[32m✔\033[0m Killed \033[1m%s\033[0m (PID %s) on port \033[1;36m%s\033[0m\n" "${proc_col// /}" "$pid_clean" "$p_clean"
+      else
+        printf "  \033[31m✖\033[0m Failed to kill PID %s on port %s\n" "$pid_clean" "$p_clean" >&2
+      fi
+    fi
+  done <<< "$selected"
 }
 
 # Yazi Shell Wrapper (changes directory on exit)
@@ -136,6 +261,60 @@ notify() {
     printf "\033[1;38;2;203;166;247m󰂚 [%s]\033[0m %s\n" "$title" "$msg"
   fi
 }
+
+# Automatic Desktop Notification for Long-Running Foreground Commands (>30s)
+if [[ -o interactive ]]; then
+  zmodload zsh/datetime 2>/dev/null || true
+  typeset -g _auto_notify_cmd=""
+  typeset -g _auto_notify_start=0
+
+  _auto_notify_preexec() {
+    _auto_notify_cmd="$1"
+    _auto_notify_start="${EPOCHSECONDS:-0}"
+  }
+
+  _auto_notify_precmd() {
+    local exit_status=$?
+    if (( _auto_notify_start > 0 )) && [ -n "$_auto_notify_cmd" ] && [ -n "$EPOCHSECONDS" ]; then
+      local elapsed=$(( EPOCHSECONDS - _auto_notify_start ))
+      local threshold="${AUTO_NOTIFY_THRESHOLD:-30}"
+      if (( elapsed >= threshold )); then
+        # Extract first command token (stripping leading sudo/env/time)
+        local -a words
+        words=(${(z)_auto_notify_cmd})
+        local first_word="${words[1]:t}"
+        while [[ "$first_word" == (sudo|env|time|nohup|command|builtin) ]] && (( ${#words[@]} > 1 )); do
+          shift words
+          first_word="${words[1]:t}"
+        done
+
+        # Ignore interactive TUIs, editors, pagers, and shell pickers
+        case "$first_word" in
+          nvim|vim|vi|nano|emacs|code|yazi|y|lazygit|lg|btop|htop|top|man|less|more|ssh|mosh|tmux|zellij|fzf|gl|gco|gstash|wt|gwtdel|gwtclean|gbclean|conf|dotbranch|.branch|.b|scratch|fa|aliases|port|watch|fg|bg)
+            ;;
+          *)
+            local mins=$(( elapsed / 60 ))
+            local secs=$(( elapsed % 60 ))
+            local dur_str="${secs}s"
+            (( mins > 0 )) && dur_str="${mins}m ${secs}s"
+            local short_cmd="${_auto_notify_cmd[1,48]}"
+            if (( exit_status == 0 )); then
+              notify "✔ ${short_cmd} (${dur_str})" "Command Completed" >/dev/null
+            else
+              notify "✖ ${short_cmd} (exit ${exit_status} after ${dur_str})" "Command Failed" >/dev/null
+            fi
+            ;;
+        esac
+      fi
+    fi
+    _auto_notify_cmd=""
+    _auto_notify_start=0
+  }
+
+  autoload -Uz add-zsh-hook
+  add-zsh-hook preexec _auto_notify_preexec
+  add-zsh-hook precmd _auto_notify_precmd
+fi
 
 # String & Snippet Diff Helper (sdiff / strdiff)
 # Usage:

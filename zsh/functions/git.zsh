@@ -176,6 +176,99 @@ gco() {
   fi
 }
 
+# Interactive Git Stash Manager (gstash / gstl)
+# When run with arguments: passes directly to git stash "$@"
+# When run without arguments: opens modal-Vim FZF stash browser with live diff preview
+# Keys: enter = apply, p = pop, x = drop (multi-select supported for drop)
+gstash() {
+  if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+    printf "\033[31m✖ Not inside a git repository or worktree.\033[0m\n" >&2
+    return 1
+  fi
+
+  if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    printf "\033[1;38;2;203;166;247mgstash\033[0m (alias: \033[1mgstl\033[0m) — Interactive modal-Vim Git stash browser\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  gstash             Open interactive stash picker (enter: apply, p: pop, x: drop)\n"
+    printf "  gstash <args...>   Pass arguments directly to 'git stash <args...>'\n"
+    return 0
+  fi
+
+  if [ $# -gt 0 ]; then
+    git stash "$@"
+    return $?
+  fi
+
+  local stashes
+  stashes="$(git stash list --color=always 2>/dev/null)"
+  if [ -z "$stashes" ]; then
+    printf "\033[33mNo git stashes found in this repository.\033[0m\n"
+    return 0
+  fi
+
+  if [ ! -t 1 ] || ! command -v fzf &>/dev/null; then
+    printf "%s\n" "$stashes"
+    return 0
+  fi
+
+  local selection
+  selection=$(printf "%s\n" "$stashes" | fzf \
+    --ansi \
+    --multi \
+    --height=~50% \
+    --layout=reverse \
+    --border=rounded \
+    --disabled \
+    --pointer="❯ " \
+    --marker="✓ " \
+    --prompt="📦 Git Stashes > " \
+    --header="  j/k: navigate │ /: search │ enter: apply │ p: pop │ space+x: drop │ q: quit" \
+    --color="header:italic:dim,prompt:bold:magenta,pointer:bold:cyan,marker:bold:red" \
+    --bind="start:unbind(esc)" \
+    --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,space:toggle+down" \
+    --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,space,i,/)+change-prompt(🔍 Search Stashes > )+change-header(  type to filter │ esc: normal mode │ enter: apply)+rebind(esc)" \
+    --bind="i:enable-search+unbind(j,k,q,g,G,space,i,/)+change-prompt(🔍 Search Stashes > )+change-header(  type to filter │ esc: normal mode │ enter: apply)+rebind(esc)" \
+    --bind="esc:disable-search+rebind(j,k,q,g,G,space,i,/)+change-prompt(📦 Git Stashes > )+change-header(  j/k: navigate │ /: search │ enter: apply │ p: pop │ space+x: drop │ q: quit)+unbind(esc)" \
+    --bind="ctrl-/:toggle-preview,ctrl-d:preview-page-down,ctrl-u:preview-page-up" \
+    --preview='s=$(echo {} | grep -oE "stash@\{[0-9]+\}" | head -n1); [ -n "$s" ] && git stash show --color=always --stat -p "$s" 2>/dev/null' \
+    --preview-window="right:60%:wrap" \
+    --expect="p,x")
+
+  [ -z "$selection" ] && return 0
+
+  local key
+  key=$(echo "$selection" | head -n1)
+  local selected_lines
+  selected_lines=$(echo "$selection" | sed '1d')
+  [ -z "$selected_lines" ] && return 0
+
+  local refs=()
+  while IFS= read -r line; do
+    local r
+    r=$(echo "$line" | grep -oE 'stash@\{[0-9]+\}' | head -n1)
+    [ -n "$r" ] && refs+=("$r")
+  done <<< "$selected_lines"
+
+  [ ${#refs[@]} -eq 0 ] && return 0
+
+  case "$key" in
+    p)
+      git stash pop "${refs[1]}"
+      ;;
+    x)
+      # Drop in reverse index order so stash@{N} indices don't shift mid-loop
+      local -a sorted_refs
+      sorted_refs=($(printf "%s\n" "${refs[@]}" | sort -t'{' -k2 -rn))
+      for r in "${sorted_refs[@]}"; do
+        git stash drop "$r"
+      done
+      ;;
+    *)
+      git stash apply "${refs[1]}"
+      ;;
+  esac
+}
+
 # Git Worktree Interactive Switcher (wt)
 # Dynamically queries git worktrees in the current repo and provides an interactive fzf selector
 wt() {

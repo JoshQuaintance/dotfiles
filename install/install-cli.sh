@@ -39,7 +39,7 @@ if command -v brew &>/dev/null; then
         # Install only specifically requested tools
         for pkg in "${REQUESTED_TOOLS[@]}"; do
             case "$pkg" in
-                ripgrep|fd|fzf|zoxide|starship|eza|atuin|bat|yazi|dust|btop|fzf-tab|git|lazygit)
+                ripgrep|fd|fzf|zoxide|starship|spaceship|eza|atuin|bat|yazi|dust|btop|fzf-tab|zsh-autosuggestions|zsh-syntax-highlighting|git|git-delta|lazygit)
                     if brew list "$pkg" &>/dev/null; then
                         ask_update_tool "$pkg" "$(brew info "$pkg" 2>/dev/null | head -n 1 | awk '{print $3}')" DO_UPD
                         [ "$DO_UPD" = true ] && brew upgrade "$pkg" 2>/dev/null || true
@@ -91,7 +91,7 @@ elif [ "$OS" = "Linux" ]; then
         fi
     elif command -v pacman &>/dev/null; then
         # Arch Linux
-        run_sudo pacman -S --noconfirm --needed curl wget git base-devel ripgrep fd fzf eza atuin bat tar gzip unzip
+        run_sudo pacman -S --noconfirm --needed curl wget git base-devel ripgrep fd fzf eza atuin bat git-delta zsh-autosuggestions zsh-syntax-highlighting tar gzip unzip
     fi
 
     # 1. eza
@@ -169,7 +169,30 @@ elif [ "$OS" = "Linux" ]; then
         fi
     fi
 
-    # 6. btop
+    # 6. git-delta (package manager or standalone binary)
+    if is_tool_requested "git-delta" || is_tool_requested "delta"; then
+        if ! command -v delta &>/dev/null; then
+            log "Installing git-delta..."
+            if command -v apt-get &>/dev/null; then
+                run_sudo apt-get install -y git-delta 2>/dev/null || true
+            elif command -v dnf &>/dev/null; then
+                run_sudo dnf install -y git-delta 2>/dev/null || true
+            fi
+            if ! command -v delta &>/dev/null; then
+                DELTA_ARCH="x86_64-unknown-linux-musl"
+                [ "$ARCH" = "aarch64" -o "$ARCH" = "arm64" ] && DELTA_ARCH="aarch64-unknown-linux-gnu"
+                curl -fsSL "https://github.com/dandavison/delta/releases/download/0.18.2/delta-0.18.2-${DELTA_ARCH}.tar.gz" 2>/dev/null | tar -xz -C "/tmp" 2>/dev/null || true
+                if [ -f "/tmp/delta-0.18.2-${DELTA_ARCH}/delta" ]; then
+                    mv "/tmp/delta-0.18.2-${DELTA_ARCH}/delta" "$HOME/.local/bin/delta"
+                    chmod +x "$HOME/.local/bin/delta"
+                    rm -rf "/tmp/delta-0.18.2-${DELTA_ARCH}"
+                    success "git-delta ready!"
+                fi
+            fi
+        fi
+    fi
+
+    # 7. btop
     if is_tool_requested "btop"; then
         if ! command -v btop &>/dev/null; then
             if command -v apt-get &>/dev/null; then
@@ -182,17 +205,25 @@ elif [ "$OS" = "Linux" ]; then
         fi
     fi
 
-    # 7. fzf-tab (clone to ~/.local/share/fzf-tab if not present)
-    if is_tool_requested "fzf-tab"; then
-        if [ ! -d "${XDG_DATA_HOME:-$HOME/.local/share}/fzf-tab" ]; then
-            log "Installing fzf-tab..."
-            mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}"
-            git clone --depth 1 https://github.com/Aloxaf/fzf-tab "${XDG_DATA_HOME:-$HOME/.local/share}/fzf-tab" 2>/dev/null || true
-            success "fzf-tab ready!"
-        fi
+    # 8. Zsh Plugins: fzf-tab, zsh-autosuggestions, zsh-syntax-highlighting
+    mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}"
+    if is_tool_requested "fzf-tab" && [ ! -d "${XDG_DATA_HOME:-$HOME/.local/share}/fzf-tab" ]; then
+        log "Installing fzf-tab..."
+        git clone --depth 1 https://github.com/Aloxaf/fzf-tab "${XDG_DATA_HOME:-$HOME/.local/share}/fzf-tab" 2>/dev/null || true
+        success "fzf-tab ready!"
+    fi
+    if is_tool_requested "zsh-autosuggestions" && [ ! -d "${XDG_DATA_HOME:-$HOME/.local/share}/zsh-autosuggestions" ]; then
+        log "Installing zsh-autosuggestions..."
+        git clone --depth 1 https://github.com/zsh-users/zsh-autosuggestions "${XDG_DATA_HOME:-$HOME/.local/share}/zsh-autosuggestions" 2>/dev/null || true
+        success "zsh-autosuggestions ready!"
+    fi
+    if is_tool_requested "zsh-syntax-highlighting" && [ ! -d "${XDG_DATA_HOME:-$HOME/.local/share}/zsh-syntax-highlighting" ]; then
+        log "Installing zsh-syntax-highlighting..."
+        git clone --depth 1 https://github.com/zsh-users/zsh-syntax-highlighting "${XDG_DATA_HOME:-$HOME/.local/share}/zsh-syntax-highlighting" 2>/dev/null || true
+        success "zsh-syntax-highlighting ready!"
     fi
 
-    # 8. Developer Fonts (Miracode, FiraCode NF, Monocraft)
+    # 9. Developer Fonts (Miracode, FiraCode NF, Monocraft)
     if is_tool_requested "fonts" || is_tool_requested "font-miracode" || is_tool_requested "font-fira-code-nerd-font"; then
         if [ -x "$DOTFILES_DIR/install/install-fonts.sh" ]; then
             bash "$DOTFILES_DIR/install/install-fonts.sh"

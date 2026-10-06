@@ -105,3 +105,77 @@ _up() {
 }
 (( $+functions[compdef] )) && compdef _up up
 
+# Smart Directory Tree: 'tree' (full), 'tree 3' (3 levels), 'tree 2 src/' or 'tree src/ 2', 'tree -L 3'
+unalias tree lt 2>/dev/null || true
+
+tree() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "Usage: tree [N] [path] [flags...]\n"
+    printf "  tree          -> Full recursive directory tree\n"
+    printf "  tree 3        -> Tree limited to 3 levels deep\n"
+    printf "  tree 2 src/   -> Tree of src/ limited to 2 levels deep\n"
+    printf "  tree -L 3     -> Standard -L / --level flag also supported\n"
+    return 0
+  fi
+
+  local level=""
+  if [[ "$1" =~ ^[0-9]+$ ]] && [ ! -e "$1" ]; then
+    level="$1"
+    shift
+  elif (( $# >= 2 )) && [[ "$2" =~ ^[0-9]+$ ]] && [ ! -e "$2" ] && [[ "$1" != "-L" && "$1" != "--level" ]]; then
+    level="$2"
+    set -- "$1" "${@:3}"
+  fi
+
+  if command -v eza &>/dev/null; then
+    if [ -n "$level" ]; then
+      eza --tree --icons --level="$level" "$@"
+    else
+      eza --tree --icons "$@"
+    fi
+  elif command -v tree &>/dev/null; then
+    if [ -n "$level" ]; then
+      command tree -C -L "$level" "$@"
+    else
+      command tree -C "$@"
+    fi
+  else
+    if [ -n "$level" ]; then
+      find "${1:-.}" -maxdepth "$level" 2>/dev/null
+    else
+      find "${1:-.}" 2>/dev/null
+    fi
+  fi
+}
+
+# Level-2 Default Tree: 'lt' (2 levels), 'lt 3' (3 levels), 'lt src/' (2 levels in src/)
+lt() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "Usage: lt [N] [path] [flags...]\n"
+    printf "  lt            -> Tree limited to 2 levels deep (default)\n"
+    printf "  lt 3          -> Tree limited to 3 levels deep\n"
+    printf "  lt src/       -> Tree of src/ limited to 2 levels deep\n"
+    return 0
+  fi
+
+  local has_level=false
+  if [[ "$1" =~ ^[0-9]+$ ]] && [ ! -e "$1" ]; then
+    has_level=true
+  elif (( $# >= 2 )) && [[ "$2" =~ ^[0-9]+$ ]] && [ ! -e "$2" ] && [[ "$1" != "-L" && "$1" != "--level" ]]; then
+    has_level=true
+  else
+    local arg
+    for arg in "$@"; do
+      if [[ "$arg" == -L* || "$arg" == --level* ]]; then
+        has_level=true
+        break
+      fi
+    done
+  fi
+
+  if [ "$has_level" = true ]; then
+    tree "$@"
+  else
+    tree 2 "$@"
+  fi
+}

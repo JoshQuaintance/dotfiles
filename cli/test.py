@@ -258,7 +258,7 @@ def test_shell_runtime(report: TestReport, dotfiles: Path):
 
     # Custom functions check
     func_check_code = """
-for fn in take up groot gmain conf dotbranch clone port wt gwtnew gwts gwtdel gwtclean gbclean y copy paste scratch extract npmr bunr pnpmr fa toggle-autols notify gl gco sdiff; do
+for fn in take up tree lt groot gmain conf dotbranch clone port wt gwtnew gwts gwtdel gwtclean gbclean gstash y copy paste scratch extract npmr bunr pnpmr fa toggle-autols notify gl gco sdiff; do
     if ! (( $+functions[$fn] )); then
         echo "Missing function: $fn"
     fi
@@ -267,7 +267,7 @@ done
     code, out, err = run_cmd(["zsh", "-i", "-c", func_check_code], timeout=5, env=zsh_env)
     missing_funcs = [line.strip() for line in out.splitlines() if line.startswith("Missing function:")]
     if not missing_funcs:
-        report.ok("Custom shell functions", "All 28 functions registered in zsh")
+        report.ok("Custom shell functions", "All 31 functions registered in zsh")
     else:
         report.fail("Custom shell functions", missing_funcs[0])
 
@@ -323,7 +323,11 @@ print -l "${collisions[@]}"
 set -e
 # Universal functions
 up -h >/dev/null
+tree -h >/dev/null
+tree 1 "{dotfiles}/zsh" >/dev/null
+lt 1 "{dotfiles}/zsh" >/dev/null
 fa -p >/dev/null
+port -h >/dev/null
 take /tmp/test-smoke-take >/dev/null && cd - >/dev/null && rm -rf /tmp/test-smoke-take
 notify "test" "dottest" >/dev/null
 extract >/dev/null 2>&1 || true
@@ -338,6 +342,7 @@ dotbranch -s >/dev/null
     groot >/dev/null
     gmain >/dev/null
     gwts >/dev/null
+    gstash -h >/dev/null
     gl -n 1 >/dev/null
 )
 """

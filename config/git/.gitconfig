@@ -30,6 +30,17 @@
 [core]
     excludesfile = ~/.gitignore_global
     autocrlf = input
+    pager = delta
+
+[interactive]
+    diffFilter = delta --color-only
+
+[delta]
+    navigate = true
+    syntax-theme = Catppuccin Mocha
+    line-numbers = true
+    hyperlinks = true
+    decorations = true
 
 [help]
     autocorrect = prompt
