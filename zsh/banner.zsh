@@ -3,12 +3,16 @@
 if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
     _t_total=$(( EPOCHREALTIME - _t_start ))
     _tot_str=$(printf "%.2fs" "$_t_total")
-    _arch="$(uname -m)"
-    _os_name="$(uname -s)"
+    _arch="${CPUTYPE:-$(uname -m)}"
 
-    if [ "$_os_name" = "Darwin" ]; then
+    if [[ "$OSTYPE" == darwin* ]]; then
+        _os_name="Darwin"
         _os_str="macOS (${_arch})"
+    elif [[ "$OSTYPE" == linux* ]]; then
+        _os_name="Linux"
+        _os_str="Linux (${_arch})"
     else
+        _os_name="$(uname -s)"
         _os_str="${_os_name} (${_arch})"
     fi
 
@@ -33,15 +37,14 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
     [ -z "$_dot_hash" ] && _dot_hash="$(git -C "$_dot_dir" rev-parse --short HEAD 2>/dev/null || echo "")"
     _dot_info="${_dot_branch}${_dot_hash:+ (${_dot_hash})}"
 
-    # 2. Battery status (macOS pmset + Linux sysfs /sys/class/power_supply)
+    # 2. Battery status (macOS pmset pure Zsh matching + Linux sysfs /sys/class/power_supply)
     _batt_info=""
     _batt_label="Battery:"
     if command -v pmset &>/dev/null; then
-        # macOS
         _batt_raw="$(pmset -g batt 2>/dev/null)"
-        _batt_pct="$(echo "$_batt_raw" | grep -Eo '[0-9]+%' | head -n 1)"
-        if [ -n "$_batt_pct" ]; then
-            if echo "$_batt_raw" | grep -qi "charging" && ! echo "$_batt_raw" | grep -qi "not charging"; then
+        if [[ "$_batt_raw" =~ ([0-9]+%) ]]; then
+            _batt_pct="${match[1]}"
+            if [[ "${(L)_batt_raw}" == *"charging"* && "${(L)_batt_raw}" != *"not charging"* && "${(L)_batt_raw}" != *"discharging"* ]]; then
                 _batt_info="${_batt_pct} ⚡"
             else
                 _batt_info="${_batt_pct} 🔋"
@@ -53,8 +56,9 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
         _bats=(/sys/class/power_supply/BAT*(N) /sys/class/power_supply/battery(N))
         for _bat in "${_bats[@]}"; do
             if [ -f "$_bat/capacity" ]; then
-                _pct="$(cat "$_bat/capacity" 2>/dev/null)%"
-                _st="$(cat "$_bat/status" 2>/dev/null)"
+                read -r _pct_val < "$_bat/capacity" 2>/dev/null
+                read -r _st < "$_bat/status" 2>/dev/null
+                _pct="${_pct_val}%"
                 if [ "$_st" = "Charging" ]; then
                     _batt_info="${_pct} ⚡"
                 elif [ "$_st" = "Full" ]; then
@@ -72,14 +76,43 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
         _batt_info="Online"
     fi
 
-    # 3. System Uptime (macOS sysctl + Linux /proc/uptime)
+    # 3 & 4. System Uptime, CPU Load & Memory Stats (batched sysctl on macOS + Linux /proc)
     _uptime_str="N/A"
     _up_sec=0
+    _cpu_load=""
+    _mem_str="N/A"
+
     if [ "$_os_name" = "Darwin" ]; then
-        _boot_sec="$(sysctl -n kern.boottime 2>/dev/null | awk '{print $4}' | tr -d ',')"
-        [ -n "$_boot_sec" ] && _up_sec=$(( EPOCHSECONDS - _boot_sec ))
-    elif [ -f /proc/uptime ]; then
-        _up_sec=$(awk '{print int($1)}' /proc/uptime 2>/dev/null)
+        _sysctl_out="$(sysctl -n kern.boottime vm.loadavg hw.memsize 2>/dev/null)"
+        if [ -n "$_sysctl_out" ]; then
+            local -a _sys_lines
+            _sys_lines=("${(@f)_sysctl_out}")
+            if [[ "${_sys_lines[1]}" =~ sec\ =\ ([0-9]+) ]]; then
+                _up_sec=$(( EPOCHSECONDS - match[1] ))
+            fi
+            _tot_ram=$(( ${_sys_lines[3]:-0} / 1073741824 ))
+        else
+            _tot_ram=0
+        fi
+        if command -v vm_stat &>/dev/null; then
+            _mem_str="$(vm_stat | awk -v tot="$_tot_ram" '
+                /page size of/ { ps = substr($8, 1, length($8)) + 0 }
+                /Pages active:/ { a = substr($3, 1, length($3)-1) + 0 }
+                /Pages wired/ { w = substr($4, 1, length($4)-1) + 0 }
+                /occupied by compressor:/ { c = substr($5, 1, length($5)-1) + 0 }
+                END {
+                    if (ps == 0) ps = 16384;
+                    used = (a + w + c) * ps / (1024*1024*1024);
+                    printf "%.0f/%.0fGB", used, tot;
+                }
+            ')"
+        fi
+    else
+        [ -f /proc/uptime ] && _up_sec=$(awk '{print int($1)}' /proc/uptime 2>/dev/null)
+        [ -f /proc/loadavg ] && _cpu_load="$(awk '{print $1}' /proc/loadavg 2>/dev/null)"
+        if [ -f /proc/meminfo ]; then
+            _mem_str="$(awk '/MemTotal:/ {tot=$2} /MemAvailable:/ {avail=$2} END { used=(tot-avail)/1048576; tot_gb=tot/1048576; printf "%.0f/%.0fGB", used, tot_gb }' /proc/meminfo 2>/dev/null)"
+        fi
     fi
 
     if [ -n "$_up_sec" ] && [ "$_up_sec" -gt 0 ]; then
@@ -95,32 +128,6 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
         fi
     fi
 
-    # 4. CPU Load & Memory Stats (macOS vm_stat + Linux /proc)
-    _cpu_load=""
-    _mem_str="N/A"
-    if [ "$_os_name" = "Darwin" ]; then
-        _cpu_load="$(sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}')"
-        if command -v vm_stat &>/dev/null; then
-            _tot_ram=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1073741824 ))
-            _mem_str="$(vm_stat | awk -v tot="$_tot_ram" '
-                /page size of/ { ps = substr($8, 1, length($8)) + 0 }
-                /Pages active:/ { a = substr($3, 1, length($3)-1) + 0 }
-                /Pages wired/ { w = substr($4, 1, length($4)-1) + 0 }
-                /occupied by compressor:/ { c = substr($5, 1, length($5)-1) + 0 }
-                END {
-                    if (ps == 0) ps = 16384;
-                    used = (a + w + c) * ps / (1024*1024*1024);
-                    printf "%.0f/%.0fGB", used, tot;
-                }
-            ')"
-        fi
-    else
-        [ -f /proc/loadavg ] && _cpu_load="$(awk '{print $1}' /proc/loadavg 2>/dev/null)"
-        if [ -f /proc/meminfo ]; then
-            _mem_str="$(awk '/MemTotal:/ {tot=$2} /MemAvailable:/ {avail=$2} END { used=(tot-avail)/1048576; tot_gb=tot/1048576; printf "%.0f/%.0fGB", used, tot_gb }' /proc/meminfo 2>/dev/null)"
-        fi
-    fi
-
     # 5. Disk Space
     _disk_str="$(df -h / 2>/dev/null | awk 'NR==2 {printf "%s (%s)", $4, $5}')"
 
@@ -129,14 +136,17 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
         "'npmr' / 'bunr'   → Interactive script runner"
         "'.check' / '.update' → Check or update dotfiles"
         "'.doctor'         → System health & dotfiles diagnostics"
-        "'groot'           → Jump to git project root"
+        "'.branch'         → Switch active dotfiles branch & reload"
+        "'groot' / 'gmain' → Jump to worktree or main repo root"
         "'scratch'         → Instant terminal notes buffer"
         "'conf <target>'   → Edit config with fuzzy matcher & auto-reload"
-        "'wt'              → Interactive git worktree switcher"
+        "'wt' / 'gwtclean' → Interactive git worktree switcher & pruner"
         "'x <archive>'     → Universal archive extractor"
         "'up <N|dir>'      → Smart parent directory navigation"
         "'gprune'          → Prune remote git branches"
-        "'gbclean'         → Delete merged git branches"
+        "'gbclean'         → Interactive merged git branch cleaner"
+        "'gco' / 'gl'      → Modal Vim branch switcher & commit browser"
+        "'sdiff <a> <b>'   → Colored character/word diff & scratch diff"
         "'take <dir>'      → mkdir -p and cd in one step"
         "'sz'              → Reload ~/.zshrc and aliases"
         "'als'             → Toggle auto-ls after cd"

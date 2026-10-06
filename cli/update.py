@@ -2,6 +2,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from cli.doctor import DoctorReport, check_and_heal_symlinks
 from cli.manifest import get_dotfiles_dir
 from cli.test import run_tests
 
@@ -113,6 +114,8 @@ def run_update(check_only: bool = False, auto_apply: bool = False, update_all: b
             if code == 0:
                 code, new_head = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "--short", "HEAD"])
                 print(f"{C_GREEN}✔{C_RESET} Dotfiles successfully updated to {C_CYAN}{new_head}{C_RESET}!")
+                # Automatically repair any configuration symlinks that moved in the pulled commit
+                check_and_heal_symlinks(DoctorReport(), dotfiles, fix=True)
                 updated_git = True
             else:
                 print(f"{C_RED}✖ Git pull failed. Please check {dotfiles}{C_RESET}", file=sys.stderr)

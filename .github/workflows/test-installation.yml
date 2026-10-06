@@ -59,6 +59,7 @@ jobs:
         run: |
           ls -la ~/.zshrc
           ls -la ~/.zshenv
+          ls -la ~/.config/spaceship.zsh
           ls -la ~/.config/starship.toml
           ls -la ~/.config/bat/config
           ls -la ~/.config/eza/theme.yml
@@ -108,6 +109,7 @@ jobs:
         run: |
           ls -la ~/.zshrc
           ls -la ~/.zshenv
+          ls -la ~/.config/spaceship.zsh
           ls -la ~/.config/starship.toml
           ls -la ~/.config/bat/config
           ls -la ~/.config/eza/theme.yml

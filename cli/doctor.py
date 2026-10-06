@@ -156,7 +156,7 @@ def check_cli_tools(report: DoctorReport):
         ("fd", "fd file finder", ["fd", "--version"]),
         ("fzf", "fzf fuzzy finder", ["fzf", "--version"]),
         ("zoxide", "zoxide smart cd", ["zoxide", "--version"]),
-        ("starship", "Starship prompt", ["starship", "--version"]),
+        ("starship", "Starship prompt (fallback)", ["starship", "--version"]),
         ("eza", "eza modern ls", ["eza", "--version"]),
         ("atuin", "Atuin shell history", ["atuin", "--version"]),
         ("bat", "bat syntax viewer", ["bat", "--version"]),
@@ -175,6 +175,35 @@ def check_cli_tools(report: DoctorReport):
             report.ok(label, first_line[:38])
         else:
             report.warn(label, f"{bin_name} binary not found")
+
+    # Check Spaceship Zsh prompt installation
+    home = Path.home()
+    spaceship_candidates = [
+        Path("/opt/homebrew/opt/spaceship/spaceship.zsh"),
+        Path("/home/linuxbrew/.linuxbrew/opt/spaceship/spaceship.zsh"),
+        Path("/usr/local/opt/spaceship/spaceship.zsh"),
+        home / ".oh-my-zsh" / "custom" / "themes" / "spaceship-prompt" / "spaceship.zsh",
+        home / ".spaceship-prompt" / "spaceship.zsh",
+    ]
+    sp_found = next((p for p in spaceship_candidates if p.is_file()), None)
+    if sp_found:
+        zwc_status = " (.zwc compiled)" if sp_found.with_name("spaceship.zsh.zwc").is_file() else ""
+        report.ok("Spaceship Zsh prompt", f"{sp_found.parent.name}{zwc_status}")
+    else:
+        report.warn("Spaceship Zsh prompt", "spaceship.zsh not found (using Starship fallback)")
+
+    # Check fzf-tab Zsh plugin installation
+    fzf_tab_candidates = [
+        Path("/opt/homebrew/opt/fzf-tab/share/fzf-tab/fzf-tab.zsh"),
+        Path("/usr/share/fzf-tab/fzf-tab.zsh"),
+        Path("/home/linuxbrew/.linuxbrew/opt/fzf-tab/share/fzf-tab/fzf-tab.zsh"),
+        home / ".local" / "share" / "fzf-tab" / "fzf-tab.zsh",
+    ]
+    ft_found = next((p for p in fzf_tab_candidates if p.is_file()), None)
+    if ft_found:
+        report.ok("fzf-tab completion menu", str(ft_found).replace(str(home), "~")[:38])
+    else:
+        report.warn("fzf-tab completion menu", "fzf-tab.zsh not found")
 
 def check_locale(report: DoctorReport):
     print(f"\n{C_BOLD}4. Locale & Multibyte Support{C_RESET}")

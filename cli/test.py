@@ -231,9 +231,11 @@ def test_shell_runtime(report: TestReport, dotfiles: Path):
         report.fail("Completions engine", "zsh binary not found")
         return
 
+    zsh_env = {"DOTFILES_DIR": str(dotfiles), "ZSH_STARTUP_VERBOSE": "false"}
+
     # Interactive boot test & stderr inspection
     t0 = time.perf_counter()
-    code, out, err = run_cmd(["zsh", "-i", "-c", "exit"], timeout=10, env={"ZSH_STARTUP_VERBOSE": "false"})
+    code, out, err = run_cmd(["zsh", "-i", "-c", "exit"], timeout=10, env=zsh_env)
     elapsed_ms = int((time.perf_counter() - t0) * 1000)
 
     # Filter benign terminal warnings in headless CI
@@ -262,7 +264,7 @@ for fn in take up groot gmain conf dotbranch clone port wt gwtnew gwts gwtdel gw
     fi
 done
 """
-    code, out, err = run_cmd(["zsh", "-i", "-c", func_check_code], timeout=5)
+    code, out, err = run_cmd(["zsh", "-i", "-c", func_check_code], timeout=5, env=zsh_env)
     missing_funcs = [line.strip() for line in out.splitlines() if line.startswith("Missing function:")]
     if not missing_funcs:
         report.ok("Custom shell functions", "All 28 functions registered in zsh")
@@ -277,7 +279,7 @@ for comp in _git _uv _fzf_complete _up _wt _gwtnew _gwtdel; do
     fi
 done
 """
-    code, out, err = run_cmd(["zsh", "-i", "-c", comp_check_code], timeout=5)
+    code, out, err = run_cmd(["zsh", "-i", "-c", comp_check_code], timeout=5, env=zsh_env)
     missing_comps = [line.strip() for line in out.splitlines() if line.startswith("Missing completion:")]
     if not missing_comps:
         report.ok("Completions engine", "All completions active (_git, _uv, _fzf, _up, _wt, _gwtn, _gwtdel)")
@@ -288,7 +290,7 @@ done
     reload_code = """
 source ~/.zshrc
 """
-    code, out, err = run_cmd(["zsh", "-i", "-c", reload_code], timeout=10, env={"ZSH_STARTUP_VERBOSE": "false"})
+    code, out, err = run_cmd(["zsh", "-i", "-c", reload_code], timeout=10, env=zsh_env)
     reload_errors = []
     for line in err.splitlines():
         line_clean = line.strip()
@@ -309,7 +311,7 @@ for a in ${(k)aliases}; do
 done
 print -l "${collisions[@]}"
 """
-    code, out, err = run_cmd(["zsh", "-i", "-c", collision_check_code], timeout=5)
+    code, out, err = run_cmd(["zsh", "-i", "-c", collision_check_code], timeout=5, env=zsh_env)
     collisions = [line.strip() for line in out.splitlines() if line.strip()]
     if not collisions:
         report.ok("Alias & function namespaces", "Clean separation (0 colliding names)")
@@ -339,7 +341,7 @@ dotbranch -s >/dev/null
     gl -n 1 >/dev/null
 )
 """
-    code, out, err = run_cmd(["zsh", "-i", "-c", smoke_test_code], timeout=10)
+    code, out, err = run_cmd(["zsh", "-i", "-c", smoke_test_code], timeout=10, env=zsh_env)
     if code == 0:
         report.ok("Function runtime execution", "Core custom functions run cleanly (smoke test)")
     else:

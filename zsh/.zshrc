@@ -92,9 +92,12 @@ elif [ -f "/home/linuxbrew/.linuxbrew/bin/brew" ]; then
 fi
 _step "Homebrew environment"
 
+# Resolve canonical dotfiles repository directory (follows ~/.zshrc symlink in CI or custom checkouts)
+export DOTFILES_DIR="${DOTFILES_DIR:-${${(%):-%x}:A:h:h}}"
+
 # Oh My Zsh configuration
 export ZSH="$HOME/.oh-my-zsh"
-export ZSH_CUSTOM="${DOTFILES_DIR:-$HOME/.dotfiles}/zsh/custom"
+export ZSH_CUSTOM="$DOTFILES_DIR/zsh/custom"
 export ZSH_DISABLE_COMPFIX="true"
 export SHORT_HOST="${HOST/.*/}"
 export ZSH_COMPDUMP="${ZDOTDIR:-$HOME}/.zcompdump-${SHORT_HOST}-${ZSH_VERSION}"
@@ -295,11 +298,14 @@ _step "CLI tools (Atuin, Zoxide, FZF, Bun, Bat)"
 # ==========================================
 # Functions & Aliases
 # ==========================================
-_dot_dir="${DOTFILES_DIR:-$HOME/.dotfiles}"
+_dot_dir="$DOTFILES_DIR"
 
 [ -f "$_dot_dir/zsh/functions.zsh" ] && source "$_dot_dir/zsh/functions.zsh"
-[ -f "$HOME/.aliases" ] && source "$HOME/.aliases"
-[ -f "$_dot_dir/zsh/.aliases" ] && [ ! -f "$HOME/.aliases" ] && source "$_dot_dir/zsh/.aliases"
+if [ -f "$_dot_dir/zsh/.aliases" ]; then
+    source "$_dot_dir/zsh/.aliases"
+elif [ -f "$HOME/.aliases" ]; then
+    source "$HOME/.aliases"
+fi
 _step "Dotfiles aliases & functions"
 
 # Vi-Mode Command Line Editing (Vim keybindings, dynamic cursor shape, Neovim 'v' integration)
