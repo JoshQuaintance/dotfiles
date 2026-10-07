@@ -404,6 +404,149 @@ ga() {
   esac
 }
 
+# Interactive Single-File Git History & Time-Travel (gfile / gfh)
+# Usage:
+#   gfile <file>       -> Browse commit history for <file> with file-scoped delta diff preview
+#   gfile              -> Pick a tracked file via FZF first, then browse its commit history
+#   Keys: enter = view diff, ctrl-v = nvim DiffviewFileHistory, r = restore file from commit, y = copy SHA
+gfile() {
+  if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    printf "\033[1;38;2;203;166;247mgfile\033[0m (alias: \033[1mgfh\033[0m) — Interactive single-file Git commit history & time-travel\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  gfile <path>       Browse commits that touched <path> with file-scoped delta preview\n"
+    printf "  gfile              Pick a tracked file interactively first, then browse its history\n"
+    printf "  Enter              View full commit diff for this file\n"
+    printf "  Ctrl-V             Open in Neovim DiffviewFileHistory\n"
+    printf "  r                  Restore file contents from selected commit (with confirmation)\n"
+    printf "  y                  Copy commit SHA to clipboard\n"
+    return 0
+  fi
+
+  if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+    printf "\033[31m✖ Not inside a git repository or worktree.\033[0m\n" >&2
+    return 1
+  fi
+
+  local target_file="$1"
+
+  # If no file argument provided, let user pick a tracked file via modal-Vim FZF
+  if [ -z "$target_file" ]; then
+    if [ ! -t 1 ] || ! command -v fzf &>/dev/null; then
+      printf "\033[33mUsage: gfile <path>\033[0m\n" >&2
+      return 1
+    fi
+
+    target_file=$(git ls-files 2>/dev/null | fzf \
+      --height=~55% \
+      --layout=reverse \
+      --border=rounded \
+      --disabled \
+      --pointer="❯ " \
+      --prompt="📄 Select File for History > " \
+      --header="  j/k: navigate │ /: search │ enter: view git history │ q: quit" \
+      --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
+      --bind="start:unbind(esc)" \
+      --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept" \
+      --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search Files > )+change-header(  type to filter │ esc: normal mode │ enter: select)+rebind(esc)" \
+      --bind="i:enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search Files > )+change-header(  type to filter │ esc: normal mode │ enter: select)+rebind(esc)" \
+      --bind="esc:disable-search+rebind(j,k,q,g,G,i,/)+change-prompt(📄 Select File for History > )+change-header(  j/k: navigate │ /: search │ enter: view git history │ q: quit)+unbind(esc)" \
+      --preview='if command -v bat &>/dev/null; then bat --color=always --style=numbers --line-range :250 {} 2>/dev/null; else head -n 200 {} 2>/dev/null; fi' \
+      --preview-window='right:55%:wrap')
+
+    [ -z "$target_file" ] && return 0
+  fi
+
+  local commits
+  commits=$(git log --follow --color=always --format='%C(auto)%h%d %s %C(dim white)(%cr) %C(dim cyan)<%an>%Creset' -- "$target_file" 2>/dev/null)
+  if [ -z "$commits" ]; then
+    printf "\033[33mNo git commit history found for '%s'.\033[0m\n" "$target_file"
+    return 1
+  fi
+
+  if [ ! -t 1 ] || ! command -v fzf &>/dev/null; then
+    printf "%s\n" "$commits"
+    return 0
+  fi
+
+  local hdr="  j/k: move │ /: search │ enter: diff │ ctrl-v: nvim diffview │ r: restore file │ y: copy SHA │ q: quit"
+  local preview_cmd="
+    h=\$(echo {} | sed 's/\x1b\[[0-9;]*m//g' | awk '{print \$1}')
+    if [ -n \"\$h\" ]; then
+      if command -v delta &>/dev/null; then
+        git show --stat -p \"\$h\" -- '$target_file' 2>/dev/null | delta --paging=never --width=\"\${FZF_PREVIEW_COLUMNS:-80}\"
+      else
+        git show --color=always --stat -p \"\$h\" -- '$target_file' 2>/dev/null
+      fi
+    fi
+  "
+
+  local selection
+  selection=$(printf "%s\n" "$commits" | fzf \
+    --ansi \
+    --height=~65% \
+    --layout=reverse \
+    --border=rounded \
+    --disabled \
+    --pointer="❯ " \
+    --prompt="🕰  History ($target_file) > " \
+    --header="$hdr" \
+    --color="header:italic:dim,prompt:bold:magenta,pointer:bold:green" \
+    --bind="start:unbind(esc)" \
+    --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort" \
+    --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,r,y,i,/)+change-prompt(🔍 Search Commits > )+change-header(  type to filter │ esc: normal mode │ enter: diff)+rebind(esc)" \
+    --bind="i:enable-search+unbind(j,k,q,g,G,r,y,i,/)+change-prompt(🔍 Search Commits > )+change-header(  type to filter │ esc: normal mode │ enter: diff)+rebind(esc)" \
+    --bind="esc:disable-search+rebind(j,k,q,g,G,r,y,i,/)+change-prompt(🕰  History ($target_file) > )+change-header($hdr)+unbind(esc)" \
+    --bind="ctrl-/:toggle-preview,ctrl-d:preview-page-down,ctrl-u:preview-page-up" \
+    --preview="$preview_cmd" \
+    --preview-window="right:60%:wrap" \
+    --expect="ctrl-v,r,y")
+
+  [ -z "$selection" ] && return 0
+
+  local key
+  key=$(echo "$selection" | head -n1)
+  local selected_line
+  selected_line=$(echo "$selection" | sed '1d' | head -n1)
+  [ -z "$selected_line" ] && return 0
+
+  local sha
+  sha=$(printf "%s" "$selected_line" | sed $'s/\x1b\\[[0-9;]*m//g' | awk '{print $1}')
+  [ -z "$sha" ] && return 0
+
+  case "$key" in
+    y)
+      if (( $+functions[copy] )); then
+        printf "%s" "$sha" | copy
+        printf "\033[32m✔ Copied commit SHA to clipboard: %s\033[0m\n" "$sha"
+      else
+        printf "%s\n" "$sha"
+      fi
+      ;;
+    ctrl-v)
+      if command -v nvim &>/dev/null; then
+        nvim -c "DiffviewFileHistory $target_file"
+      else
+        printf "\033[31m✖ Neovim (nvim) is not installed.\033[0m\n" >&2
+      fi
+      ;;
+    r)
+      printf "\033[1;33m⚠ Restore '%s' to state from commit %s? [y/N]: \033[0m" "$target_file" "$sha"
+      local confirm=""
+      read -r confirm
+      if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        git checkout "$sha" -- "$target_file"
+        printf "\033[32m✔ Restored '%s' from commit %s.\033[0m\n" "$target_file" "$sha"
+        git status -sb -- "$target_file"
+      else
+        printf "\033[2mCancelled.\033[0m\n"
+      fi
+      ;;
+    *)
+      git show --stat -p "$sha" -- "$target_file"
+      ;;
+  esac
+}
+
 # Git Worktree Interactive Switcher (wt)
 # Dynamically queries git worktrees in the current repo and provides an interactive fzf selector
 wt() {

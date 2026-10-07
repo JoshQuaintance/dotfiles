@@ -166,6 +166,9 @@ def check_cli_tools(report: DoctorReport):
         ("yazi", "Yazi file manager", ["yazi", "--version"]),
         ("dust", "dust disk analyzer", ["dust", "--version"]),
         ("btop", "btop system monitor", ["btop", "--version"]),
+        ("tldr", "tlrc cheat sheets (tldr)", ["tldr", "--version"]),
+        ("tokei", "tokei codebase statistics", ["tokei", "--version"]),
+        ("hyperfine", "hyperfine CLI benchmark", ["hyperfine", "--version"]),
         ("uv", "uv Astral Python manager", ["uv", "--version"]),
     ]
 

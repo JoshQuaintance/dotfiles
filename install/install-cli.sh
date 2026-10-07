@@ -39,7 +39,7 @@ if command -v brew &>/dev/null; then
         # Install only specifically requested tools
         for pkg in "${REQUESTED_TOOLS[@]}"; do
             case "$pkg" in
-                ripgrep|fd|fzf|zoxide|starship|spaceship|eza|atuin|bat|yazi|dust|btop|fzf-tab|zsh-autosuggestions|zsh-syntax-highlighting|git|git-delta|lazygit)
+                ripgrep|fd|fzf|zoxide|starship|spaceship|eza|atuin|bat|yazi|dust|btop|tlrc|tokei|hyperfine|fzf-tab|zsh-autosuggestions|zsh-syntax-highlighting|git|git-delta|lazygit)
                     if brew list "$pkg" &>/dev/null; then
                         ask_update_tool "$pkg" "$(brew info "$pkg" 2>/dev/null | head -n 1 | awk '{print $3}')" DO_UPD
                         [ "$DO_UPD" = true ] && brew upgrade "$pkg" 2>/dev/null || true
@@ -91,7 +91,7 @@ elif [ "$OS" = "Linux" ]; then
         fi
     elif command -v pacman &>/dev/null; then
         # Arch Linux
-        run_sudo pacman -S --noconfirm --needed curl wget git base-devel ripgrep fd fzf eza atuin bat git-delta zsh-autosuggestions zsh-syntax-highlighting tar gzip unzip
+        run_sudo pacman -S --noconfirm --needed curl wget git base-devel ripgrep fd fzf eza atuin bat git-delta tlrc tokei hyperfine zsh-autosuggestions zsh-syntax-highlighting tar gzip unzip
     fi
 
     # 1. eza
@@ -192,7 +192,7 @@ elif [ "$OS" = "Linux" ]; then
         fi
     fi
 
-    # 7. btop
+    # 7. btop, tlrc (tldr), tokei, hyperfine
     if is_tool_requested "btop"; then
         if ! command -v btop &>/dev/null; then
             if command -v apt-get &>/dev/null; then
@@ -201,6 +201,39 @@ elif [ "$OS" = "Linux" ]; then
                 run_sudo dnf install -y btop 2>/dev/null || true
             elif command -v pacman &>/dev/null; then
                 run_sudo pacman -S --noconfirm btop 2>/dev/null || true
+            fi
+        fi
+    fi
+
+    if is_tool_requested "tlrc" || is_tool_requested "tldr"; then
+        if ! command -v tldr &>/dev/null; then
+            log "Installing tlrc (tldr)..."
+            TLRC_ARCH="x86_64-unknown-linux-musl"
+            [ "$ARCH" = "aarch64" -o "$ARCH" = "arm64" ] && TLRC_ARCH="aarch64-unknown-linux-musl"
+            curl -fsSL "https://github.com/tldr-pages/tlrc/releases/latest/download/tlrc-v1.10.0-${TLRC_ARCH}.tar.gz" 2>/dev/null | tar -xz -C "$HOME/.local/bin" tldr 2>/dev/null || \
+                (command -v apt-get &>/dev/null && run_sudo apt-get install -y tealdeer 2>/dev/null) || true
+            chmod +x "$HOME/.local/bin/tldr" 2>/dev/null || true
+        fi
+    fi
+
+    if is_tool_requested "tokei"; then
+        if ! command -v tokei &>/dev/null; then
+            log "Installing tokei..."
+            if command -v apt-get &>/dev/null; then
+                run_sudo apt-get install -y tokei 2>/dev/null || true
+            elif command -v dnf &>/dev/null; then
+                run_sudo dnf install -y tokei 2>/dev/null || true
+            fi
+        fi
+    fi
+
+    if is_tool_requested "hyperfine"; then
+        if ! command -v hyperfine &>/dev/null; then
+            log "Installing hyperfine..."
+            if command -v apt-get &>/dev/null; then
+                run_sudo apt-get install -y hyperfine 2>/dev/null || true
+            elif command -v dnf &>/dev/null; then
+                run_sudo dnf install -y hyperfine 2>/dev/null || true
             fi
         fi
     fi

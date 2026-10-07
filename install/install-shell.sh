@@ -40,18 +40,7 @@ if [ "$CURRENT_SHELL" != "zsh" ] && command -v zsh &>/dev/null; then
     chsh -s "$ZSH_PATH" "$USER" 2>/dev/null || run_sudo chsh -s "$ZSH_PATH" "$USER" 2>/dev/null || true
 fi
 
-# 3. Install Oh My Zsh if missing
-if [ ! -d "$HOME/.oh-my-zsh" ]; then
-    log "Installing Oh My Zsh (single-branch)..."
-    RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended || true
-fi
-# Enforce single-branch tracking and prune any extra branches from Oh My Zsh
-if [ -d "$HOME/.oh-my-zsh/.git" ]; then
-    git -C "$HOME/.oh-my-zsh" config remote.origin.fetch "+refs/heads/master:refs/remotes/origin/master" 2>/dev/null || true
-    git -C "$HOME/.oh-my-zsh" remote prune origin 2>/dev/null || true
-fi
-
-# 4. Symlink .zshrc with .bak backup
+# 3. Symlink .zshrc with .bak backup
 if [ -f "$DOTFILES_DIR/zsh/.zshrc" ]; then
     if [ -e "$HOME/.zshrc" ] || [ -L "$HOME/.zshrc" ]; then
         if [ "$(readlink "$HOME/.zshrc" 2>/dev/null)" != "$DOTFILES_DIR/zsh/.zshrc" ]; then

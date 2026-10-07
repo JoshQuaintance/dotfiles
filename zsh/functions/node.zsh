@@ -76,34 +76,84 @@ _pkg_script_select() {
   local formatted
   formatted=$(echo "$raw_scripts" | awk -F'\t' -v len="$max_len" '{ printf "\033[1;36m%-" len "s\033[0m \033[90m│\033[0m %s\t%s\n", $1, $2, $1 }')
 
+  local preview_cmd="
+    s={2}
+    ln=\$(grep -nF \"\\\"\$s\\\"\" '$pkg_file' 2>/dev/null | head -n1 | cut -d: -f1)
+    if command -v bat &>/dev/null; then
+      if [ -n \"\$ln\" ]; then
+        start=\$(( ln > 10 ? ln - 10 : 1 ))
+        end=\$(( ln + 25 ))
+        bat --color=always --style=numbers --highlight-line \"\$ln\" --line-range \"\$start:\$end\" '$pkg_file' 2>/dev/null
+      else
+        bat --color=always --style=numbers '$pkg_file' 2>/dev/null
+      fi
+    else
+      cat '$pkg_file' 2>/dev/null
+    fi
+  "
+
   local selection
   selection=$(echo "$formatted" | fzf \
     --ansi \
     --delimiter=$'\t' \
     --with-nth=1 \
     --disabled \
-    --height=~50% \
+    --height=~55% \
     --min-height=10 \
     --layout=reverse \
     --border=rounded \
     --info=inline \
-    --pointer="▶" \
+    --pointer="❯ " \
     --prompt="⚡ $runner run > " \
-    --header="  j/k: navigate │ /: search │ enter: run │ q: quit" \
+    --header="  j/k: navigate │ /: search │ enter: run │ e: edit package.json │ y: copy cmd │ q: quit" \
     --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
     --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,ctrl-j:down,ctrl-k:up,ctrl-n:down,ctrl-p:up,down:down,up:up,enter:accept" \
-    --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 filter > )+change-header(  type to filter │ esc: normal mode │ enter: run)+rebind(esc)" \
-    --bind="i:enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 filter > )+change-header(  type to filter │ esc: normal mode │ enter: run)+rebind(esc)" \
-    --bind="esc:disable-search+rebind(j,k,q,g,G,i,/)+change-prompt(⚡ $runner run > )+change-header(  j/k: navigate │ /: search │ enter: run │ q: quit)+unbind(esc)" \
-    --bind="start:unbind(esc)")
+    --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,e,y,i,/)+change-prompt(🔍 filter > )+change-header(  type to filter │ esc: normal mode │ enter: run)+rebind(esc)" \
+    --bind="i:enable-search+unbind(j,k,q,g,G,e,y,i,/)+change-prompt(🔍 filter > )+change-header(  type to filter │ esc: normal mode │ enter: run)+rebind(esc)" \
+    --bind="esc:disable-search+rebind(j,k,q,g,G,e,y,i,/)+change-prompt(⚡ $runner run > )+change-header(  j/k: navigate │ /: search │ enter: run │ e: edit package.json │ y: copy cmd │ q: quit)+unbind(esc)" \
+    --bind="start:unbind(esc)" \
+    --bind="ctrl-/:toggle-preview,ctrl-d:preview-page-down,ctrl-u:preview-page-up" \
+    --preview="$preview_cmd" \
+    --preview-window="right:50%:wrap" \
+    --expect="e,y")
 
+  [ -z "$selection" ] && return 0
+
+  local key
+  key=$(echo "$selection" | head -n1)
+  local selected_line
+  selected_line=$(echo "$selection" | sed '1d')
   local selected
-  selected=$(echo "$selection" | awk -F'\t' '{print $2}')
+  selected=$(echo "$selected_line" | awk -F'\t' '{print $2}')
 
-  if [ -n "$selected" ]; then
-    printf "\033[1;32m➜\033[0m \033[1;36m%s run %s\033[0m\n" "$runner" "$selected"
-    command "$runner" run "$selected"
-  fi
+  [ -z "$selected" ] && return 0
+
+  case "$key" in
+    e)
+      local ln
+      ln=$(grep -nF "\"$selected\"" "$pkg_file" 2>/dev/null | head -n1 | cut -d: -f1)
+      local editor="${EDITOR:-nvim}"
+      command -v "$editor" &>/dev/null || editor="nano"
+      if [ -n "$ln" ] && [[ "$editor" == *vim* ]]; then
+        "$editor" "+$ln" "$pkg_file"
+      else
+        "$editor" "$pkg_file"
+      fi
+      ;;
+    y)
+      local run_cmd="$runner run $selected"
+      if (( $+functions[copy] )); then
+        printf "%s" "$run_cmd" | copy
+        printf "\033[32m✔ Copied to clipboard: %s\033[0m\n" "$run_cmd"
+      else
+        printf "%s\n" "$run_cmd"
+      fi
+      ;;
+    *)
+      printf "\033[1;32m➜\033[0m \033[1;36m%s run %s\033[0m\n" "$runner" "$selected"
+      command "$runner" run "$selected"
+      ;;
+  esac
 }
 
 # npm / bun / pnpm wrappers (intercept 'run' without arguments)

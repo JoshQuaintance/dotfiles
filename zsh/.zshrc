@@ -28,7 +28,7 @@ unset _def_locale
 
 
 # Startup verbose checklist & environment banner
-if [[ -o interactive ]] && [ -t 1 ] && [ "${ZSH_STARTUP_VERBOSE:-true}" = true ]; then
+if [[ -o interactive ]] && { [ -t 1 ] || [ "${ZSH_BENCH_STEPS:-false}" = true ]; } && [ "${ZSH_STARTUP_VERBOSE:-true}" = true ]; then
     _ZSH_STARTUP_VERBOSE=true
     zmodload zsh/datetime 2>/dev/null || true
     _t_start=$EPOCHREALTIME
@@ -95,35 +95,55 @@ _step "Homebrew environment"
 # Resolve canonical dotfiles repository directory (follows ~/.zshrc symlink in CI or custom checkouts)
 export DOTFILES_DIR="${DOTFILES_DIR:-${${(%):-%x}:A:h:h}}"
 
-# Oh My Zsh configuration
-export ZSH="$HOME/.oh-my-zsh"
-export ZSH_CUSTOM="$DOTFILES_DIR/zsh/custom"
-export ZSH_DISABLE_COMPFIX="true"
+# Native Zsh Completions, Options, History & Terminal Title
 export SHORT_HOST="${HOST/.*/}"
 export ZSH_COMPDUMP="${ZDOTDIR:-$HOME}/.zcompdump-${SHORT_HOST}-${ZSH_VERSION}"
-ZSH_THEME="robbyrussell"
-zstyle ':omz:update' mode disabled
-plugins=(git)
+[ -d "$DOTFILES_DIR/zsh/custom/completions" ] && fpath=("$DOTFILES_DIR/zsh/custom/completions" $fpath)
 
-# Precompile ~/.zcompdump to bytecode for instant loading
-if [ -f "$ZSH_COMPDUMP" ] && [ ! -f "${ZSH_COMPDUMP}.zwc" -o "$ZSH_COMPDUMP" -nt "${ZSH_COMPDUMP}.zwc" ]; then
-    zcompile "$ZSH_COMPDUMP" 2>/dev/null || true
-fi
-
-if [ -f "$ZSH/oh-my-zsh.sh" ]; then
-    source "$ZSH/oh-my-zsh.sh"
+autoload -Uz compinit
+setopt extendedglob
+if [[ -n "$ZSH_COMPDUMP"(#qN.mh-24) ]]; then
+    compinit -C -d "$ZSH_COMPDUMP"
 else
-    # Fallback Git prompt if Oh My Zsh is not yet installed
-    autoload -Uz vcs_info
-    precmd() { vcs_info }
-    zstyle ':vcs_info:git:*' formats ' (%b)'
-    setopt PROMPT_SUBST
-    PROMPT='%F{cyan}%~%F{yellow}${vcs_info_msg_0_}%F{reset} %# '
+    compinit -u -d "$ZSH_COMPDUMP"
+    zcompile -R -- "${ZSH_COMPDUMP}.zwc" "$ZSH_COMPDUMP" 2>/dev/null || true
 fi
+if [ -f "$ZSH_COMPDUMP" ] && [ ! -f "${ZSH_COMPDUMP}.zwc" -o "$ZSH_COMPDUMP" -nt "${ZSH_COMPDUMP}.zwc" ]; then
+    zcompile -R -- "${ZSH_COMPDUMP}.zwc" "$ZSH_COMPDUMP" 2>/dev/null || true
+fi
+unsetopt extendedglob
 
-# Disable Oh My Zsh's AUTO_CD (prevents jumping into folders named like commands e.g. 'gradle', 'dist', 'test')
+# Completion styling (case-insensitive, hyphen/underscore insensitive, menu selection, caching)
+zstyle ':completion:*' menu select
+zstyle ':completion:*' matcher-list 'm:{[:lower:][:upper:]-_}={[:upper:][:lower:]_-}' 'r:|=*' 'l:|=* r:|=*'
+zstyle ':completion:*' special-dirs true
+zstyle ':completion:*' use-cache yes
+zstyle ':completion:*' cache-path "${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zcompcache"
+
+# Directory stack & navigation options (no auto_cd so folders like 'test'/'dist' don't hijack commands)
 unsetopt auto_cd
-_step "Oh My Zsh & plugins (git)"
+setopt auto_pushd pushd_ignore_dups pushdminus interactivecomments multios long_list_jobs
+
+# History configuration (shared across sessions, deduplicated, Atuin-compatible)
+HISTFILE="${ZDOTDIR:-$HOME}/.zsh_history"
+HISTSIZE=50000
+SAVEHIST=50000
+setopt extended_history hist_expire_dups_first hist_ignore_dups hist_ignore_space hist_verify share_history
+
+# Terminal window / tab title updates (shows ~/dir when idle, ~/dir — cmd when running)
+if [[ "$TERM" != "dumb" ]] && [[ -t 1 ]]; then
+    _zsh_title_precmd() {
+        print -Pn "\e]2;%~\a"
+    }
+    _zsh_title_preexec() {
+        local cmd="${1[(wr)^(*=*|sudo|ssh|mosh|rake|-*)]:gs/%/%%}"
+        print -Pn "\e]2;%~ — $cmd\a"
+    }
+    autoload -Uz add-zsh-hook
+    add-zsh-hook precmd _zsh_title_precmd
+    add-zsh-hook preexec _zsh_title_preexec
+fi
+_step "Zsh completions & options"
 
 # ==========================================
 # User Configuration & Tools
@@ -143,8 +163,8 @@ if [ "$TERM" != "dumb" ]; then
         "/opt/homebrew/opt/spaceship/spaceship.zsh" \
         "/home/linuxbrew/.linuxbrew/opt/spaceship/spaceship.zsh" \
         "/usr/local/opt/spaceship/spaceship.zsh" \
-        "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/spaceship-prompt/spaceship.zsh" \
-        "$HOME/.spaceship-prompt/spaceship.zsh"; do
+        "$HOME/.spaceship-prompt/spaceship.zsh" \
+        "$HOME/.oh-my-zsh/custom/themes/spaceship-prompt/spaceship.zsh"; do
         if [ -f "$_sp_candidate" ]; then
             _spaceship_entry="$_sp_candidate"
             break
@@ -174,6 +194,13 @@ if [ "$TERM" != "dumb" ]; then
         fi
     elif command -v starship &>/dev/null; then
         eval "$(starship init zsh)"
+    else
+        # Fallback Git prompt if neither Spaceship nor Starship is installed
+        autoload -Uz vcs_info add-zsh-hook
+        add-zsh-hook precmd vcs_info
+        zstyle ':vcs_info:git:*' formats ' (%b)'
+        setopt PROMPT_SUBST
+        PROMPT='%F{cyan}%~%F{yellow}${vcs_info_msg_0_}%F{reset} %# '
     fi
     unset _spaceship_entry _sp_candidate
 
@@ -357,9 +384,10 @@ for _zsh_synhl in \
     fi
 done
 unset _zsh_synhl
+_step "Vi-mode & Zsh plugins (autosuggest, syntax)"
 
 # Startup Summary Card & Rotating Tips
-[ -f "$_dot_dir/zsh/banner.zsh" ] && source "$_dot_dir/zsh/banner.zsh"
+[ -t 1 ] && [ -f "$_dot_dir/zsh/banner.zsh" ] && source "$_dot_dir/zsh/banner.zsh"
 
 
 # ==========================================

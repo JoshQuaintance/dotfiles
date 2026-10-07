@@ -24,6 +24,13 @@ alias codes="cd ~/Codes/"
 alias path="echo \$PATH | tr ':' '\n'"
 alias x="extract"
 alias strdiff="sdiff"
+alias kp="fkill"
+alias dps="fcon"
+alias cheat="cheath"
+if command -v tokei &>/dev/null; then
+  alias loc="tokei"
+  alias cloc="tokei"
+fi
 if command -v dust &>/dev/null; then
   alias diskuse="dust"
 else
@@ -65,6 +72,7 @@ alias localip="ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | a
 alias .doctor="dotdoctor"
 alias .check="dotcheck"
 alias .update="dotupdate"
+alias .bench="dot bench"
 alias .branch="dotbranch"
 alias .b="dotbranch"
 
@@ -109,6 +117,7 @@ alias gpr="git pull --rebase"
 
 # History & Log
 unalias gl 2>/dev/null || true
+alias gfh="gfile"
 alias glo="git log --oneline --graph --decorate -n 20"
 alias glog="git log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
 

@@ -25,6 +25,9 @@ brew "atuin"        # Magical shell history
 brew "yazi"         # Terminal file manager
 brew "btop"         # Resource monitor (CPU, memory, disks, network)
 brew "dust"         # More intuitive du in Rust
+brew "tlrc"         # Official tldr client in Rust (community cheat sheets)
+brew "tokei"        # Fast codebase line-of-code & language statistics
+brew "hyperfine"    # Statistical command-line benchmarking tool
 brew "fzf-tab"      # Interactive zsh completion menu
 brew "zsh-autosuggestions"     # Fish-like fast/unobtrusive autosuggestions for zsh
 brew "zsh-syntax-highlighting" # Fish-like syntax highlighting for zsh

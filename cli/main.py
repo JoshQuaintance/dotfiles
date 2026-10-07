@@ -1,5 +1,6 @@
 import argparse
 import sys
+from cli.bench import run_bench
 from cli.doctor import run_doctor
 from cli.test import run_tests
 from cli.update import run_update
@@ -17,6 +18,10 @@ def main():
 
     # dot test
     parser_test = subparsers.add_parser("test", help="Run deep runtime configuration and schema integration tests")
+
+    # dot bench
+    parser_bench = subparsers.add_parser("bench", help="Benchmark interactive Zsh startup latency and per-phase breakdown")
+    parser_bench.add_argument("-n", "--iterations", type=int, default=5, help="Number of benchmark runs (default: 5)")
 
     # dot update
     parser_update = subparsers.add_parser("update", help="Check and apply dotfiles, Homebrew, and Mise updates")
@@ -42,6 +47,8 @@ def main():
         sys.exit(run_doctor(fix=args.fix))
     elif args.subcommand == "test":
         sys.exit(run_tests())
+    elif args.subcommand == "bench":
+        sys.exit(run_bench(iterations=args.iterations))
     elif args.subcommand == "update":
         sys.exit(run_update(
             check_only=args.check,

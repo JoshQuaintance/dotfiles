@@ -129,6 +129,405 @@ port() {
   done <<< "$selected"
 }
 
+# Interactive Process Browser & Killer (fkill / kp)
+# Usage:
+#   fkill            -> Interactive modal-Vim FZF browser of user processes sorted by CPU/MEM
+#   fkill <query>    -> Pre-filtered process browser (e.g. fkill node, kp gradle)
+#   Keys: space = multi-select, enter = SIGTERM (-15), x = SIGKILL (-9)
+fkill() {
+  if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    printf "\033[1;38;2;243;139;168mfkill\033[0m (alias: \033[1mkp\033[0m) — Interactive modal-Vim process browser & killer (macOS & Linux)\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  fkill              Browse user processes sorted by CPU & memory\n"
+    printf "  fkill <query>      Open filtered by <query> (e.g. fkill node)\n"
+    printf "  Enter              Graceful terminate (SIGTERM -15)\n"
+    printf "  x                  Force kill (SIGKILL -9)\n"
+    return 0
+  fi
+
+  local query="$*"
+  local target_user="${USER:-$(id -un 2>/dev/null)}"
+
+  _list_user_procs() {
+    ps -u "$target_user" -o pid=,%cpu=,%mem=,args= 2>/dev/null | awk '
+      $1 ~ /^[0-9]+$/ {
+        pid = $1; cpu = $2; mem = $3;
+        cmd = "";
+        for (i = 4; i <= NF; i++) cmd = cmd (i == 4 ? "" : " ") $i;
+        comm = $4;
+        if (match(cmd, /^\/[^ ]*\.app\/Contents\/MacOS\/[^ ]+/)) {
+          comm = substr(cmd, RSTART, RLENGTH);
+        }
+        sub(/^.*[\/]/, "", comm);
+        sub(/:$/, "", comm);
+        if (length(comm) > 20) comm = substr(comm, 1, 20);
+        if (length(cmd) > 90) cmd = substr(cmd, 1, 87) "...";
+        printf "%-8s\t%6s%%\t%6s%%\t%-20s\t%s\n", pid, cpu, mem, comm, cmd
+      }
+    ' | sort -rn -k2,2 -k3,3
+  }
+
+  local rows
+  rows="$(_list_user_procs)"
+  if [ -z "$rows" ]; then
+    printf "\033[33mNo running processes found for user %s.\033[0m\n" "$target_user"
+    return 0
+  fi
+
+  if [ ! -t 1 ] || ! command -v fzf &>/dev/null; then
+    printf "\033[1;38;2;243;139;168m%-8s\t%7s\t%7s\t%-20s\t%s\033[0m\n" "PID" "CPU" "MEM" "PROCESS" "COMMAND"
+    printf "%s\n" "$rows" | head -n 30
+    return 0
+  fi
+
+  local hdr=$'  j/k: move │ space: select │ enter: SIGTERM (-15) │ x: SIGKILL (-9) │ /: search │ q: quit\n  PID     \t   CPU\t   MEM\tPROCESS             \tCOMMAND'
+  local fzf_mode_flags=()
+  if [ -z "$query" ]; then
+    fzf_mode_flags=(
+      "--disabled"
+      "--bind=start:unbind(esc)"
+      "--bind=j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,space:toggle+down"
+      "--bind=/:clear-query+enable-search+unbind(j,k,q,g,G,space,x,i,/)+change-prompt(🔍 Search Procs > )+change-header(  type to filter │ esc: normal mode │ enter: SIGTERM)+rebind(esc)"
+      "--bind=i:enable-search+unbind(j,k,q,g,G,space,x,i,/)+change-prompt(🔍 Search Procs > )+change-header(  type to filter │ esc: normal mode │ enter: SIGTERM)+rebind(esc)"
+      "--bind=esc:disable-search+rebind(j,k,q,g,G,space,x,i,/)+change-prompt(⚡ Processes > )+change-header($hdr)+unbind(esc)"
+    )
+  else
+    fzf_mode_flags=(
+      "--query=$query"
+      "--bind=space:toggle+down"
+    )
+  fi
+
+  local selection
+  selection=$(printf "%s\n" "$rows" | fzf \
+    --delimiter='\t' \
+    --multi \
+    --height=~55% \
+    --layout=reverse \
+    --border=rounded \
+    --pointer="❯ " \
+    --marker="✓ " \
+    --prompt="⚡ Processes > " \
+    --header="$hdr" \
+    --color="header:italic:dim,prompt:bold:red,pointer:bold:red,marker:bold:yellow" \
+    "${fzf_mode_flags[@]}" \
+    --preview='pid=$(echo {1} | tr -d " "); if [ -n "$pid" ]; then ps -p "$pid" -o pid,ppid,user,%cpu,%mem,etime,command 2>/dev/null; echo ""; if command -v lsof &>/dev/null; then lsof -p "$pid" -i -P -n 2>/dev/null | head -n 15; fi; fi' \
+    --preview-window='right:50%:wrap' \
+    --expect="x")
+
+  [ -z "$selection" ] && return 0
+
+  local key
+  key=$(echo "$selection" | head -n1)
+  local selected_lines
+  selected_lines=$(echo "$selection" | sed '1d')
+  [ -z "$selected_lines" ] && return 0
+
+  local sig="-15"
+  local sig_name="SIGTERM (-15)"
+  if [ "$key" = "x" ]; then
+    sig="-9"
+    sig_name="SIGKILL (-9)"
+  fi
+
+  while IFS=$'\t' read -r pid_col cpu_col mem_col proc_col cmd_col; do
+    local pid_clean="${pid_col// /}"
+    local proc_clean="${proc_col// /}"
+    if [ -n "$pid_clean" ]; then
+      if kill "$sig" "$pid_clean" 2>/dev/null; then
+        printf "  \033[32m✔\033[0m Sent \033[1m%s\033[0m to \033[1;36m%s\033[0m (PID %s)\n" "$sig_name" "$proc_clean" "$pid_clean"
+      else
+        printf "  \033[31m✖\033[0m Failed to signal PID %s (%s)\n" "$pid_clean" "$proc_clean" >&2
+      fi
+    fi
+  done <<< "$selected_lines"
+}
+
+# Interactive Container Inspector for Podman & Docker (fcon / dps)
+# Usage:
+#   fcon / dps       -> Browse running & stopped containers in modal-Vim FZF with live logs preview
+#   Keys: enter/l = follow logs, s = exec shell, r = restart, x = stop
+fcon() {
+  if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    printf "\033[1;38;2;137;180;250mfcon\033[0m (alias: \033[1mdps\033[0m) — Interactive modal-Vim Podman & Docker container manager\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  fcon / dps         Browse running & stopped containers with live log preview\n"
+    printf "  Enter / l          Follow live container logs (logs -f)\n"
+    printf "  s                  Open interactive shell inside container (bash/sh)\n"
+    printf "  r                  Restart selected container(s)\n"
+    printf "  x                  Stop selected container(s)\n"
+    return 0
+  fi
+
+  local rt="${CONTAINER_RUNTIME:-}"
+  if [ -z "$rt" ]; then
+    if command -v podman &>/dev/null && podman ps &>/dev/null; then
+      rt="podman"
+    elif [ -x "/opt/podman/bin/podman" ] && /opt/podman/bin/podman ps &>/dev/null; then
+      rt="/opt/podman/bin/podman"
+    elif command -v docker &>/dev/null && docker ps &>/dev/null; then
+      rt="docker"
+    elif command -v podman &>/dev/null; then
+      rt="podman"
+    elif command -v docker &>/dev/null; then
+      rt="docker"
+    else
+      printf "\033[31m✖ Neither podman nor docker is installed.\033[0m\n" >&2
+      return 1
+    fi
+  fi
+
+  local raw_containers
+  raw_containers=$("$rt" ps -a --format '{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Ports}}' 2>/dev/null)
+  if [ -z "$raw_containers" ]; then
+    printf "\033[33mNo containers found (%s).\033[0m\n" "$(basename "$rt")"
+    return 0
+  fi
+
+  local formatted
+  formatted=$(printf "%s\n" "$raw_containers" | awk -F'\t' '{
+    id = substr($1, 1, 12);
+    name = $2; if (length(name) > 24) name = substr(name, 1, 21) "...";
+    st = $3; if (length(st) > 22) st = substr(st, 1, 19) "...";
+    img = $4; if (length(img) > 28) img = substr(img, 1, 25) "...";
+    ports = $5;
+    if (st ~ /^Up/) {
+      st_col = sprintf("\033[32m%-22s\033[0m", st);
+    } else {
+      st_col = sprintf("\033[2m%-22s\033[0m", st);
+    }
+    printf "\033[36m%-12s\033[0m\t\033[1m%-24s\033[0m\t%s\t%-28s\t%s\n", id, name, st_col, img, ports
+  }')
+
+  if [ ! -t 1 ] || ! command -v fzf &>/dev/null; then
+    printf "\033[1;38;2;137;180;250m%-12s\t%-24s\t%-22s\t%-28s\t%s\033[0m\n" "CONTAINER ID" "NAME" "STATUS" "IMAGE" "PORTS"
+    printf "%s\n" "$formatted"
+    return 0
+  fi
+
+  local query="$*"
+  local hdr=$'  j/k: move │ space: select │ enter/l: logs -f │ s: shell │ r: restart │ x: stop │ /: search │ q: quit\n  ID          \tNAME                    \tSTATUS                \tIMAGE                       \tPORTS'
+  local fzf_mode_flags=()
+  if [ -z "$query" ]; then
+    fzf_mode_flags=(
+      "--disabled"
+      "--bind=start:unbind(esc)"
+      "--bind=j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,space:toggle+down"
+      "--bind=/:clear-query+enable-search+unbind(j,k,q,g,G,space,l,s,r,x,i,/)+change-prompt(🔍 Search Containers > )+change-header(  type to filter │ esc: normal mode │ enter: follow logs)+rebind(esc)"
+      "--bind=i:enable-search+unbind(j,k,q,g,G,space,l,s,r,x,i,/)+change-prompt(🔍 Search Containers > )+change-header(  type to filter │ esc: normal mode │ enter: follow logs)+rebind(esc)"
+      "--bind=esc:disable-search+rebind(j,k,q,g,G,space,l,s,r,x,i,/)+change-prompt(🐳 Containers ($(basename "$rt")) > )+change-header($hdr)+unbind(esc)"
+    )
+  else
+    fzf_mode_flags=(
+      "--query=$query"
+      "--bind=space:toggle+down"
+    )
+  fi
+
+  local selection
+  selection=$(printf "%s\n" "$formatted" | fzf \
+    --ansi \
+    --delimiter='\t' \
+    --multi \
+    --height=~60% \
+    --layout=reverse \
+    --border=rounded \
+    --pointer="❯ " \
+    --marker="✓ " \
+    --prompt="🐳 Containers ($(basename "$rt")) > " \
+    --header="$hdr" \
+    --color="header:italic:dim,prompt:bold:cyan,pointer:bold:blue,marker:bold:yellow" \
+    "${fzf_mode_flags[@]}" \
+    --bind="ctrl-/:toggle-preview,ctrl-d:preview-page-down,ctrl-u:preview-page-up" \
+    --preview="cid=\$(echo {1} | sed 's/\x1b\[[0-9;]*m//g' | tr -d ' '); [ -n \"\$cid\" ] && '$rt' logs --tail 60 \"\$cid\" 2>&1" \
+    --preview-window='right:55%:wrap' \
+    --expect="l,s,r,x")
+
+  [ -z "$selection" ] && return 0
+
+  local key
+  key=$(echo "$selection" | head -n1)
+  local selected_lines
+  selected_lines=$(echo "$selection" | sed '1d')
+  [ -z "$selected_lines" ] && return 0
+
+  local -a cids cnames
+  while IFS=$'\t' read -r id_col name_col rest; do
+    local cid cname
+    cid=$(printf "%s" "$id_col" | sed $'s/\x1b\\[[0-9;]*m//g' | tr -d ' ')
+    cname=$(printf "%s" "$name_col" | sed $'s/\x1b\\[[0-9;]*m//g' | tr -d ' ')
+    if [ -n "$cid" ]; then
+      cids+=("$cid")
+      cnames+=("${cname:-$cid}")
+    fi
+  done <<< "$selected_lines"
+
+  [ ${#cids[@]} -eq 0 ] && return 0
+
+  case "$key" in
+    s)
+      printf "\033[1;36m➜ Opening shell in %s...\033[0m\n" "${cnames[1]}"
+      "$rt" exec -it "${cids[1]}" /bin/sh -c 'if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi'
+      ;;
+    r)
+      "$rt" restart "${cids[@]}"
+      printf "\033[32m✔ Restarted container(s): %s\033[0m\n" "${(j:, :)cnames}"
+      ;;
+    x)
+      "$rt" stop "${cids[@]}"
+      printf "\033[33m■ Stopped container(s): %s\033[0m\n" "${(j:, :)cnames}"
+      ;;
+    *)
+      printf "\033[1;36m➜ Following logs for %s (Ctrl-C to exit)...\033[0m\n" "${cnames[1]}"
+      "$rt" logs -f --tail 100 "${cids[1]}"
+      ;;
+  esac
+}
+
+# Interactive SSH Host Browser (fssh)
+# Usage:
+#   fssh             -> Browse SSH hosts from ~/.ssh/config in modal-Vim FZF
+#   fssh <query>     -> Open pre-filtered by <query>
+#   Keys: enter = ssh <host>, y = copy user@hostname, e = edit ~/.ssh/config at Host block
+fssh() {
+  if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    printf "\033[1;38;2;137;180;250mfssh\033[0m — Interactive modal-Vim SSH host picker (~/.ssh/config)\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  fssh               Browse configured SSH hosts with live config preview\n"
+    printf "  fssh <query>       Open pre-filtered by <query>\n"
+    printf "  Enter              Connect via 'ssh <host>'\n"
+    printf "  y                  Copy [user@]hostname to clipboard\n"
+    printf "  e                  Edit ~/.ssh/config at the selected Host entry\n"
+    return 0
+  fi
+
+  local ssh_cfg="$HOME/.ssh/config"
+  if [ ! -f "$ssh_cfg" ]; then
+    printf "\033[33mNo ~/.ssh/config file found.\033[0m\n" >&2
+    return 1
+  fi
+
+  local rows
+  rows=$(awk '
+    function flush_host() {
+      if (host != "" && host !~ /\*/) {
+        printf "\033[1;36m%-24s\033[0m\t%-30s\t%-16s\t%s\n", host, (hostname != "" ? hostname : "-"), (user != "" ? user : "-"), (port != "" ? port : "22")
+      }
+    }
+    tolower($1) == "host" {
+      flush_host()
+      host = $2; hostname = ""; user = ""; port = ""
+      next
+    }
+    tolower($1) == "hostname" { hostname = $2 }
+    tolower($1) == "user"     { user = $2 }
+    tolower($1) == "port"     { port = $2 }
+    END { flush_host() }
+  ' "$ssh_cfg" 2>/dev/null)
+
+  if [ -z "$rows" ]; then
+    printf "\033[33mNo named Host entries found in %s.\033[0m\n" "$ssh_cfg"
+    return 0
+  fi
+
+  if [ ! -t 1 ] || ! command -v fzf &>/dev/null; then
+    printf "\033[1;38;2;137;180;250m%-24s\t%-30s\t%-16s\t%s\033[0m\n" "HOST" "HOSTNAME" "USER" "PORT"
+    printf "%s\n" "$rows"
+    return 0
+  fi
+
+  local query="$*"
+  local hdr=$'  j/k: move │ /: search │ enter: ssh connect │ y: copy target │ e: edit config │ q: quit\n  HOST                    \tHOSTNAME                      \tUSER            \tPORT'
+  local fzf_mode_flags=()
+  if [ -z "$query" ]; then
+    fzf_mode_flags=(
+      "--disabled"
+      "--bind=start:unbind(esc)"
+      "--bind=j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort"
+      "--bind=/:clear-query+enable-search+unbind(j,k,q,g,G,y,e,i,/)+change-prompt(🔍 Search SSH Hosts > )+change-header(  type to filter │ esc: normal mode │ enter: connect)+rebind(esc)"
+      "--bind=i:enable-search+unbind(j,k,q,g,G,y,e,i,/)+change-prompt(🔍 Search SSH Hosts > )+change-header(  type to filter │ esc: normal mode │ enter: connect)+rebind(esc)"
+      "--bind=esc:disable-search+rebind(j,k,q,g,G,y,e,i,/)+change-prompt(🔐 SSH Hosts > )+change-header($hdr)+unbind(esc)"
+    )
+  else
+    fzf_mode_flags=(
+      "--query=$query"
+    )
+  fi
+
+  local preview_cmd="
+    h=\$(echo {1} | sed 's/\x1b\[[0-9;]*m//g' | tr -d ' ')
+    awk -v target=\"\$h\" '
+      tolower(\$1) == \"host\" {
+        in_block = (\$2 == target)
+      }
+      in_block { print }
+    ' '$ssh_cfg' | if command -v bat &>/dev/null; then bat --color=always --style=plain -l ssh_config 2>/dev/null || bat --color=always --style=plain; else cat; fi
+  "
+
+  local selection
+  selection=$(printf "%s\n" "$rows" | fzf \
+    --ansi \
+    --delimiter='\t' \
+    --height=~50% \
+    --layout=reverse \
+    --border=rounded \
+    --pointer="❯ " \
+    --prompt="🔐 SSH Hosts > " \
+    --header="$hdr" \
+    --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
+    "${fzf_mode_flags[@]}" \
+    --preview="$preview_cmd" \
+    --preview-window='right:50%:wrap' \
+    --expect="y,e")
+
+  [ -z "$selection" ] && return 0
+
+  local key
+  key=$(echo "$selection" | head -n1)
+  local selected_line
+  selected_line=$(echo "$selection" | sed '1d' | head -n1)
+  [ -z "$selected_line" ] && return 0
+
+  local host_alias host_name user_name
+  host_alias=$(printf "%s" "$selected_line" | awk -F'\t' '{print $1}' | sed $'s/\x1b\\[[0-9;]*m//g' | tr -d ' ')
+  host_name=$(printf "%s" "$selected_line" | awk -F'\t' '{print $2}' | tr -d ' ')
+  user_name=$(printf "%s" "$selected_line" | awk -F'\t' '{print $3}' | tr -d ' ')
+
+  case "$key" in
+    y)
+      local target_str="$host_alias"
+      if [ -n "$host_name" ] && [ "$host_name" != "-" ]; then
+        if [ -n "$user_name" ] && [ "$user_name" != "-" ]; then
+          target_str="${user_name}@${host_name}"
+        else
+          target_str="$host_name"
+        fi
+      fi
+      if (( $+functions[copy] )); then
+        printf "%s" "$target_str" | copy
+        printf "\033[32m✔ Copied SSH target to clipboard: %s\033[0m\n" "$target_str"
+      else
+        printf "%s\n" "$target_str"
+      fi
+      ;;
+    e)
+      local ln
+      ln=$(grep -nE "^[[:space:]]*[Hh]ost[[:space:]]+${host_alias}([[:space:]]|$)" "$ssh_cfg" 2>/dev/null | head -n1 | cut -d: -f1)
+      local editor="${EDITOR:-nvim}"
+      command -v "$editor" &>/dev/null || editor="nano"
+      if [ -n "$ln" ] && [[ "$editor" == *vim* ]]; then
+        "$editor" "+$ln" "$ssh_cfg"
+      else
+        "$editor" "$ssh_cfg"
+      fi
+      ;;
+    *)
+      printf "\033[1;32m➜\033[0m \033[1;36mssh %s\033[0m\n" "$host_alias"
+      ssh "$host_alias"
+      ;;
+  esac
+}
+
 # Yazi Shell Wrapper (changes directory on exit)
 y() {
   local tmp
