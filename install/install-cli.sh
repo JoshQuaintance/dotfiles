@@ -138,19 +138,45 @@ elif [ "$OS" = "Linux" ]; then
         fi
     fi
 
+    # 4. yazi (standalone binary + ya CLI)
+    if is_tool_requested "yazi"; then
+        if ! command -v yazi &>/dev/null; then
+            log "Installing yazi..."
+            YAZI_ARCH="x86_64-unknown-linux-musl"
+            [ "$ARCH" = "aarch64" -o "$ARCH" = "arm64" ] && YAZI_ARCH="aarch64-unknown-linux-musl"
+            rm -rf "/tmp/yazi-${YAZI_ARCH}" "/tmp/yazi.zip"
+            if curl -fsSL "https://github.com/sxyazi/yazi/releases/latest/download/yazi-${YAZI_ARCH}.zip" -o "/tmp/yazi.zip" 2>/dev/null; then
+                unzip -q "/tmp/yazi.zip" -d "/tmp" 2>/dev/null || true
+                if [ -f "/tmp/yazi-${YAZI_ARCH}/yazi" ]; then
+                    mv "/tmp/yazi-${YAZI_ARCH}/yazi" "$HOME/.local/bin/yazi"
+                    [ -f "/tmp/yazi-${YAZI_ARCH}/ya" ] && mv "/tmp/yazi-${YAZI_ARCH}/ya" "$HOME/.local/bin/ya"
+                    chmod +x "$HOME/.local/bin/yazi" "$HOME/.local/bin/ya" 2>/dev/null || true
+                    [ "$(id -u)" -eq 0 ] && ln -sf "$HOME/.local/bin/yazi" "/usr/local/bin/yazi" 2>/dev/null || true
+                    [ "$(id -u)" -eq 0 ] && [ -f "$HOME/.local/bin/ya" ] && ln -sf "$HOME/.local/bin/ya" "/usr/local/bin/ya" 2>/dev/null || true
+                    success "yazi ready!"
+                fi
+                rm -rf "/tmp/yazi-${YAZI_ARCH}" "/tmp/yazi.zip"
+            fi
+        fi
+    fi
+
     # 5. dust (standalone binary)
     if is_tool_requested "dust"; then
         if ! command -v dust &>/dev/null; then
             log "Installing dust..."
             DUST_ARCH="x86_64-unknown-linux-musl"
             [ "$ARCH" = "aarch64" -o "$ARCH" = "arm64" ] && DUST_ARCH="aarch64-unknown-linux-musl"
-            curl -fsSL "https://github.com/bootandy/dust/releases/latest/download/dust-v1.1.1-${DUST_ARCH}.tar.gz" 2>/dev/null | tar -xz -C "/tmp" 2>/dev/null || true
-            if [ -f "/tmp/dust-v1.1.1-${DUST_ARCH}/dust" ]; then
-                mv "/tmp/dust-v1.1.1-${DUST_ARCH}/dust" "$HOME/.local/bin/dust"
+            DUST_TAG="$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/bootandy/dust/releases/latest 2>/dev/null | awk -F'/' '{print $NF}')"
+            [ -z "$DUST_TAG" ] && DUST_TAG="v1.2.6"
+            rm -rf "/tmp/dust-extract" && mkdir -p "/tmp/dust-extract"
+            curl -fsSL "https://github.com/bootandy/dust/releases/download/${DUST_TAG}/dust-${DUST_TAG}-${DUST_ARCH}.tar.gz" 2>/dev/null | tar -xz --strip-components=1 -C "/tmp/dust-extract" 2>/dev/null || true
+            if [ -f "/tmp/dust-extract/dust" ]; then
+                mv "/tmp/dust-extract/dust" "$HOME/.local/bin/dust"
                 chmod +x "$HOME/.local/bin/dust"
-                rm -rf "/tmp/dust-v1.1.1-${DUST_ARCH}"
+                [ "$(id -u)" -eq 0 ] && ln -sf "$HOME/.local/bin/dust" "/usr/local/bin/dust" 2>/dev/null || true
                 success "dust ready!"
             fi
+            rm -rf "/tmp/dust-extract"
         fi
     fi
 
@@ -166,13 +192,17 @@ elif [ "$OS" = "Linux" ]; then
             if ! command -v delta &>/dev/null; then
                 DELTA_ARCH="x86_64-unknown-linux-musl"
                 [ "$ARCH" = "aarch64" -o "$ARCH" = "arm64" ] && DELTA_ARCH="aarch64-unknown-linux-gnu"
-                curl -fsSL "https://github.com/dandavison/delta/releases/download/0.18.2/delta-0.18.2-${DELTA_ARCH}.tar.gz" 2>/dev/null | tar -xz -C "/tmp" 2>/dev/null || true
-                if [ -f "/tmp/delta-0.18.2-${DELTA_ARCH}/delta" ]; then
-                    mv "/tmp/delta-0.18.2-${DELTA_ARCH}/delta" "$HOME/.local/bin/delta"
+                DELTA_TAG="$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/dandavison/delta/releases/latest 2>/dev/null | awk -F'/' '{print $NF}')"
+                [ -z "$DELTA_TAG" ] && DELTA_TAG="0.20.1"
+                rm -rf "/tmp/delta-extract" && mkdir -p "/tmp/delta-extract"
+                curl -fsSL "https://github.com/dandavison/delta/releases/download/${DELTA_TAG}/delta-${DELTA_TAG}-${DELTA_ARCH}.tar.gz" 2>/dev/null | tar -xz --strip-components=1 -C "/tmp/delta-extract" 2>/dev/null || true
+                if [ -f "/tmp/delta-extract/delta" ]; then
+                    mv "/tmp/delta-extract/delta" "$HOME/.local/bin/delta"
                     chmod +x "$HOME/.local/bin/delta"
-                    rm -rf "/tmp/delta-0.18.2-${DELTA_ARCH}"
+                    [ "$(id -u)" -eq 0 ] && ln -sf "$HOME/.local/bin/delta" "/usr/local/bin/delta" 2>/dev/null || true
                     success "git-delta ready!"
                 fi
+                rm -rf "/tmp/delta-extract"
             fi
         fi
     fi
@@ -195,9 +225,12 @@ elif [ "$OS" = "Linux" ]; then
             log "Installing tlrc (tldr)..."
             TLRC_ARCH="x86_64-unknown-linux-musl"
             [ "$ARCH" = "aarch64" -o "$ARCH" = "arm64" ] && TLRC_ARCH="aarch64-unknown-linux-musl"
-            curl -fsSL "https://github.com/tldr-pages/tlrc/releases/latest/download/tlrc-v1.10.0-${TLRC_ARCH}.tar.gz" 2>/dev/null | tar -xz -C "$HOME/.local/bin" tldr 2>/dev/null || \
+            TLRC_TAG="$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/tldr-pages/tlrc/releases/latest 2>/dev/null | awk -F'/' '{print $NF}')"
+            [ -z "$TLRC_TAG" ] && TLRC_TAG="v1.13.1"
+            curl -fsSL "https://github.com/tldr-pages/tlrc/releases/download/${TLRC_TAG}/tlrc-${TLRC_TAG}-${TLRC_ARCH}.tar.gz" 2>/dev/null | tar -xz -C "$HOME/.local/bin" tldr 2>/dev/null || \
                 (command -v apt-get &>/dev/null && run_sudo apt-get install -y tealdeer 2>/dev/null) || true
             chmod +x "$HOME/.local/bin/tldr" 2>/dev/null || true
+            [ "$(id -u)" -eq 0 ] && [ -f "$HOME/.local/bin/tldr" ] && ln -sf "$HOME/.local/bin/tldr" "/usr/local/bin/tldr" 2>/dev/null || true
         fi
     fi
 
