@@ -26,3 +26,6 @@ if [ -z "$LC_ALL" ] || [ "$LC_ALL" = "C" ] || [ "$LC_ALL" = "POSIX" ]; then
 fi
 unset _def_locale
 
+# Prevent Debian/Ubuntu /etc/zsh/zshrc from running an uncached, prompt-blocking compinit
+# before ~/.zshrc initializes our cached bytecode compinit.
+skip_global_compinit=1

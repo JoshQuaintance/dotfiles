@@ -103,7 +103,7 @@ export ZSH_COMPDUMP="${ZDOTDIR:-$HOME}/.zcompdump-${SHORT_HOST}-${ZSH_VERSION}"
 autoload -Uz compinit
 setopt extendedglob
 if [[ -n "$ZSH_COMPDUMP"(#qN.mh-24) ]]; then
-    compinit -C -d "$ZSH_COMPDUMP"
+    compinit -u -C -d "$ZSH_COMPDUMP"
 else
     compinit -u -d "$ZSH_COMPDUMP"
     zcompile -R -- "${ZSH_COMPDUMP}.zwc" "$ZSH_COMPDUMP" 2>/dev/null || true

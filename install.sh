@@ -139,7 +139,7 @@ fi
 if [[ "$CHOICE" == "1" || "$CHOICE" == "--workstation" || "$CHOICE" == "--all" ]]; then
     log "Setting up Full Workstation..."
     
-    DOTFILES_DIR="$DEFAULT_TARGET_DIR"
+    DOTFILES_DIR="${DOTFILES_DIR:-$DEFAULT_TARGET_DIR}"
     if [ ! -d "$DOTFILES_DIR/.git" ]; then
         log "Cloning dotfiles to $DOTFILES_DIR..."
         mkdir -p "$(dirname "$DOTFILES_DIR")"

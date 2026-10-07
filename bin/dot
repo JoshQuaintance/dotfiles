@@ -15,8 +15,26 @@ while [ -L "$SOURCE" ]; do
 done
 DOTFILES_DIR="$(cd -P "$(dirname "$SOURCE")/.." >/dev/null 2>&1 && pwd)"
 
-# Ensure standard user binary paths are in PATH
-export PATH="$HOME/.local/bin:$HOME/bin:/usr/local/bin:$PATH"
+# Ensure standard user & Homebrew/Linuxbrew binary paths are in PATH
+for _p in \
+    "$HOME/.local/share/mise/shims" \
+    "$HOME/.atuin/bin" \
+    "$HOME/.cargo/bin" \
+    "/opt/homebrew/bin" \
+    "/opt/homebrew/sbin" \
+    "/home/linuxbrew/.linuxbrew/bin" \
+    "/home/linuxbrew/.linuxbrew/sbin" \
+    "/usr/local/bin" \
+    "$HOME/bin" \
+    "$HOME/.local/bin"; do
+    if [ -d "$_p" ]; then
+        case ":$PATH:" in
+            *":$_p:"*) ;;
+            *) PATH="$_p:$PATH" ;;
+        esac
+    fi
+done
+export PATH
 
 # Sanitize broken or missing locale on Linux containers before launching subshells or Python
 if [ "$(uname -s 2>/dev/null)" = "Linux" ]; then

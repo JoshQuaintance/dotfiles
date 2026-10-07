@@ -242,7 +242,7 @@ def test_shell_runtime(report: TestReport, dotfiles: Path):
     critical_errors = []
     for line in err.splitlines():
         line_clean = line.strip()
-        if re.search(r"command not found|parse error|syntax error|job table full|no such file", line_clean, re.IGNORECASE):
+        if re.search(r"command not found|parse error|syntax error|job table full|no such file|compinit: initialization aborted", line_clean, re.IGNORECASE):
             critical_errors.append(line_clean)
 
     if not critical_errors:

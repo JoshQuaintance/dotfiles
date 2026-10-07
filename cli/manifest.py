@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import os
 from pathlib import Path
 import platform
 from typing import List
@@ -11,8 +12,29 @@ class SymlinkEntry:
     is_directory: bool = False
     required: bool = True
 
+def ensure_standard_path() -> None:
+    """Ensure Homebrew, Linuxbrew, Mise, Atuin, and ~/.local/bin are in PATH even in non-interactive shells."""
+    home = Path.home()
+    candidates = [
+        home / ".local" / "bin",
+        home / "bin",
+        Path("/usr/local/bin"),
+        Path("/opt/homebrew/bin"),
+        Path("/opt/homebrew/sbin"),
+        Path("/home/linuxbrew/.linuxbrew/bin"),
+        Path("/home/linuxbrew/.linuxbrew/sbin"),
+        home / ".atuin" / "bin",
+        home / ".cargo" / "bin",
+        home / ".local" / "share" / "mise" / "shims",
+    ]
+    current_parts = os.environ.get("PATH", "").split(os.pathsep)
+    prepend = [str(p) for p in candidates if p.is_dir() and str(p) not in current_parts]
+    if prepend:
+        os.environ["PATH"] = os.pathsep.join(prepend + current_parts)
+
 def get_dotfiles_dir() -> Path:
     """Resolve the canonical dotfiles repository root."""
+    ensure_standard_path()
     return Path(__file__).resolve().parent.parent
 
 def get_symlink_manifest() -> List[SymlinkEntry]:
