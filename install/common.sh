@@ -315,3 +315,22 @@ git_clone_and_clean() {
         return 1
     fi
 }
+
+# Declarative symlink helper with automatic parent creation and collision backup
+# Usage: link_dotfile <repo_rel_path> <dest_link_path>
+link_dotfile() {
+    local src="$DOTFILES_DIR/$1"
+    local dest="$2"
+    [ -e "$src" ] || return 0
+
+    mkdir -p "$(dirname "$dest")"
+    if [ -e "$dest" ] || [ -L "$dest" ]; then
+        if [ "$(readlink "$dest" 2>/dev/null)" != "$src" ]; then
+            local bak="${dest}.bak"
+            [ -e "$bak" ] && bak="${dest}.bak.$(date +%Y%m%d%H%M%S)"
+            mv "$dest" "$bak" 2>/dev/null || cp -LR "$dest" "$bak" 2>/dev/null || true
+        fi
+    fi
+    ln -sfn "$src" "$dest"
+    success "Linked ${dest/#$HOME/\~} -> $1"
+}

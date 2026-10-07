@@ -7,16 +7,21 @@ import time
 from typing import Dict, List
 
 from cli.manifest import get_dotfiles_dir
-
-C_GREEN = "\033[38;2;166;227;161m"
-C_YELLOW = "\033[38;2;249;226;175m"
-C_RED = "\033[38;2;243;139;168m"
-C_CYAN = "\033[38;2;137;220;235m"
-C_MAUVE = "\033[38;2;203;166;247m"
-C_BLUE = "\033[38;2;137;180;250m"
-C_DIM = "\033[38;2;108;112;134m"
-C_BOLD = "\033[1m"
-C_RESET = "\033[0m"
+from cli.ui import (
+    C_BLUE,
+    C_BOLD,
+    C_CYAN,
+    C_DIM,
+    C_GREEN,
+    C_MAUVE,
+    C_RED,
+    C_RESET,
+    C_YELLOW,
+    ICON_FAIL,
+    ICON_OK,
+    ICON_WARN,
+    print_header,
+)
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 STEP_RE = re.compile(r"\u2714\s+(.+?)\s+([0-9]+)\s*ms\s*$")
@@ -26,14 +31,12 @@ def run_bench(iterations: int = 5) -> int:
     dotfiles = get_dotfiles_dir()
 
     if not shutil.which("zsh"):
-        print(f"{C_RED}\u2716 zsh binary not found in PATH.{C_RESET}")
+        print(f"{C_RED}{ICON_FAIL} zsh binary not found in PATH.{C_RESET}")
         return 1
 
     iterations = max(1, min(iterations, 25))
 
-    print(f"\n{C_CYAN}\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e{C_RESET}")
-    print(f"{C_CYAN}\u2502{C_RESET}  {C_BOLD}Dotfiles Startup Benchmark \u2014 Zsh Interactive Profiler {C_RESET}{C_CYAN}\u2502{C_RESET}")
-    print(f"{C_CYAN}\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f{C_RESET}")
+    print_header("Dotfiles Startup Benchmark \u2014 Zsh Interactive Profiler")
 
     env = os.environ.copy()
     env["DOTFILES_DIR"] = str(dotfiles)

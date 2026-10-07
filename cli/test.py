@@ -16,14 +16,17 @@ except ImportError:
     tomllib = None
 
 from cli.manifest import get_dotfiles_dir, get_symlink_manifest
-
-C_GREEN = "\033[38;2;166;227;161m"
-C_YELLOW = "\033[38;2;249;226;175m"
-C_RED = "\033[38;2;243;139;168m"
-C_CYAN = "\033[38;2;137;220;235m"
-C_DIM = "\033[38;2;108;112;134m"
-C_BOLD = "\033[1m"
-C_RESET = "\033[0m"
+from cli.ui import (
+    C_BOLD,
+    C_CYAN,
+    C_DIM,
+    C_GREEN,
+    C_RED,
+    C_RESET,
+    C_YELLOW,
+    print_header,
+    run_cmd,
+)
 
 class TestReport:
     def __init__(self):
@@ -42,18 +45,6 @@ class TestReport:
     def fail(self, label: str, detail: str = ""):
         self.failed += 1
         print(f"  {C_RED}✖{C_RESET} {C_BOLD}{label:<44}{C_RESET} {C_RED}{detail}{C_RESET}")
-
-def run_cmd(cmd: list[str], timeout: int = 5, env: dict = None) -> Tuple[int, str, str]:
-    try:
-        cur_env = os.environ.copy()
-        if env:
-            cur_env.update(env)
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=cur_env)
-        return res.returncode, res.stdout, res.stderr
-    except subprocess.TimeoutExpired:
-        return 124, "", "Timed out"
-    except Exception as e:
-        return 1, "", str(e)
 
 def parse_jsonc(filepath: Path) -> dict:
     """Parse JSON with comments and trailing commas (standard VS Code JSONC format)."""
@@ -138,12 +129,15 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
     # Yazi TOML validation
     yazi_toml = dotfiles / "config" / "yazi" / "yazi.toml"
     theme_toml = dotfiles / "config" / "yazi" / "theme.toml"
+    keymap_toml = dotfiles / "config" / "yazi" / "keymap.toml"
     if yazi_toml.exists() and theme_toml.exists():
         if tomllib:
             try:
                 tomllib.loads(yazi_toml.read_text(encoding="utf-8"))
                 tomllib.loads(theme_toml.read_text(encoding="utf-8"))
-                report.ok("Yazi configuration", "yazi.toml & theme.toml valid TOML")
+                if keymap_toml.exists():
+                    tomllib.loads(keymap_toml.read_text(encoding="utf-8"))
+                report.ok("Yazi configuration", "yazi.toml, theme.toml & keymap.toml valid TOML")
             except Exception as e:
                 report.fail("Yazi configuration", f"TOML parse error: {e}")
         else:
@@ -152,8 +146,11 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
         report.warn("Yazi configuration", "Configs not found")
 
     # Ghostty config validation
-    if shutil.which("ghostty"):
-        code, out, err = run_cmd(["ghostty", "+validate-config"])
+    ghostty_bin = shutil.which("ghostty")
+    if not ghostty_bin and Path("/Applications/Ghostty.app/Contents/MacOS/ghostty").is_file():
+        ghostty_bin = "/Applications/Ghostty.app/Contents/MacOS/ghostty"
+    if ghostty_bin:
+        code, out, err = run_cmd([ghostty_bin, "+validate-config"])
         if code == 0:
             report.ok("Ghostty terminal configuration", "ghostty +validate-config valid")
         else:
@@ -173,7 +170,7 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
     else:
         report.warn("Neovim headless initialization", "nvim binary not found (skipped)")
 
-    # Spaceship & Starship prompt config validation
+    # Spaceship prompt config validation
     spaceship_cfg = dotfiles / "config" / "spaceship" / "spaceship.zsh"
     if spaceship_cfg.exists() and shutil.which("zsh"):
         code, out, err = run_cmd(["zsh", "-n", str(spaceship_cfg)])
@@ -181,14 +178,6 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
             report.ok("Spaceship prompt configuration", "config/spaceship/spaceship.zsh valid Zsh")
         else:
             report.fail("Spaceship prompt configuration", err.splitlines()[0] if err else "Syntax error")
-
-    starship_toml = dotfiles / "config" / "starship" / "starship.toml"
-    if starship_toml.exists() and tomllib:
-        try:
-            tomllib.loads(starship_toml.read_text(encoding="utf-8"))
-            report.ok("Starship prompt configuration", "starship.toml valid TOML")
-        except Exception as e:
-            report.fail("Starship prompt configuration", f"Invalid TOML: {e}")
 
     # Bat syntax viewer config
     bat_config = dotfiles / "config" / "bat" / "config"
@@ -256,18 +245,24 @@ def test_shell_runtime(report: TestReport, dotfiles: Path):
     else:
         report.warn("Startup latency budget (<350ms)", f"Exceeded target: {elapsed_ms}ms")
 
-    # Custom functions check
+    # Custom functions check (reads canonical DOTFILES_FUNCTIONS from zsh/functions.zsh)
     func_check_code = """
-for fn in take up tree lt groot gmain conf dotbranch clone port fkill fcon fssh wt gwtnew gwts gwtdel gwtclean gbclean gstash ga gfile y copy paste scratch extract npmr bunr pnpmr fa fenv cheath toggle-autols notify gl gco sdiff; do
+if (( ! ${#DOTFILES_FUNCTIONS[@]} )); then
+    echo "Missing function: DOTFILES_FUNCTIONS registry is empty"
+fi
+for fn in "${DOTFILES_FUNCTIONS[@]}"; do
     if ! (( $+functions[$fn] )); then
         echo "Missing function: $fn"
     fi
 done
+echo "COUNT:${#DOTFILES_FUNCTIONS[@]}"
 """
     code, out, err = run_cmd(["zsh", "-i", "-c", func_check_code], timeout=5, env=zsh_env)
     missing_funcs = [line.strip() for line in out.splitlines() if line.startswith("Missing function:")]
+    count_lines = [line.split(":", 1)[1] for line in out.splitlines() if line.startswith("COUNT:")]
+    fn_count = count_lines[0] if count_lines else "all"
     if not missing_funcs:
-        report.ok("Custom shell functions", "All 38 functions registered in zsh")
+        report.ok("Custom shell functions", f"All {fn_count} functions registered in zsh")
     else:
         report.fail("Custom shell functions", missing_funcs[0])
 
@@ -326,6 +321,7 @@ up -h >/dev/null
 tree -h >/dev/null
 tree 1 "{dotfiles}/zsh" >/dev/null
 lt 1 "{dotfiles}/zsh" >/dev/null
+conf -h >/dev/null
 fa -p >/dev/null
 fenv -h >/dev/null
 cheath -h >/dev/null
@@ -334,9 +330,11 @@ fkill -h >/dev/null
 fcon -h >/dev/null
 fssh -h >/dev/null
 scratch -h >/dev/null
+toggle-autonotify -h >/dev/null
 take /tmp/test-smoke-take >/dev/null && cd - >/dev/null && rm -rf /tmp/test-smoke-take
 notify "test" "dottest" >/dev/null
 extract >/dev/null 2>&1 || true
+pack -h >/dev/null
 sdiff -h >/dev/null
 sdiff "feat/SALES-1234/my-branch" "feat/SALES-1235/my_branch " >/dev/null
 dotbranch -h >/dev/null
@@ -426,9 +424,7 @@ def run_tests() -> int:
     dotfiles = get_dotfiles_dir()
     report = TestReport()
 
-    print(f"\n{C_CYAN}╭────────────────────────────────────────────────────────╮{C_RESET}")
-    print(f"{C_CYAN}│{C_RESET}  {C_BOLD}Dotfiles Test Suite — Deep Runtime & Schema Checker   {C_RESET}{C_CYAN}│{C_RESET}")
-    print(f"{C_CYAN}╰────────────────────────────────────────────────────────╯{C_RESET}")
+    print_header("Dotfiles Test Suite \u2014 Deep Runtime & Schema Checker")
 
     test_parsers_and_schemas(report, dotfiles)
     test_shell_runtime(report, dotfiles)

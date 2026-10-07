@@ -5,14 +5,15 @@ from pathlib import Path
 from cli.doctor import DoctorReport, check_and_heal_symlinks
 from cli.manifest import get_dotfiles_dir
 from cli.test import run_tests
-
-C_GREEN = "\033[38;2;166;227;161m"
-C_YELLOW = "\033[38;2;249;226;175m"
-C_RED = "\033[38;2;243;139;168m"
-C_BLUE = "\033[1;34m"
-C_CYAN = "\033[38;2;137;220;235m"
-C_BOLD = "\033[1m"
-C_RESET = "\033[0m"
+from cli.ui import (
+    C_BLUE,
+    C_BOLD,
+    C_CYAN,
+    C_GREEN,
+    C_RED,
+    C_RESET,
+    C_YELLOW,
+)
 
 def run_cmd(cmd: list[str], cwd: Path = None) -> tuple[int, str]:
     try:

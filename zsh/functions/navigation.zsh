@@ -10,21 +10,10 @@ groot() {
 
 # Jump from any worktree or subdirectory to the primary repository root
 gmain() {
-  if ! git rev-parse --is-inside-work-tree &>/dev/null; then
-    printf "\033[31m✖ Not inside a git repository or worktree.\033[0m\n" >&2
-    return 1
-  fi
-
-  local common_dir
-  common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
-  if [ -z "$common_dir" ]; then
-    cd "$(git rev-parse --show-toplevel)" || return 1
-    return 0
-  fi
-
+  _require_git_repo || return 1
   local main_root
-  main_root="$(cd "$common_dir/.." && pwd)"
-  cd "$main_root" || return 1
+  main_root="$(_git_main_root)"
+  [ -n "$main_root" ] && cd "$main_root"
 }
 
 # Smart Ancestor Navigation: 'up' (1 level), 'up 3' (N levels), 'up 3549' or 'up sales' (ancestor name/substring)

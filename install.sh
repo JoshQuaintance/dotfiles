@@ -182,8 +182,13 @@ if [[ "$CHOICE" == "1" || "$CHOICE" == "--workstation" || "$CHOICE" == "--all" ]
     done
 
     "$DOTFILES_DIR/install/install-mise.sh"
-    "$DOTFILES_DIR/install/install-nvm.sh"
+    if ! command -v mise &>/dev/null && [ ! -x "$HOME/.local/bin/mise" ]; then
+        "$DOTFILES_DIR/install/install-nvm.sh"
+    fi
     "$DOTFILES_DIR/install/install-astral.sh"
+
+    # Reconcile all declarative symlinks from cli/manifest.py
+    "$DOTFILES_DIR/bin/dot" link --fix >/dev/null 2>&1 || true
 
     launch_shell "Full Workstation setup complete!"
 fi

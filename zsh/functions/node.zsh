@@ -19,31 +19,17 @@ _extract_pkg_scripts() {
   local pkg_file="$1"
   if command -v jq &>/dev/null; then
     jq -r 'if .scripts then .scripts | to_entries[] | "\(.key)\t\(.value)" else empty end' "$pkg_file" 2>/dev/null
-  elif command -v node &>/dev/null; then
-    node -e '
-      try {
-        const fs = require("fs");
-        const pkg = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-        if (pkg.scripts) {
-          for (const [k, v] of Object.entries(pkg.scripts)) {
-            console.log(k + "\t" + v);
-          }
-        }
-      } catch (e) {}
-    ' "$pkg_file" 2>/dev/null
-  elif command -v bun &>/dev/null; then
-    bun -e '
-      try {
-        const fs = require("fs");
-        const pkg = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-        if (pkg.scripts) {
-          for (const [k, v] of Object.entries(pkg.scripts)) {
-            console.log(k + "\t" + v);
-          }
-        }
-      } catch (e) {}
-    ' "$pkg_file" 2>/dev/null
+    return
   fi
+  local js_rt=""
+  command -v node &>/dev/null && js_rt="node" || { command -v bun &>/dev/null && js_rt="bun"; }
+  [ -z "$js_rt" ] && return
+  "$js_rt" -e '
+    try {
+      const pkg = JSON.parse(require("fs").readFileSync(process.argv.at(-1), "utf8"));
+      for (const [k, v] of Object.entries(pkg.scripts || {})) console.log(k + "\t" + v);
+    } catch {}
+  ' -- "$pkg_file" 2>/dev/null
 }
 
 _pkg_script_select() {
@@ -52,8 +38,8 @@ _pkg_script_select() {
   pkg_file=$(_find_package_json)
 
   if [ -z "$pkg_file" ] || [ ! -f "$pkg_file" ]; then
-    command "$runner" run
-    return $?
+    printf "\033[31m✖ Cannot find a package.json file.\033[0m\n" >&2
+    return 1
   fi
 
   local raw_scripts
@@ -65,9 +51,9 @@ _pkg_script_select() {
   fi
 
   if ! command -v fzf &>/dev/null; then
-    printf "\033[33mfzf not found. Falling back to %s run...\033[0m\n" "$runner" >&2
-    command "$runner" run
-    return $?
+    printf "\033[33mfzf not found. Available scripts in %s:\033[0m\n" "$pkg_file" >&2
+    printf "%s\n" "$raw_scripts"
+    return 0
   fi
 
   local max_len
@@ -92,27 +78,19 @@ _pkg_script_select() {
     fi
   "
 
+  local -a fzf_mode_flags
+  _fzf_vim_mode "⚡ $runner run > " "  j/k: navigate │ /: search │ enter: run │ e: edit package.json │ y: copy cmd │ q: quit" "run" "e,y"
+
   local selection
   selection=$(echo "$formatted" | fzf \
     --ansi \
     --delimiter=$'\t' \
     --with-nth=1 \
-    --disabled \
     --height=~55% \
     --min-height=10 \
-    --layout=reverse \
-    --border=rounded \
     --info=inline \
-    --pointer="❯ " \
-    --prompt="⚡ $runner run > " \
-    --header="  j/k: navigate │ /: search │ enter: run │ e: edit package.json │ y: copy cmd │ q: quit" \
+    "${fzf_mode_flags[@]}" \
     --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
-    --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,ctrl-j:down,ctrl-k:up,ctrl-n:down,ctrl-p:up,down:down,up:up,enter:accept" \
-    --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,e,y,i,/)+change-prompt(🔍 filter > )+change-header(  type to filter │ esc: normal mode │ enter: run)+rebind(esc)" \
-    --bind="i:enable-search+unbind(j,k,q,g,G,e,y,i,/)+change-prompt(🔍 filter > )+change-header(  type to filter │ esc: normal mode │ enter: run)+rebind(esc)" \
-    --bind="esc:disable-search+rebind(j,k,q,g,G,e,y,i,/)+change-prompt(⚡ $runner run > )+change-header(  j/k: navigate │ /: search │ enter: run │ e: edit package.json │ y: copy cmd │ q: quit)+unbind(esc)" \
-    --bind="start:unbind(esc)" \
-    --bind="ctrl-/:toggle-preview,ctrl-d:preview-page-down,ctrl-u:preview-page-up" \
     --preview="$preview_cmd" \
     --preview-window="right:50%:wrap" \
     --expect="e,y")
@@ -132,22 +110,11 @@ _pkg_script_select() {
     e)
       local ln
       ln=$(grep -nF "\"$selected\"" "$pkg_file" 2>/dev/null | head -n1 | cut -d: -f1)
-      local editor="${EDITOR:-nvim}"
-      command -v "$editor" &>/dev/null || editor="nano"
-      if [ -n "$ln" ] && [[ "$editor" == *vim* ]]; then
-        "$editor" "+$ln" "$pkg_file"
-      else
-        "$editor" "$pkg_file"
-      fi
+      _edit_file "$pkg_file" "$ln"
       ;;
     y)
       local run_cmd="$runner run $selected"
-      if (( $+functions[copy] )); then
-        printf "%s" "$run_cmd" | copy
-        printf "\033[32m✔ Copied to clipboard: %s\033[0m\n" "$run_cmd"
-      else
-        printf "%s\n" "$run_cmd"
-      fi
+      _copy_or_print "$run_cmd" "to clipboard: $run_cmd"
       ;;
     *)
       printf "\033[1;32m➜\033[0m \033[1;36m%s run %s\033[0m\n" "$runner" "$selected"
@@ -156,52 +123,27 @@ _pkg_script_select() {
   esac
 }
 
-# npm / bun / pnpm wrappers (intercept 'run' without arguments)
-npm() {
-  if [ "$1" = "run" ] && [ "$#" -eq 1 ]; then
-    _pkg_script_select npm
-  else
-    command npm "$@"
-  fi
-}
-
-bun() {
-  if [ "$1" = "run" ] && [ "$#" -eq 1 ]; then
-    _pkg_script_select bun
-  else
-    command bun "$@"
-  fi
-}
-
-pnpm() {
-  if [ "$1" = "run" ] && [ "$#" -eq 1 ]; then
-    _pkg_script_select pnpm
-  else
-    command pnpm "$@"
-  fi
-}
-
-# Direct shortcuts: npmr, bunr, pnpmr
-npmr() {
-  if [ "$#" -eq 0 ]; then
-    _pkg_script_select npm
-  else
-    command npm run "$@"
-  fi
-}
-
-bunr() {
-  if [ "$#" -eq 0 ]; then
-    _pkg_script_select bun
-  else
-    command bun run "$@"
-  fi
-}
-
-pnpmr() {
-  if [ "$#" -eq 0 ]; then
-    _pkg_script_select pnpm
-  else
-    command pnpm run "$@"
-  fi
-}
+# npm / bun / pnpm wrappers (intercept 'run' without arguments) & direct shortcuts (npmr, bunr, pnpmr)
+for _pm in npm bun pnpm; do
+  eval "
+    ${_pm}() {
+      if [ \"\$1\" = \"run\" ] && [ \"\$#\" -eq 1 ]; then
+        _pkg_script_select ${_pm}
+      else
+        command ${_pm} \"\$@\"
+      fi
+    }
+    ${_pm}r() {
+      if ! _find_package_json >/dev/null; then
+        printf \"\033[31m✖ Cannot find a package.json file.\033[0m\n\" >&2
+        return 1
+      fi
+      if [ \"\$#\" -eq 0 ]; then
+        _pkg_script_select ${_pm}
+      else
+        command ${_pm} run \"\$@\"
+      fi
+    }
+  "
+done
+unset _pm

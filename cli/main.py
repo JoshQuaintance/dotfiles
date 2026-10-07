@@ -1,7 +1,9 @@
 import argparse
 import sys
 from cli.bench import run_bench
+from cli.clean import run_clean
 from cli.doctor import run_doctor
+from cli.status import run_status
 from cli.test import run_tests
 from cli.update import run_update
 
@@ -12,16 +14,24 @@ def main():
     )
     subparsers = parser.add_subparsers(dest="subcommand", help="Available subcommands")
 
+    # dot status
+    subparsers.add_parser("status", help="Show quick 1-screen workstation & dotfiles status overview")
+
     # dot doctor
     parser_doctor = subparsers.add_parser("doctor", help="Run system health checks and audit symlinks")
     parser_doctor.add_argument("-f", "--fix", action="store_true", help="Automatically repair broken or missing symlinks")
 
     # dot test
-    parser_test = subparsers.add_parser("test", help="Run deep runtime configuration and schema integration tests")
+    subparsers.add_parser("test", help="Run deep runtime configuration and schema integration tests")
 
     # dot bench
     parser_bench = subparsers.add_parser("bench", help="Benchmark interactive Zsh startup latency and per-phase breakdown")
     parser_bench.add_argument("-n", "--iterations", type=int, default=5, help="Number of benchmark runs (default: 5)")
+
+    # dot clean
+    parser_clean = subparsers.add_parser("clean", help="Clean stale Zsh dumps, completion caches, oversized logs, and temp files")
+    parser_clean.add_argument("-n", "--dry-run", action="store_true", help="Preview items and space to be reclaimed without deleting")
+    parser_clean.add_argument("-a", "--all", action="store_true", help="Also remove legacy ~/.oh-my-zsh and prune uv/Homebrew caches")
 
     # dot update
     parser_update = subparsers.add_parser("update", help="Check and apply dotfiles, Homebrew, and Mise updates")
@@ -37,11 +47,9 @@ def main():
 
     args = parser.parse_args()
 
-    if not args.subcommand:
-        parser.print_help()
-        sys.exit(0)
-
-    if args.subcommand == "doctor":
+    if not args.subcommand or args.subcommand == "status":
+        sys.exit(run_status())
+    elif args.subcommand == "doctor":
         sys.exit(run_doctor(fix=args.fix))
     elif args.subcommand == "link":
         sys.exit(run_doctor(fix=args.fix))
@@ -49,6 +57,8 @@ def main():
         sys.exit(run_tests())
     elif args.subcommand == "bench":
         sys.exit(run_bench(iterations=args.iterations))
+    elif args.subcommand == "clean":
+        sys.exit(run_clean(dry_run=args.dry_run, clean_all=args.all))
     elif args.subcommand == "update":
         sys.exit(run_update(
             check_only=args.check,

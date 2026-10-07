@@ -17,15 +17,16 @@ except ImportError:
     HAS_RICH = False
 
 from cli.manifest import get_dotfiles_dir, get_symlink_manifest, SymlinkEntry
-
-# Catppuccin-inspired status icons and ANSI colors
-C_GREEN = "\033[38;2;166;227;161m"
-C_YELLOW = "\033[38;2;249;226;175m"
-C_RED = "\033[38;2;243;139;168m"
-C_CYAN = "\033[38;2;137;220;235m"
-C_DIM = "\033[38;2;108;112;134m"
-C_BOLD = "\033[1m"
-C_RESET = "\033[0m"
+from cli.ui import (
+    C_BOLD,
+    C_CYAN,
+    C_DIM,
+    C_GREEN,
+    C_RED,
+    C_RESET,
+    C_YELLOW,
+    print_header,
+)
 
 class DoctorReport:
     def __init__(self):
@@ -157,7 +158,6 @@ def check_cli_tools(report: DoctorReport):
         ("fd", "fd file finder", ["fd", "--version"]),
         ("fzf", "fzf fuzzy finder", ["fzf", "--version"]),
         ("zoxide", "zoxide smart cd", ["zoxide", "--version"]),
-        ("starship", "Starship prompt (fallback)", ["starship", "--version"]),
         ("eza", "eza modern ls", ["eza", "--version"]),
         ("atuin", "Atuin shell history", ["atuin", "--version"]),
         ("bat", "bat syntax viewer", ["bat", "--version"]),
@@ -194,7 +194,7 @@ def check_cli_tools(report: DoctorReport):
         zwc_status = " (.zwc compiled)" if sp_found.with_name("spaceship.zsh.zwc").is_file() else ""
         report.ok("Spaceship Zsh prompt", f"{sp_found.parent.name}{zwc_status}")
     else:
-        report.warn("Spaceship Zsh prompt", "spaceship.zsh not found (using Starship fallback)")
+        report.warn("Spaceship Zsh prompt", "spaceship.zsh not found (using vcs_info fallback)")
 
     # Check Zsh plugins (fzf-tab, zsh-autosuggestions, zsh-syntax-highlighting)
     zsh_plugins = [
@@ -277,13 +277,11 @@ def run_doctor(fix: bool = False) -> int:
     dotfiles = get_dotfiles_dir()
     report = DoctorReport()
 
-    header_text = "Dotfiles Doctor — System & Environment Health Check"
+    header_text = "Dotfiles Doctor \u2014 System & Environment Health Check"
     if fix:
-        header_text += " [AUTO-HEALING ACTIVE]"
+        header_text += " [FIX]"
 
-    print(f"\n{C_CYAN}╭────────────────────────────────────────────────────────╮{C_RESET}")
-    print(f"{C_CYAN}│{C_RESET}  {C_BOLD}{header_text:<53}{C_RESET}{C_CYAN}│{C_RESET}")
-    print(f"{C_CYAN}╰────────────────────────────────────────────────────────╯{C_RESET}")
+    print_header(header_text)
 
     check_repository(report, dotfiles)
     check_and_heal_symlinks(report, dotfiles, fix=fix)

@@ -1,0 +1,62 @@
+# Yazi Keymaps Configuration
+# https://yazi-rs.github.io/docs/configuration/keymap
+
+[[mgr.prepend_keymap]]
+on   = [ "T" ]
+run  = '''shell --confirm '
+  if [ -n "$TMUX" ]; then
+    tmux new-window -c "$PWD"
+  elif [ -n "$ZELLIJ" ]; then
+    zellij action new-tab --cwd "$PWD"
+  elif [ "$TERM_PROGRAM" = "WezTerm" ] && command -v wezterm >/dev/null 2>&1; then
+    wezterm cli spawn --cwd "$PWD" >/dev/null
+  elif [ -n "$KITTY_LISTEN_ON" ] && command -v kitty >/dev/null 2>&1; then
+    kitty @ launch --type=tab --cwd="$PWD" >/dev/null
+  elif [ "$(uname -s)" = "Darwin" ]; then
+    if [ "$TERM_PROGRAM" = "ghostty" ] || [ -d "/Applications/Ghostty.app" ]; then
+      osascript - "$PWD" <<APPLESCRIPT >/dev/null 2>&1
+on run argv
+  set targetDir to item 1 of argv
+  tell application "Ghostty"
+    set cfg to new surface configuration
+    set initial working directory of cfg to targetDir
+    if (count of windows) > 0 then
+      new tab in front window with configuration cfg
+    else
+      new window with configuration cfg
+    end if
+    activate
+  end tell
+end run
+APPLESCRIPT
+    elif [ "$TERM_PROGRAM" = "iTerm.app" ]; then
+      open -a iTerm "$PWD"
+    else
+      open -a Terminal "$PWD"
+    fi
+  elif [ -n "$WT_SESSION" ] && command -v wt.exe >/dev/null 2>&1; then
+    wt.exe -w 0 nt -d "$PWD"
+  elif command -v gnome-terminal >/dev/null 2>&1; then
+    gnome-terminal --tab --working-directory="$PWD"
+  elif command -v konsole >/dev/null 2>&1; then
+    konsole --new-tab --workdir "$PWD"
+  elif command -v xfce4-terminal >/dev/null 2>&1; then
+    xfce4-terminal --tab --working-directory="$PWD"
+  fi
+' '''
+desc = "Open new terminal tab in current directory"
+
+[[mgr.prepend_keymap]]
+on   = [ "L" ]
+run  = 'shell "lazygit" --block --confirm'
+desc = "Open lazygit in current directory"
+
+[[mgr.prepend_keymap]]
+on   = [ "Y" ]
+run  = [ "copy path", "unyank" ]
+desc = "Copy absolute path to system clipboard"
+
+[[mgr.prepend_keymap]]
+on   = [ "D" ]
+run  = 'shell "nvim -d \"$@\"" --block --confirm'
+desc = "Diff selected files side-by-side in Neovim"

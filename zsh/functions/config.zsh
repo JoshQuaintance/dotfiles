@@ -33,7 +33,7 @@ _conf_candidates() {
 
       if [ -d "$item" ]; then
         local primary=""
-        for sub in "$item"/config*(N) "$item"/spaceship.zsh(N) "$item"/starship.toml(N) "$item"/settings.json(N) "$item"/theme.yml(N) "$item"/init.lua(N) "$item"/.gitconfig(N); do
+        for sub in "$item"/config*(N) "$item"/spaceship.zsh(N) "$item"/settings.json(N) "$item"/theme.yml(N) "$item"/init.lua(N) "$item"/.gitconfig(N); do
           if [ -f "$sub" ]; then
             primary="$sub"
             break
@@ -61,64 +61,62 @@ _conf_candidates() {
 }
 
 conf() {
+  if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    printf "\033[1;38;2;137;180;250mconf\033[0m — Fuzzy configuration opener with auto-reload (macOS & Linux)\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  conf                  Interactive modal-Vim FZF browser of all configurations\n"
+    printf "  conf <target>         Open matching config (e.g. conf zsh, conf nvim, conf ghostty)\n"
+    printf "  conf <path>           Open file or directory path directly\n"
+    return 0
+  fi
+
   local target_file=""
   local is_shell_rc=false
 
-  # 1. If nothing passed, default to editing ~/.zshrc
-  if [ -z "$1" ]; then
+  # 1. If nothing passed and not in an interactive FZF-capable terminal, default to ~/.zshrc
+  if [ -z "$1" ] && { [ ! -t 1 ] || ! command -v fzf &>/dev/null; }; then
     target_file="$HOME/.zshrc"
     is_shell_rc=true
   # 2. If an explicit file or directory path was given
-  elif [ -f "$1" ] || [ -d "$1" ]; then
+  elif [ -n "$1" ] && { [ -f "$1" ] || [ -d "$1" ]; }; then
     target_file="$1"
   else
     local query="$1"
     local all_candidates
     all_candidates=$(_conf_candidates)
 
-    # Check for exact key match first (case-insensitive)
-    local exact_match
-    exact_match=$(echo "$all_candidates" | awk -F'\t' -v q="$query" 'tolower($1) == tolower(q) { print $2; exit }')
+    # Check for exact key match first (case-insensitive) when a query is provided
+    local exact_match=""
+    if [ -n "$query" ]; then
+      exact_match=$(echo "$all_candidates" | awk -F'\t' -v q="$query" 'tolower($1) == tolower(q) { print $2; exit }')
+    fi
 
     if [ -n "$exact_match" ]; then
       target_file="$exact_match"
     else
-      # Fuzzy filter candidate entries
-      local matches
-      matches=$(echo "$all_candidates" | awk -F'\t' -v q="$query" 'tolower($1) ~ tolower(q) || tolower($2) ~ tolower(q) { print $0 }' | sort -u -k2,2)
-      local match_count
-      match_count=$(echo "$matches" | grep -c . || true)
+      # Fuzzy filter candidate entries (or deduplicate by path when browsing all)
+      local matches=""
+      local match_count=0
+      if [ -n "$query" ]; then
+        matches=$(echo "$all_candidates" | awk -F'\t' -v q="$query" 'tolower($1) ~ tolower(q) || tolower($2) ~ tolower(q) { if (!seen[$2]++) print $0 }')
+        match_count=$(echo "$matches" | grep -c . || true)
+      fi
 
       if [ "$match_count" -eq 1 ]; then
         target_file=$(echo "$matches" | awk -F'\t' '{print $2}')
       elif command -v fzf &>/dev/null; then
         local candidate_pool="$matches"
-        [ -z "$candidate_pool" ] && candidate_pool=$(echo "$all_candidates" | sort -u -k2,2)
+        [ -z "$candidate_pool" ] && candidate_pool=$(echo "$all_candidates" | awk -F'\t' '!seen[$2]++ { print $0 }')
 
-        local fzf_mode_flags=()
-        if [ -z "$query" ]; then
-          fzf_mode_flags=(
-            "--disabled"
-            "--bind=j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept"
-            "--bind=/:clear-query+enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: open)+rebind(esc)"
-            "--bind=i:enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: open)+rebind(esc)"
-            "--bind=esc:disable-search+rebind(j,k,q,g,G,i,/)+change-prompt(⚙  Edit Config > )+change-header(  j/k: navigate │ /: search │ enter: open │ q: quit)+unbind(esc)"
-            "--bind=start:unbind(esc)"
-          )
-        else
-          fzf_mode_flags=("--query=$query")
-        fi
+        local -a fzf_mode_flags
+        _fzf_vim_mode "⚙  Edit Config > " "  j/k: navigate │ /: search │ enter: open │ q: quit" "open" "" "$query"
 
         local selected
         selected=$(echo "$candidate_pool" | awk -F'\t' '{ printf "%-16s │ %s\t%s\n", $1, $2, $2 }' | fzf \
           --delimiter='\t' \
           --with-nth=1 \
-          "${fzf_mode_flags[@]}" \
           --height=~50% \
-          --layout=reverse \
-          --border=rounded \
-          --prompt="⚙  Edit Config > " \
-          --header="  j/k: navigate │ /: search │ enter: open │ q: quit" \
+          "${fzf_mode_flags[@]}" \
           --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
           --preview='if [ -d {2} ]; then if command -v eza &>/dev/null; then eza -la --color=always {2}; else ls -la {2}; fi; elif [ -f {2} ]; then if command -v bat &>/dev/null; then bat --style=plain --color=always --line-range :60 {2}; else head -n 60 {2}; fi; fi' \
           --preview-window='right:55%:wrap')
@@ -155,11 +153,8 @@ conf() {
       ;;
   esac
 
-  local editor="${EDITOR:-nvim}"
-  command -v "$editor" &>/dev/null || editor="nano"
-
   if [ -d "$target_file" ]; then
-    "$editor" "$target_file"
+    _edit_file "$target_file"
     return 0
   fi
 
@@ -168,7 +163,7 @@ conf() {
   local before_sum
   before_sum=$(cksum "$target_file" 2>/dev/null)
 
-  "$editor" "$target_file"
+  _edit_file "$target_file"
 
   local after_sum
   after_sum=$(cksum "$target_file" 2>/dev/null)
@@ -297,20 +292,13 @@ dotbranch() {
     return 0
   fi
 
+  local -a fzf_mode_flags
+  _fzf_vim_mode "⚙ Dotfiles Branch [current: ${current_branch}] > " "  j/k: navigate │ /: search │ enter: switch & reload │ q: quit" "switch & reload"
+
   target=$(printf "%s\n" "${branches[@]}" | fzf \
     --height=~45% \
-    --layout=reverse \
-    --border=rounded \
-    --disabled \
-    --pointer="❯ " \
-    --prompt="⚙ Dotfiles Branch [current: ${current_branch}] > " \
-    --header="  j/k: navigate │ /: search │ enter: switch & reload │ q: quit" \
+    "${fzf_mode_flags[@]}" \
     --color="header:italic:dim,prompt:bold:magenta,pointer:bold:green" \
-    --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept" \
-    --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: switch & reload)+rebind(esc)" \
-    --bind="i:enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: switch & reload)+rebind(esc)" \
-    --bind="esc:disable-search+rebind(j,k,q,g,G,i,/)+change-prompt(⚙ Dotfiles Branch [current: ${current_branch}] > )+change-header(  j/k: navigate │ /: search │ enter: switch & reload │ q: quit)+unbind(esc)" \
-    --bind="start:unbind(esc)" \
     --preview="git -C '$dot_dir' log -n 12 --oneline --graph --decorate --color=always {} 2>/dev/null" \
     --preview-window='right:55%:wrap')
 
@@ -330,14 +318,12 @@ _dotbranch_reload() {
     "$dot_dir/bin/dot" doctor --fix >/dev/null 2>&1 || true
   fi
 
-  # Cleanly tear down both Spaceship and Starship prompt hooks before re-sourcing ~/.zshrc
+  # Cleanly tear down Spaceship prompt hooks before re-sourcing ~/.zshrc
   autoload -Uz add-zsh-hook
   (( $+functions[async_stop_worker] )) && async_stop_worker "spaceship" "spaceship_1" "spaceship_2" "spaceship_3" 2>/dev/null || true
   add-zsh-hook -d precmd prompt_spaceship_precmd 2>/dev/null || true
   add-zsh-hook -d preexec prompt_spaceship_preexec 2>/dev/null || true
   add-zsh-hook -d chpwd prompt_spaceship_chpwd 2>/dev/null || true
-  add-zsh-hook -d precmd prompt_starship_precmd 2>/dev/null || true
-  add-zsh-hook -d preexec prompt_starship_preexec 2>/dev/null || true
   RPROMPT=""
   [[ -t 1 && ! -t 2 ]] && exec 2>&1
 

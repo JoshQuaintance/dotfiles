@@ -4,7 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-log "Installing Core CLI Utilities (ripgrep, fd, fzf, zoxide, starship, eza, atuin, bat)..."
+log "Installing Core CLI Utilities (ripgrep, fd, fzf, zoxide, spaceship, eza, atuin, bat)..."
 
 # Ensure local bin directory exists in PATH
 mkdir -p "$HOME/.local/bin"
@@ -39,7 +39,7 @@ if command -v brew &>/dev/null; then
         # Install only specifically requested tools
         for pkg in "${REQUESTED_TOOLS[@]}"; do
             case "$pkg" in
-                ripgrep|fd|fzf|zoxide|starship|spaceship|eza|atuin|bat|yazi|dust|btop|tlrc|tokei|hyperfine|fzf-tab|zsh-autosuggestions|zsh-syntax-highlighting|git|git-delta|lazygit)
+                ripgrep|fd|fzf|zoxide|spaceship|eza|atuin|bat|yazi|dust|btop|tlrc|tokei|hyperfine|fzf-tab|zsh-autosuggestions|zsh-syntax-highlighting|git|git-delta|lazygit)
                     if brew list "$pkg" &>/dev/null; then
                         ask_update_tool "$pkg" "$(brew info "$pkg" 2>/dev/null | head -n 1 | awk '{print $3}')" DO_UPD
                         [ "$DO_UPD" = true ] && brew upgrade "$pkg" 2>/dev/null || true
@@ -126,22 +126,7 @@ elif [ "$OS" = "Linux" ]; then
         fi
     fi
 
-    # 3. Starship prompt
-    if is_tool_requested "starship"; then
-        DO_STARSHIP=true
-        if command -v starship &>/dev/null; then
-            ask_update_tool "Starship" "$(starship --version 2>/dev/null | head -n 1 | awk '{print $1,$2}')" DO_STARSHIP
-        fi
-        if [ "$DO_STARSHIP" = true ]; then
-            log "Installing / Updating Starship prompt..."
-            curl -sS https://starship.rs/install.sh | sh -s -- -y -b "$HOME/.local/bin"
-            chmod +x "$HOME/.local/bin/starship" 2>/dev/null || true
-            [ "$(id -u)" -eq 0 ] && ln -sf "$HOME/.local/bin/starship" "/usr/local/bin/starship" 2>/dev/null || true
-            success "Starship ready!"
-        fi
-    fi
-
-    # 4. Atuin
+    # 3. Atuin
     if is_tool_requested "atuin"; then
         DO_ATUIN=true
         if command -v atuin &>/dev/null || [ -f "$HOME/.atuin/bin/atuin" ]; then
@@ -264,64 +249,19 @@ elif [ "$OS" = "Linux" ]; then
     fi
 fi
 
-# Symlink Spaceship & Starship prompt configurations with backup
-mkdir -p "$HOME/.config"
-if [ -f "$DOTFILES_DIR/config/spaceship/spaceship.zsh" ]; then
-    ln -sfn "$DOTFILES_DIR/config/spaceship/spaceship.zsh" "$HOME/.config/spaceship.zsh"
-    success "Linked ~/.config/spaceship.zsh -> $DOTFILES_DIR/config/spaceship/spaceship.zsh"
+# Symlink CLI configurations via shared link_dotfile helper
+link_dotfile "config/spaceship/spaceship.zsh" "$HOME/.config/spaceship.zsh"
+link_dotfile "config/ghostty/config" "$HOME/.config/ghostty/config"
+if [ "$OS" = "Darwin" ]; then
+    link_dotfile "config/ghostty/config" "$HOME/Library/Application Support/com.mitchellh.ghostty/config"
+    link_dotfile "config/ghostty/config" "$HOME/Library/Application Support/com.mitchellh.ghostty/config.ghostty"
 fi
-
-if is_tool_requested "starship"; then
-    if [ -f "$DOTFILES_DIR/config/starship/starship.toml" ]; then
-        if [ -f "$HOME/.config/starship.toml" ] && [ ! -L "$HOME/.config/starship.toml" ]; then
-            BACKUP_STARSHIP="$HOME/.config/starship.toml.bak"
-            [ -e "$BACKUP_STARSHIP" ] && BACKUP_STARSHIP="$HOME/.config/starship.toml.bak.$(date +%Y%m%d%H%M%S)"
-            cp "$HOME/.config/starship.toml" "$BACKUP_STARSHIP"
-        fi
-        ln -sfn "$DOTFILES_DIR/config/starship/starship.toml" "$HOME/.config/starship.toml"
-        success "Linked ~/.config/starship.toml -> $DOTFILES_DIR/config/starship/starship.toml"
-    fi
+link_dotfile "config/bat/config" "$HOME/.config/bat/config"
+link_dotfile "config/eza/theme.yml" "$HOME/.config/eza/theme.yml"
+if [ "$OS" = "Darwin" ]; then
+    link_dotfile "config/eza/theme.yml" "$HOME/Library/Application Support/eza/theme.yml"
 fi
-
-# Symlink Ghostty configuration
-if [ -f "$DOTFILES_DIR/config/ghostty/config" ]; then
-    mkdir -p "$HOME/.config/ghostty"
-    ln -sfn "$DOTFILES_DIR/config/ghostty/config" "$HOME/.config/ghostty/config"
-    success "Linked ~/.config/ghostty/config -> $DOTFILES_DIR/config/ghostty/config"
-
-    if [ "$OS" = "Darwin" ]; then
-        mkdir -p "$HOME/Library/Application Support/com.mitchellh.ghostty"
-        ln -sfn "$DOTFILES_DIR/config/ghostty/config" "$HOME/Library/Application Support/com.mitchellh.ghostty/config"
-        ln -sfn "$DOTFILES_DIR/config/ghostty/config" "$HOME/Library/Application Support/com.mitchellh.ghostty/config.ghostty"
-    fi
-fi
-
-# Symlink bat configuration
-if [ -f "$DOTFILES_DIR/config/bat/config" ]; then
-    mkdir -p "$HOME/.config/bat"
-    ln -sfn "$DOTFILES_DIR/config/bat/config" "$HOME/.config/bat/config"
-    success "Linked ~/.config/bat/config -> $DOTFILES_DIR/config/bat/config"
-fi
-
-# Symlink eza theme configuration
-if [ -f "$DOTFILES_DIR/config/eza/theme.yml" ]; then
-    mkdir -p "$HOME/.config/eza"
-    ln -sfn "$DOTFILES_DIR/config/eza/theme.yml" "$HOME/.config/eza/theme.yml"
-    success "Linked ~/.config/eza/theme.yml -> $DOTFILES_DIR/config/eza/theme.yml"
-
-    if [ "$OS" = "Darwin" ]; then
-        mkdir -p "$HOME/Library/Application Support/eza"
-        ln -sfn "$DOTFILES_DIR/config/eza/theme.yml" "$HOME/Library/Application Support/eza/theme.yml"
-        success "Linked ~/Library/Application Support/eza/theme.yml -> $DOTFILES_DIR/config/eza/theme.yml"
-    fi
-fi
-
-# Symlink yazi configuration
-if [ -d "$DOTFILES_DIR/config/yazi" ]; then
-    mkdir -p "$HOME/.config"
-    ln -sfn "$DOTFILES_DIR/config/yazi" "$HOME/.config/yazi"
-    success "Linked ~/.config/yazi -> $DOTFILES_DIR/config/yazi"
-fi
+link_dotfile "config/yazi" "$HOME/.config/yazi"
 
 # Symlink standalone bin utilities (dotupdate, dotcheck, dotdoctor, git-prompt-dir, esdiff, killport)
 if [ -d "$DOTFILES_DIR/bin" ]; then

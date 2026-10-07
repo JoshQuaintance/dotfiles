@@ -15,7 +15,6 @@ brew "fzf"          # Command-line fuzzy finder
 brew "bat"          # Cat clone with syntax highlighting
 brew "eza"          # Modern replacement for ls
 brew "zoxide"       # Smarter cd command
-brew "starship"     # Cross-shell prompt
 brew "spaceship"    # Zsh prompt with native async section rendering
 brew "atuin"        # Magical shell history
 

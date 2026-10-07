@@ -69,23 +69,7 @@ if command -v nvim &>/dev/null; then
 fi
 
 # 2. Symlink Neovim config with safe backup
-mkdir -p "$HOME/.config"
-if [ -d "$DOTFILES_DIR/config/nvim" ]; then
-    if [ -e "$HOME/.config/nvim" ] || [ -L "$HOME/.config/nvim" ]; then
-        if [ "$(readlink "$HOME/.config/nvim" 2>/dev/null)" != "$DOTFILES_DIR/config/nvim" ]; then
-            BACKUP_TARGET="$HOME/.config/nvim.bak"
-            if [ -e "$BACKUP_TARGET" ]; then
-                BACKUP_TARGET="$HOME/.config/nvim.bak.$(date +%Y%m%d%H%M%S)"
-            fi
-            log "Backing up existing ~/.config/nvim to $BACKUP_TARGET..."
-            mv "$HOME/.config/nvim" "$BACKUP_TARGET"
-            success "Created backup at $BACKUP_TARGET"
-        fi
-    fi
-
-    ln -sfn "$DOTFILES_DIR/config/nvim" "$HOME/.config/nvim"
-    success "Linked ~/.config/nvim -> $DOTFILES_DIR/config/nvim"
-fi
+link_dotfile "config/nvim" "$HOME/.config/nvim"
 
 # 3. Bootstrap & Sync Plugins (Headless)
 if [ "$MODE" = "--full" ] && command -v nvim &>/dev/null; then

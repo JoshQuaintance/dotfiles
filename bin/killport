@@ -1,18 +1,29 @@
 #!/usr/bin/env bash
 set -e
 
-# Kill process listening on a given port
-PORT="$1"
-if [ -z "$PORT" ]; then
+# Kill process listening on a given TCP port (macOS & Linux)
+PORT="${1#:}"
+if [ -z "$PORT" ] || [ "$PORT" = "-h" ] || [ "$PORT" = "--help" ]; then
   echo "Usage: killport <port_number>"
   exit 1
 fi
 
-PIDS=$(lsof -t -i :"$PORT" 2>/dev/null || true)
+PIDS=""
+if command -v lsof &>/dev/null; then
+  PIDS=$(lsof -t -i :"$PORT" 2>/dev/null || true)
+elif command -v fuser &>/dev/null; then
+  PIDS=$(fuser "${PORT}/tcp" 2>/dev/null || true)
+elif command -v ss &>/dev/null; then
+  PIDS=$(ss -tlnp "sport = :$PORT" 2>/dev/null | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u || true)
+fi
+
 if [ -n "$PIDS" ]; then
-  echo "Killing process(es) on port $PORT: $(echo $PIDS | tr '\n' ' ')"
-  echo "$PIDS" | xargs kill -9
+  PID_LIST=$(echo "$PIDS" | tr '\n' ' ' | sed 's/ *$//')
+  echo "Terminating process(es) on port $PORT (PID: $PID_LIST)..."
+  # Try graceful SIGTERM first, fallback to SIGKILL
+  echo "$PIDS" | xargs kill -15 2>/dev/null || echo "$PIDS" | xargs kill -9 2>/dev/null || true
   echo "✔ Port $PORT cleared"
 else
-  echo "No process found running on port $PORT"
+  echo "No process found listening on port $PORT"
+  exit 1
 fi

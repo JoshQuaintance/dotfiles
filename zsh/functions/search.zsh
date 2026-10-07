@@ -18,8 +18,8 @@ fa() {
   fi
 
   _gen_list() {
-    # 1. Custom dotfiles functions
-    for fn in take up tree lt groot gmain conf dotbranch clone port fkill fcon fssh gsearch wt gwtnew gwts gwtdel gwtclean gbclean gstash ga gfile y copy paste scratch extract npmr bunr pnpmr toggle-autols fa fenv cheath notify gl gco sdiff; do
+    # 1. Custom dotfiles functions (sourced from canonical DOTFILES_FUNCTIONS registry)
+    for fn in "${DOTFILES_FUNCTIONS[@]}"; do
       if (( $+functions[$fn] )); then
         printf "function\t%-18s\t(shell function)\n" "$fn"
       fi
@@ -50,25 +50,8 @@ fa() {
       _gen_list
     fi
   elif command -v fzf &>/dev/null; then
-    local fzf_mode_flags=()
-    if [ -z "$query" ]; then
-      fzf_mode_flags=(
-        "--disabled"
-        "--bind=j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept"
-        "--bind=/:clear-query+enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: paste)+rebind(esc)"
-        "--bind=i:enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: paste)+rebind(esc)"
-        "--bind=esc:disable-search+rebind(j,k,q,g,G,i,/)+change-prompt(⚡ Aliases & Functions > )+change-header(  j/k: navigate │ /: search │ enter: paste │ q: quit)+unbind(esc)"
-        "--bind=start:unbind(esc)"
-        "--header=  j/k: navigate │ /: search │ enter: paste │ q: quit"
-        "--prompt=⚡ Aliases & Functions > "
-      )
-    else
-      fzf_mode_flags=(
-        "--query=$query"
-        "--header=  enter: paste │ esc: quit"
-        "--prompt=🔍 Search Aliases & Functions > "
-      )
-    fi
+    local -a fzf_mode_flags
+    _fzf_vim_mode "⚡ Aliases & Functions > " "  j/k: navigate │ /: search │ enter: paste │ q: quit" "paste" "" "$query"
 
     local selected
     selected=$(_gen_list | fzf \
@@ -76,11 +59,8 @@ fa() {
       --nth=2 \
       --with-nth=1,2,3 \
       --height=~45% \
-      --layout=reverse \
-      --border=rounded \
-      --pointer="❯ " \
-      --color="header:italic:dim,prompt:bold:magenta,pointer:bold:magenta" \
       "${fzf_mode_flags[@]}" \
+      --color="header:italic:dim,prompt:bold:magenta,pointer:bold:magenta" \
       --preview='which {2} 2>/dev/null | if command -v bat &>/dev/null; then bat -l zsh --color=always --style=plain; else cat; fi' \
       --preview-window='right:55%:wrap')
 
@@ -135,21 +115,8 @@ fenv() {
   fi
 
   local hdr="  j/k: navigate │ /: search │ enter/y: copy value │ n: copy KEY=VAL │ e: edit export │ q: quit"
-  local fzf_mode_flags=()
-  if [ -z "$query" ]; then
-    fzf_mode_flags=(
-      "--disabled"
-      "--bind=start:unbind(esc)"
-      "--bind=j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort"
-      "--bind=/:clear-query+enable-search+unbind(j,k,q,g,G,y,n,e,i,/)+change-prompt(🔍 Search Env > )+change-header(  type to filter │ esc: normal mode │ enter: copy value)+rebind(esc)"
-      "--bind=i:enable-search+unbind(j,k,q,g,G,y,n,e,i,/)+change-prompt(🔍 Search Env > )+change-header(  type to filter │ esc: normal mode │ enter: copy value)+rebind(esc)"
-      "--bind=esc:disable-search+rebind(j,k,q,g,G,y,n,e,i,/)+change-prompt(🌎 Environment > )+change-header($hdr)+unbind(esc)"
-    )
-  else
-    fzf_mode_flags=(
-      "--query=$query"
-    )
-  fi
+  local -a fzf_mode_flags
+  _fzf_vim_mode "🌎 Environment > " "$hdr" "copy value" "y,n,e" "$query"
 
   local preview_cmd='
     k=$(echo {1} | sed "s/\x1b\[[0-9;]*m//g" | tr -d " ")
@@ -175,13 +142,8 @@ fenv() {
     --ansi \
     --delimiter='\t' \
     --height=~55% \
-    --layout=reverse \
-    --border=rounded \
-    --pointer="❯ " \
-    --prompt="🌎 Environment > " \
-    --header="$hdr" \
-    --color="header:italic:dim,prompt:bold:blue,pointer:bold:magenta" \
     "${fzf_mode_flags[@]}" \
+    --color="header:italic:dim,prompt:bold:blue,pointer:bold:magenta" \
     --preview="$preview_cmd" \
     --preview-window='right:55%:wrap' \
     --expect="y,n,e")
@@ -204,20 +166,10 @@ fenv() {
       print -z "export ${var_name}=${(qq)var_val}"
       ;;
     n)
-      if (( $+functions[copy] )); then
-        printf "%s=%s" "$var_name" "$var_val" | copy
-        printf "\033[32m✔ Copied %s=<value> to clipboard\033[0m\n" "$var_name"
-      else
-        printf "%s=%s\n" "$var_name" "$var_val"
-      fi
+      _copy_or_print "${var_name}=${var_val}" "${var_name}=<value> to clipboard"
       ;;
     *)
-      if (( $+functions[copy] )); then
-        printf "%s" "$var_val" | copy
-        printf "\033[32m✔ Copied value of %s to clipboard\033[0m\n" "$var_name"
-      else
-        printf "%s\n" "$var_val"
-      fi
+      _copy_or_print "$var_val" "value of ${var_name} to clipboard"
       ;;
   esac
 }
@@ -263,33 +215,14 @@ cheath() {
 
   local query="$*"
   local hdr="  j/k: navigate │ /: search │ enter: print cheat sheet │ e: insert cmd │ q: quit"
-  local fzf_mode_flags=()
-  if [ -z "$query" ]; then
-    fzf_mode_flags=(
-      "--disabled"
-      "--bind=start:unbind(esc)"
-      "--bind=j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort"
-      "--bind=/:clear-query+enable-search+unbind(j,k,q,g,G,e,i,/)+change-prompt(🔍 Search Cheat Sheets > )+change-header(  type to filter │ esc: normal mode │ enter: view)+rebind(esc)"
-      "--bind=i:enable-search+unbind(j,k,q,g,G,e,i,/)+change-prompt(🔍 Search Cheat Sheets > )+change-header(  type to filter │ esc: normal mode │ enter: view)+rebind(esc)"
-      "--bind=esc:disable-search+rebind(j,k,q,g,G,e,i,/)+change-prompt(📚 Cheat Sheets > )+change-header($hdr)+unbind(esc)"
-    )
-  else
-    fzf_mode_flags=(
-      "--query=$query"
-    )
-  fi
+  local -a fzf_mode_flags
+  _fzf_vim_mode "📚 Cheat Sheets > " "$hdr" "view" "e" "$query"
 
   local selection
   selection=$(printf "%s\n" "$pages" | fzf \
     --height=~60% \
-    --layout=reverse \
-    --border=rounded \
-    --pointer="❯ " \
-    --prompt="📚 Cheat Sheets > " \
-    --header="$hdr" \
-    --color="header:italic:dim,prompt:bold:magenta,pointer:bold:cyan" \
     "${fzf_mode_flags[@]}" \
-    --bind="ctrl-/:toggle-preview,ctrl-d:preview-page-down,ctrl-u:preview-page-up" \
+    --color="header:italic:dim,prompt:bold:magenta,pointer:bold:cyan" \
     --preview='tldr --color always {} 2>/dev/null' \
     --preview-window='right:65%:wrap' \
     --expect="e")

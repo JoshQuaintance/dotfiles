@@ -49,23 +49,16 @@ scratch() {
       return 0
     fi
 
+    local -a fzf_mode_flags
+    _fzf_vim_mode "🔍 Scratch Search > " "  j/k: navigate │ /: filter │ enter: open at line │ q: quit" "open"
+
     local match
     match=$(printf "%s\n" "$hits" | fzf \
       --ansi \
       --delimiter=':' \
       --height=~55% \
-      --layout=reverse \
-      --border=rounded \
-      --disabled \
-      --pointer="❯ " \
-      --prompt="🔍 Scratch Search > " \
-      --header="  j/k: navigate │ /: filter │ enter: open at line │ q: quit" \
+      "${fzf_mode_flags[@]}" \
       --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
-      --bind="start:unbind(esc)" \
-      --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept" \
-      --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Filter > )+change-header(  type to filter │ esc: normal mode │ enter: open)+rebind(esc)" \
-      --bind="i:enable-search+unbind(j,k,q,g,G,i,/)+change-prompt(🔍 Filter > )+change-header(  type to filter │ esc: normal mode │ enter: open)+rebind(esc)" \
-      --bind="esc:disable-search+rebind(j,k,q,g,G,i,/)+change-prompt(🔍 Scratch Search > )+change-header(  j/k: navigate │ /: filter │ enter: open at line │ q: quit)+unbind(esc)" \
       --preview="f={1}; ln={2}; if command -v bat &>/dev/null; then s=\$(( ln > 10 ? ln - 10 : 1 )); e=\$(( ln + 25 )); bat --style=numbers --color=always --highlight-line \"\$ln\" --line-range \"\$s:\$e\" '$scratch_dir/'\"\$f\" 2>/dev/null; else cat '$scratch_dir/'\"\$f\"; fi" \
       --preview-window='right:60%:wrap')
 
@@ -74,13 +67,7 @@ scratch() {
       clean_match=$(printf "%s" "$match" | sed $'s/\x1b\\[[0-9;]*m//g')
       file_part=$(printf "%s" "$clean_match" | cut -d: -f1)
       line_part=$(printf "%s" "$clean_match" | cut -d: -f2)
-      local editor="${EDITOR:-nvim}"
-      command -v "$editor" &>/dev/null || editor="nano"
-      if [ -n "$line_part" ] && [[ "$editor" == *vim* ]]; then
-        "$editor" "+$line_part" "$scratch_dir/$file_part"
-      else
-        "$editor" "$scratch_dir/$file_part"
-      fi
+      _edit_file "$scratch_dir/$file_part" "$line_part"
     fi
     return 0
   fi
@@ -94,23 +81,16 @@ scratch() {
     fi
 
     if command -v fzf &>/dev/null && [ -t 1 ]; then
+      local -a fzf_mode_flags
+      _fzf_vim_mode "📝 Scratchpad > " "  j/k: navigate │ space: select │ /: search │ enter: open │ x: delete │ q: quit" "open" "space,x" "" "space:toggle+down"
+
       local selection
       selection=$(find "$scratch_dir" -maxdepth 1 -name "*.md" -type f -exec basename {} \; | sort -r | fzf \
         --multi \
         --height=~50% \
-        --layout=reverse \
-        --border=rounded \
-        --disabled \
-        --pointer="❯ " \
         --marker="✓ " \
-        --prompt="📝 Scratchpad > " \
-        --header="  j/k: navigate │ space: select │ /: search │ enter: open │ x: delete │ q: quit" \
+        "${fzf_mode_flags[@]}" \
         --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green,marker:bold:red" \
-        --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,space:toggle+down,enter:accept" \
-        --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,space,x,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: open)+rebind(esc)" \
-        --bind="i:enable-search+unbind(j,k,q,g,G,space,x,i,/)+change-prompt(🔍 Search > )+change-header(  type to filter │ esc: normal mode │ enter: open)+rebind(esc)" \
-        --bind="esc:disable-search+rebind(j,k,q,g,G,space,x,i,/)+change-prompt(📝 Scratchpad > )+change-header(  j/k: navigate │ space: select │ /: search │ enter: open │ x: delete │ q: quit)+unbind(esc)" \
-        --bind="start:unbind(esc)" \
         --preview="if command -v bat &>/dev/null; then bat --style=plain --color=always '$scratch_dir/{}'; else cat '$scratch_dir/{}'; fi" \
         --preview-window='right:60%:wrap' \
         --expect="x")
@@ -183,7 +163,5 @@ scratch() {
     printf "# Scratchpad: %s\nCreated: %s\n\n" "$(basename "$target_file" .md)" "$(date '+%Y-%m-%d %H:%M:%S')" > "$target_file"
   fi
 
-  local editor="${EDITOR:-nvim}"
-  command -v "$editor" &>/dev/null || editor="nano"
-  "$editor" "$target_file"
+  _edit_file "$target_file"
 }

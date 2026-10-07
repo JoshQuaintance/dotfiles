@@ -53,7 +53,6 @@ def get_symlink_manifest() -> List[SymlinkEntry]:
 
         # ~/.config tools
         SymlinkEntry(home / ".config" / "spaceship.zsh", "config/spaceship/spaceship.zsh", "Spaceship prompt configuration", required=False),
-        SymlinkEntry(home / ".config" / "starship.toml", "config/starship/starship.toml", "Starship prompt configuration"),
         SymlinkEntry(home / ".config" / "nvim", "config/nvim", "Neovim editor configuration", is_directory=True),
         SymlinkEntry(home / ".config" / "ghostty" / "config", "config/ghostty/config", "Ghostty terminal configuration"),
         SymlinkEntry(home / ".config" / "bat" / "config", "config/bat/config", "Bat syntax viewer configuration"),

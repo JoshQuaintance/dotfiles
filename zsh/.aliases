@@ -49,6 +49,7 @@ if command -v eza &>/dev/null; then
 fi
 alias als="toggle-autols"
 alias autols="toggle-autols"
+alias autonotify="toggle-autonotify"
 alias aliases="fa"
 alias falias="fa"
 
@@ -69,10 +70,13 @@ alias myip="curl -s https://icanhazip.com"
 alias localip="ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print \$1}'"
 
 # Dotfiles Maintenance Shortcuts
+alias .status="dot status"
+alias .s="dot status"
 alias .doctor="dotdoctor"
 alias .check="dotcheck"
 alias .update="dotupdate"
 alias .bench="dot bench"
+alias .clean="dot clean"
 alias .branch="dotbranch"
 alias .b="dotbranch"
 

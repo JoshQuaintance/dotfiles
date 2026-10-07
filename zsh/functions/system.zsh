@@ -93,24 +93,18 @@ port() {
     return 0
   fi
 
+  local hdr=$'  j/k: navigate │ space: select │ /: search │ enter/x: kill process │ q: quit\n  PORT    \tPID     \tPROCESS           \tADDRESS'
+  local -a fzf_mode_flags
+  _fzf_vim_mode "🔌 Listening Ports > " "$hdr" "kill" "space,x" "" "space:toggle+down,x:accept"
+
   local selected
   selected=$(printf "%s\n" "$rows" | fzf \
     --delimiter='\t' \
     --multi \
     --height=~50% \
-    --layout=reverse \
-    --border=rounded \
-    --disabled \
-    --pointer="❯ " \
     --marker="✓ " \
-    --prompt="🔌 Listening Ports > " \
-    --header=$'  j/k: navigate │ space: select │ /: search │ enter/x: kill process │ q: quit\n  PORT    \tPID     \tPROCESS           \tADDRESS' \
+    "${fzf_mode_flags[@]}" \
     --color="header:italic:dim,prompt:bold:cyan,pointer:bold:red,marker:bold:red" \
-    --bind="start:unbind(esc)" \
-    --bind="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,space:toggle+down,x:accept" \
-    --bind="/:clear-query+enable-search+unbind(j,k,q,g,G,space,x,i,/)+change-prompt(🔍 Search Ports > )+change-header(  type to filter │ esc: normal mode │ enter: kill)+rebind(esc)" \
-    --bind="i:enable-search+unbind(j,k,q,g,G,space,x,i,/)+change-prompt(🔍 Search Ports > )+change-header(  type to filter │ esc: normal mode │ enter: kill)+rebind(esc)" \
-    --bind=$'esc:disable-search+rebind(j,k,q,g,G,space,x,i,/)+change-prompt(🔌 Listening Ports > )+change-header(  j/k: navigate │ space: select │ /: search │ enter/x: kill process │ q: quit\n  PORT    \tPID     \tPROCESS           \tADDRESS)+unbind(esc)' \
     --preview='pid=$(echo {2} | tr -d " "); if [ -n "$pid" ] && [ "$pid" != "-" ]; then ps -p "$pid" -o pid,ppid,user,%cpu,%mem,etime,command 2>/dev/null; echo ""; lsof -p "$pid" -iTCP -P -n 2>/dev/null | head -n 20; fi' \
     --preview-window='right:55%:wrap')
 
@@ -181,36 +175,17 @@ fkill() {
   fi
 
   local hdr=$'  j/k: move │ space: select │ enter: SIGTERM (-15) │ x: SIGKILL (-9) │ /: search │ q: quit\n  PID     \t   CPU\t   MEM\tPROCESS             \tCOMMAND'
-  local fzf_mode_flags=()
-  if [ -z "$query" ]; then
-    fzf_mode_flags=(
-      "--disabled"
-      "--bind=start:unbind(esc)"
-      "--bind=j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,space:toggle+down"
-      "--bind=/:clear-query+enable-search+unbind(j,k,q,g,G,space,x,i,/)+change-prompt(🔍 Search Procs > )+change-header(  type to filter │ esc: normal mode │ enter: SIGTERM)+rebind(esc)"
-      "--bind=i:enable-search+unbind(j,k,q,g,G,space,x,i,/)+change-prompt(🔍 Search Procs > )+change-header(  type to filter │ esc: normal mode │ enter: SIGTERM)+rebind(esc)"
-      "--bind=esc:disable-search+rebind(j,k,q,g,G,space,x,i,/)+change-prompt(⚡ Processes > )+change-header($hdr)+unbind(esc)"
-    )
-  else
-    fzf_mode_flags=(
-      "--query=$query"
-      "--bind=space:toggle+down"
-    )
-  fi
+  local -a fzf_mode_flags
+  _fzf_vim_mode "⚡ Processes > " "$hdr" "SIGTERM" "space,x" "$query" "space:toggle+down"
 
   local selection
   selection=$(printf "%s\n" "$rows" | fzf \
     --delimiter='\t' \
     --multi \
     --height=~55% \
-    --layout=reverse \
-    --border=rounded \
-    --pointer="❯ " \
     --marker="✓ " \
-    --prompt="⚡ Processes > " \
-    --header="$hdr" \
-    --color="header:italic:dim,prompt:bold:red,pointer:bold:red,marker:bold:yellow" \
     "${fzf_mode_flags[@]}" \
+    --color="header:italic:dim,prompt:bold:red,pointer:bold:red,marker:bold:yellow" \
     --preview='pid=$(echo {1} | tr -d " "); if [ -n "$pid" ]; then ps -p "$pid" -o pid,ppid,user,%cpu,%mem,etime,command 2>/dev/null; echo ""; if command -v lsof &>/dev/null; then lsof -p "$pid" -i -P -n 2>/dev/null | head -n 15; fi; fi' \
     --preview-window='right:50%:wrap' \
     --expect="x")
@@ -307,22 +282,8 @@ fcon() {
 
   local query="$*"
   local hdr=$'  j/k: move │ space: select │ enter/l: logs -f │ s: shell │ r: restart │ x: stop │ /: search │ q: quit\n  ID          \tNAME                    \tSTATUS                \tIMAGE                       \tPORTS'
-  local fzf_mode_flags=()
-  if [ -z "$query" ]; then
-    fzf_mode_flags=(
-      "--disabled"
-      "--bind=start:unbind(esc)"
-      "--bind=j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,space:toggle+down"
-      "--bind=/:clear-query+enable-search+unbind(j,k,q,g,G,space,l,s,r,x,i,/)+change-prompt(🔍 Search Containers > )+change-header(  type to filter │ esc: normal mode │ enter: follow logs)+rebind(esc)"
-      "--bind=i:enable-search+unbind(j,k,q,g,G,space,l,s,r,x,i,/)+change-prompt(🔍 Search Containers > )+change-header(  type to filter │ esc: normal mode │ enter: follow logs)+rebind(esc)"
-      "--bind=esc:disable-search+rebind(j,k,q,g,G,space,l,s,r,x,i,/)+change-prompt(🐳 Containers ($(basename "$rt")) > )+change-header($hdr)+unbind(esc)"
-    )
-  else
-    fzf_mode_flags=(
-      "--query=$query"
-      "--bind=space:toggle+down"
-    )
-  fi
+  local -a fzf_mode_flags
+  _fzf_vim_mode "🐳 Containers ($(basename "$rt")) > " "$hdr" "follow logs" "space,l,s,r,x" "$query" "space:toggle+down"
 
   local selection
   selection=$(printf "%s\n" "$formatted" | fzf \
@@ -330,15 +291,9 @@ fcon() {
     --delimiter='\t' \
     --multi \
     --height=~60% \
-    --layout=reverse \
-    --border=rounded \
-    --pointer="❯ " \
     --marker="✓ " \
-    --prompt="🐳 Containers ($(basename "$rt")) > " \
-    --header="$hdr" \
-    --color="header:italic:dim,prompt:bold:cyan,pointer:bold:blue,marker:bold:yellow" \
     "${fzf_mode_flags[@]}" \
-    --bind="ctrl-/:toggle-preview,ctrl-d:preview-page-down,ctrl-u:preview-page-up" \
+    --color="header:italic:dim,prompt:bold:cyan,pointer:bold:blue,marker:bold:yellow" \
     --preview="cid=\$(echo {1} | sed 's/\x1b\[[0-9;]*m//g' | tr -d ' '); [ -n \"\$cid\" ] && '$rt' logs --tail 60 \"\$cid\" 2>&1" \
     --preview-window='right:55%:wrap' \
     --expect="l,s,r,x")
@@ -438,21 +393,8 @@ fssh() {
 
   local query="$*"
   local hdr=$'  j/k: move │ /: search │ enter: ssh connect │ y: copy target │ e: edit config │ q: quit\n  HOST                    \tHOSTNAME                      \tUSER            \tPORT'
-  local fzf_mode_flags=()
-  if [ -z "$query" ]; then
-    fzf_mode_flags=(
-      "--disabled"
-      "--bind=start:unbind(esc)"
-      "--bind=j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort"
-      "--bind=/:clear-query+enable-search+unbind(j,k,q,g,G,y,e,i,/)+change-prompt(🔍 Search SSH Hosts > )+change-header(  type to filter │ esc: normal mode │ enter: connect)+rebind(esc)"
-      "--bind=i:enable-search+unbind(j,k,q,g,G,y,e,i,/)+change-prompt(🔍 Search SSH Hosts > )+change-header(  type to filter │ esc: normal mode │ enter: connect)+rebind(esc)"
-      "--bind=esc:disable-search+rebind(j,k,q,g,G,y,e,i,/)+change-prompt(🔐 SSH Hosts > )+change-header($hdr)+unbind(esc)"
-    )
-  else
-    fzf_mode_flags=(
-      "--query=$query"
-    )
-  fi
+  local -a fzf_mode_flags
+  _fzf_vim_mode "🔐 SSH Hosts > " "$hdr" "connect" "y,e" "$query"
 
   local preview_cmd="
     h=\$(echo {1} | sed 's/\x1b\[[0-9;]*m//g' | tr -d ' ')
@@ -469,13 +411,8 @@ fssh() {
     --ansi \
     --delimiter='\t' \
     --height=~50% \
-    --layout=reverse \
-    --border=rounded \
-    --pointer="❯ " \
-    --prompt="🔐 SSH Hosts > " \
-    --header="$hdr" \
-    --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
     "${fzf_mode_flags[@]}" \
+    --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
     --preview="$preview_cmd" \
     --preview-window='right:50%:wrap' \
     --expect="y,e")
@@ -503,23 +440,12 @@ fssh() {
           target_str="$host_name"
         fi
       fi
-      if (( $+functions[copy] )); then
-        printf "%s" "$target_str" | copy
-        printf "\033[32m✔ Copied SSH target to clipboard: %s\033[0m\n" "$target_str"
-      else
-        printf "%s\n" "$target_str"
-      fi
+      _copy_or_print "$target_str" "SSH target to clipboard: $target_str"
       ;;
     e)
       local ln
       ln=$(grep -nE "^[[:space:]]*[Hh]ost[[:space:]]+${host_alias}([[:space:]]|$)" "$ssh_cfg" 2>/dev/null | head -n1 | cut -d: -f1)
-      local editor="${EDITOR:-nvim}"
-      command -v "$editor" &>/dev/null || editor="nano"
-      if [ -n "$ln" ] && [[ "$editor" == *vim* ]]; then
-        "$editor" "+$ln" "$ssh_cfg"
-      else
-        "$editor" "$ssh_cfg"
-      fi
+      _edit_file "$ssh_cfg" "$ln"
       ;;
     *)
       printf "\033[1;32m➜\033[0m \033[1;36mssh %s\033[0m\n" "$host_alias"
@@ -611,12 +537,91 @@ extract() {
   esac
 }
 
-# Cross-Platform Desktop & Terminal Notification
+# Universal Archive Creator (pack)
+# Companion to extract: creates archives from files/directories based on output extension
+# Usage:
+#   pack <archive_name> <files/dirs...>   -> Create archive in specified format (.tar.gz, .zip, .tar.zst, .7z, etc.)
+#   pack <directory>                      -> Defaults to <directory>.tar.gz
+pack() {
+  if [ $# -eq 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    printf "\033[1;38;2;203;166;247mpack\033[0m — Universal archive creator (companion to \033[1mextract\033[0m / \033[1mx\033[0m)\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  pack <archive.ext> <files/dirs...>   Create archive inferred from extension\n"
+    printf "  pack <folder>                        Create <folder>.tar.gz from <folder>\n\n"
+    printf "\033[1mSupported formats:\033[0m\n"
+    printf "  .tar.gz, .tgz, .tar.bz2, .tbz2, .tar.xz, .txz, .tar.zst, .tar, .zip, .7z, .gz, .bz2, .zst\n"
+    [ $# -eq 0 ] && return 1 || return 0
+  fi
+
+  local archive="$1"
+  shift
+
+  # Shorthand: 'pack <dir>' with 1 arg and no archive extension creates '<dir>.tar.gz'
+  if [ $# -eq 0 ]; then
+    local clean_target="${archive%/}"
+    if [ -e "$clean_target" ]; then
+      set -- "$clean_target"
+      archive="${clean_target}.tar.gz"
+    else
+      printf "\033[33mUsage: pack <archive_file> <files_or_dirs...>\033[0m\n" >&2
+      return 1
+    fi
+  fi
+
+  local item
+  for item in "$@"; do
+    if [ ! -e "$item" ]; then
+      printf "\033[31m✖ Target not found: %s\033[0m\n" "$item" >&2
+      return 1
+    fi
+  done
+
+  case "${archive:l}" in
+    *.tar.bz2|*.tbz2)   tar cjvf "$archive" "$@" ;;
+    *.tar.gz|*.tgz)     tar czvf "$archive" "$@" ;;
+    *.tar.xz|*.txz)     tar cJvf "$archive" "$@" ;;
+    *.tar.zst)          tar --zstd -cvf "$archive" "$@" 2>/dev/null || { tar cvf - "$@" | zstd -o "$archive"; } ;;
+    *.tar)              tar cvf "$archive" "$@" ;;
+    *.zip)              zip -r "$archive" "$@" ;;
+    *.7z)               7z a "$archive" "$@" ;;
+    *.gz)               gzip -k -c "$1" > "$archive" ;;
+    *.bz2)              bzip2 -k -c "$1" > "$archive" ;;
+    *.zst)              zstd -k "$1" -o "$archive" ;;
+    *)
+      printf "\033[31m✖ Cannot pack '%s' — unsupported archive extension.\033[0m\n" "$archive" >&2
+      printf "Supported: .tar.gz, .tgz, .tar.bz2, .tbz2, .tar.xz, .txz, .tar.zst, .tar, .zip, .7z, .gz, .bz2, .zst\n" >&2
+      return 1
+      ;;
+  esac
+
+  local rc=$?
+  if [ $rc -eq 0 ] && [ -f "$archive" ]; then
+    local sz
+    sz=$(du -h "$archive" 2>/dev/null | awk '{print $1}')
+    printf "\033[32m✔ Created archive:\033[0m \033[1m%s\033[0m (%s)\n" "$archive" "${sz:-done}"
+  fi
+  return $rc
+}
+
+# Cross-Platform Persistent Desktop & Terminal Notification
 # Usage:
 #   notify "Build finished!"
 #   notify "Tests failed!" "Test Suite"
+#   notify -b "Quick banner only"
 #   npm run build && notify "Build succeeded!" || notify "Build failed!" "Error"
 notify() {
+  local banner_only=false
+  if [ "$1" = "-b" ] || [ "$1" = "--banner" ]; then
+    banner_only=true
+    shift
+  elif [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    printf "\033[1;38;2;137;180;250mnotify\033[0m (alias: \033[1malert\033[0m) — Persistent desktop & terminal notification (macOS, Linux, WSL)\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  notify <message> [title]      Persistent alert that stays on screen until dismissed\n"
+    printf "  notify -b <message> [title]   Transient corner banner only\n"
+    return 0
+  fi
+
   local msg="${1:-Command finished}"
   local title="${2:-Terminal}"
 
@@ -626,27 +631,36 @@ notify() {
     printf '\e]9;%s\a' "$msg" 2>/dev/null
   fi
 
-  # 1. macOS: Native Notification Center banner + subtle glass chime
+  # 1. macOS: Persistent non-blocking floating alert (stays until dismissed) + Notification Center banner + chime
   if [[ "$OSTYPE" == darwin* ]] || [ "$(uname -s 2>/dev/null)" = "Darwin" ]; then
     osascript -e "display notification \"$msg\" with title \"$title\" sound name \"Glass\"" 2>/dev/null || \
       osascript -e "display notification \"$msg\" with title \"$title\"" 2>/dev/null || true
-    if [ -t 1 ] && [ -f "/System/Library/Sounds/Glass.aiff" ]; then
+    if [ "$banner_only" = false ] && [ -t 1 ] && [ -z "$CI" ] && [ "$title" != "dottest" ]; then
+      osascript -e "display alert \"$title\" message \"$msg\" as informational buttons {\"Dismiss\"} default button \"Dismiss\"" &>/dev/null &!
+    fi
+    if [ -t 1 ] && [ "$title" != "dottest" ] && [ -f "/System/Library/Sounds/Glass.aiff" ]; then
       afplay "/System/Library/Sounds/Glass.aiff" &>/dev/null &!
     fi
 
-  # 2. Linux: Desktop notification daemon (libnotify / notify-send)
+  # 2. Linux: Persistent desktop notification (-u critical stays pinned until clicked/dismissed)
   elif command -v notify-send &>/dev/null; then
-    notify-send "$title" "$msg" 2>/dev/null || true
+    if [ "$banner_only" = true ]; then
+      notify-send "$title" "$msg" 2>/dev/null || true
+    else
+      notify-send -u critical "$title" "$msg" 2>/dev/null || notify-send "$title" "$msg" 2>/dev/null || true
+    fi
 
-  # 3. WSL: Native Windows 10/11 Toast Notification via PowerShell
+  # 3. WSL: Persistent Windows 10/11 Toast Notification (scenario="reminder" stays until dismissed)
   elif command -v powershell.exe &>/dev/null; then
     powershell.exe -NoProfile -Command "
       [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > \$null
       \$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
       \$xml = [xml]\$template.GetXml()
+      \$toastNode = \$xml.SelectSingleNode('/toast')
+      if (\$toastNode -ne \$null) { \$toastNode.SetAttribute('scenario', 'reminder') }
       \$xml.GetElementsByTagName('text')[0].AppendChild(\$xml.CreateTextNode('$title')) > \$null
       \$xml.GetElementsByTagName('text')[1].AppendChild(\$xml.CreateTextNode('$msg')) > \$null
-      \$toast = [Windows.UI.Notifications.ToastNotification]::new(\$template)
+      \$toast = [Windows.UI.Notifications.ToastNotification]::new(\$xml)
       [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Terminal').Show(\$toast)
     " 2>/dev/null || true
 
@@ -661,7 +675,23 @@ notify() {
   fi
 }
 
-# Automatic Desktop Notification for Long-Running Foreground Commands (>30s)
+# Automatic Desktop Notification for Long-Running Foreground Commands (>15s)
+typeset -g AUTO_NOTIFY_ENABLED="${AUTO_NOTIFY_ENABLED:-true}"
+
+toggle-autonotify() {
+  if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    printf "\033[1;38;2;137;180;250mtoggle-autonotify\033[0m (alias: \033[1mautonotify\033[0m) — Toggle desktop notifications for commands >%ss\n" "${AUTO_NOTIFY_THRESHOLD:-15}"
+    return 0
+  fi
+  if [ "$AUTO_NOTIFY_ENABLED" = "true" ]; then
+    AUTO_NOTIFY_ENABLED="false"
+    printf "\033[33m󰂛 Auto-notify disabled\033[0m (long-running commands will not send desktop alerts)\n"
+  else
+    AUTO_NOTIFY_ENABLED="true"
+    printf "\033[32m󰂚 Auto-notify enabled\033[0m (commands >%ss will send desktop alerts)\n" "${AUTO_NOTIFY_THRESHOLD:-15}"
+  fi
+}
+
 if [[ -o interactive ]]; then
   zmodload zsh/datetime 2>/dev/null || true
   typeset -g _auto_notify_cmd=""
@@ -674,9 +704,9 @@ if [[ -o interactive ]]; then
 
   _auto_notify_precmd() {
     local exit_status=$?
-    if (( _auto_notify_start > 0 )) && [ -n "$_auto_notify_cmd" ] && [ -n "$EPOCHSECONDS" ]; then
+    if [ "${AUTO_NOTIFY_ENABLED:-true}" = "true" ] && (( _auto_notify_start > 0 )) && [ -n "$_auto_notify_cmd" ] && [ -n "$EPOCHSECONDS" ]; then
       local elapsed=$(( EPOCHSECONDS - _auto_notify_start ))
-      local threshold="${AUTO_NOTIFY_THRESHOLD:-30}"
+      local threshold="${AUTO_NOTIFY_THRESHOLD:-15}"
       if (( elapsed >= threshold )); then
         # Extract first command token (stripping leading sudo/env/time)
         local -a words
@@ -687,9 +717,9 @@ if [[ -o interactive ]]; then
           first_word="${words[1]:t}"
         done
 
-        # Ignore interactive TUIs, editors, pagers, and shell pickers
+        # Ignore interactive TUIs, editors, pagers, and FZF shell pickers
         case "$first_word" in
-          nvim|vim|vi|nano|emacs|code|yazi|y|lazygit|lg|btop|htop|top|man|less|more|ssh|mosh|tmux|zellij|fzf|gl|gco|gstash|wt|gwtdel|gwtclean|gbclean|conf|dotbranch|.branch|.b|scratch|fa|aliases|port|watch|fg|bg)
+          nvim|vim|vi|nano|emacs|code|yazi|y|lazygit|lg|btop|htop|top|man|less|more|ssh|mosh|tmux|zellij|fzf|gl|gco|gstash|ga|gadd|gfile|gfh|wt|gwtdel|gwtclean|gbclean|conf|dotbranch|.branch|.b|scratch|fa|aliases|fenv|cheath|cheat|port|fkill|kp|fcon|dps|fssh|npmr|bunr|pnpmr|sdiff|strdiff|watch|fg|bg)
             ;;
           *)
             local mins=$(( elapsed / 60 ))

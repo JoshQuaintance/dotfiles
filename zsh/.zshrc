@@ -85,12 +85,7 @@ elif [ -d "/home/linuxbrew/.linuxbrew" ]; then
     export MANPATH="/home/linuxbrew/.linuxbrew/share/man${MANPATH+:$MANPATH}:"
     export INFOPATH="/home/linuxbrew/.linuxbrew/share/info:${INFOPATH:-}"
     fpath=("/home/linuxbrew/.linuxbrew/share/zsh/site-functions" $fpath)
-elif [ -f "/opt/homebrew/bin/brew" ]; then
-    eval "$(/opt/homebrew/bin/brew shellenv)"
-elif [ -f "/home/linuxbrew/.linuxbrew/bin/brew" ]; then
-    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 fi
-_step "Homebrew environment"
 
 # Resolve canonical dotfiles repository directory (follows ~/.zshrc symlink in CI or custom checkouts)
 export DOTFILES_DIR="${DOTFILES_DIR:-${${(%):-%x}:A:h:h}}"
@@ -155,7 +150,7 @@ if command -v mise &>/dev/null; then
 fi
 _step "Mise polyglot runtime"
 
-# Spaceship Prompt Initialization (native Zsh async section streaming, with Starship fallback)
+# Spaceship Prompt Initialization (native Zsh async section streaming, with vcs_info fallback)
 if [ "$TERM" != "dumb" ]; then
     export SPACESHIP_CONFIG="${DOTFILES_DIR:-$HOME/.dotfiles}/config/spaceship/spaceship.zsh"
     _spaceship_entry=""
@@ -192,10 +187,8 @@ if [ "$TERM" != "dumb" ]; then
                 spaceship_exec_time_start
             }
         fi
-    elif command -v starship &>/dev/null; then
-        eval "$(starship init zsh)"
     else
-        # Fallback Git prompt if neither Spaceship nor Starship is installed
+        # Fallback Git prompt if Spaceship is not installed
         autoload -Uz vcs_info add-zsh-hook
         add-zsh-hook precmd vcs_info
         zstyle ':vcs_info:git:*' formats ' (%b)'
@@ -236,7 +229,6 @@ if command -v ng &>/dev/null; then
     fi
     [ -s "$_ng_cache" ] && source "$_ng_cache"
 fi
-_step "Completions & SDK paths"
 
 # Bun
 export BUN_INSTALL="$HOME/.bun"
