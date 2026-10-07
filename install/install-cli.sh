@@ -223,7 +223,12 @@ elif [ "$OS" = "Linux" ]; then
         fi
     fi
 
-    # 8. Zsh Plugins: fzf-tab, zsh-autosuggestions, zsh-syntax-highlighting
+    # 8. Spaceship Prompt & Zsh Plugins: fzf-tab, zsh-autosuggestions, zsh-syntax-highlighting
+    if is_tool_requested "spaceship" && [ ! -d "$HOME/.spaceship-prompt" ]; then
+        log "Installing Spaceship Zsh prompt..."
+        git clone --depth 1 https://github.com/spaceship-prompt/spaceship-prompt.git "$HOME/.spaceship-prompt" 2>/dev/null || true
+        success "Spaceship prompt ready!"
+    fi
     mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}"
     if is_tool_requested "fzf-tab" && [ ! -d "${XDG_DATA_HOME:-$HOME/.local/share}/fzf-tab" ]; then
         log "Installing fzf-tab..."

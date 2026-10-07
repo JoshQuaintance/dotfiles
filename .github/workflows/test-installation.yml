@@ -60,7 +60,6 @@ jobs:
           ls -la ~/.zshrc
           ls -la ~/.zshenv
           ls -la ~/.config/spaceship.zsh
-          ls -la ~/.config/starship.toml
           ls -la ~/.config/bat/config
           ls -la ~/.config/eza/theme.yml
           ls -la ~/.config/mise/config.toml
@@ -68,11 +67,10 @@ jobs:
 
       - name: Verify Core CLI Tools
         run: |
-          which rg fd fzf zoxide starship eza atuin bat
+          which rg fd fzf zoxide eza atuin bat
           rg --version
           fd --version
           fzf --version
-          starship --version
           eza --version
           bat --version
 
@@ -110,7 +108,6 @@ jobs:
           ls -la ~/.zshrc
           ls -la ~/.zshenv
           ls -la ~/.config/spaceship.zsh
-          ls -la ~/.config/starship.toml
           ls -la ~/.config/bat/config
           ls -la ~/.config/eza/theme.yml
           ls -la ~/.config/mise/config.toml

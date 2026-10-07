@@ -208,7 +208,7 @@ if [[ "$CHOICE" == "2" || "$CHOICE" == "--server" || "$CHOICE" == "--minimal" ]]
 
     git config --global --add safe.directory "$DOTFILES_DIR" 2>/dev/null || true
     cd "$DOTFILES_DIR"
-    git sparse-checkout set config/nvim config/spaceship config/starship config/bat config/eza config/mise config/git zsh bin cli install
+    git sparse-checkout set config/nvim config/spaceship config/bat config/eza config/mise config/git zsh bin cli install
     source "$DOTFILES_DIR/install/common.sh"
 
     "$DOTFILES_DIR/install/install-cli.sh"
@@ -245,7 +245,7 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
         "zoxide (z)      - Smarter cd directory jumper"
         "eza             - Modern ls with icons & git status"
         "bat             - Cat clone with syntax highlighting & Git status"
-        "starship        - Ultra-fast customizable shell prompt"
+        "spaceship       - Native Zsh async shell prompt"
         "atuin           - Shell history with sync and fuzzy search"
         "yazi            - Blazingly fast terminal file manager"
         "dust            - Intuitive disk usage analyzer"
@@ -253,7 +253,7 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
         "fzf-tab         - Interactive zsh completion menu"
         "genignore       - Smart gitignore generator"
     )
-    cli_keys=(ripgrep fd fzf zoxide eza bat starship atuin yazi dust btop fzf-tab genignore)
+    cli_keys=(ripgrep fd fzf zoxide eza bat spaceship atuin yazi dust btop fzf-tab genignore)
     cli_defs=(1 1 1 1 1 1 1 1 1 1 1 1 1)
 
     if [ "$OS" = "Darwin" ]; then
