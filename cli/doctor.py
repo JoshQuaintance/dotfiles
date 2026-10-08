@@ -278,6 +278,37 @@ def check_locale(report: DoctorReport):
         else:
             report.warn("Zsh multibyte parsing", "Single-byte mode active; check ~/.zshenv")
 
+def check_ssh(report: DoctorReport, dotfiles: Path, fix: bool = False):
+    print(f"\n{C_BOLD}6. SSH Agent & Defaults{C_RESET}")
+    if not shutil.which("ssh"):
+        report.warn("SSH", "ssh binary not installed")
+        return
+
+    ssh_config = Path.home() / ".ssh" / "config"
+    include = f"Include {dotfiles / 'config' / 'ssh' / 'dotfiles.conf'}"
+    try:
+        current = ssh_config.read_text()
+    except OSError:
+        current = ""
+    if include in current.splitlines():
+        report.ok("~/.ssh/config", "Includes shared dotfiles defaults")
+    elif fix:
+        ssh_config.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        ssh_config.write_text(f"{include}\n\n{current}")
+        ssh_config.chmod(0o600)
+        report.fixed("~/.ssh/config", "Prepended Include for shared defaults")
+    else:
+        report.warn("~/.ssh/config", "Missing shared defaults Include. Run with --fix")
+
+    # ssh-add exit codes: 0 = keys loaded, 1 = agent running without keys, 2 = no agent
+    code, _ = run_cmd(["ssh-add", "-l"])
+    if code == 0:
+        report.ok("SSH agent", "Running with keys loaded")
+    elif code == 1:
+        report.ok("SSH agent", "Running (keys load on first use)")
+    else:
+        report.warn("SSH agent", "Not reachable; open a new shell to start the shared agent")
+
 def check_git_signing(report: DoctorReport):
     print(f"\n{C_BOLD}5. Git Identity & Commit Signing{C_RESET}")
     if not shutil.which("git"):
@@ -315,7 +346,7 @@ def is_wsl() -> bool:
         return False
 
 def check_wsl(report: DoctorReport, dotfiles: Path):
-    print(f"\n{C_BOLD}6. WSL Integration{C_RESET}")
+    print(f"\n{C_BOLD}7. WSL Integration{C_RESET}")
     if str(dotfiles.resolve()).startswith("/mnt/"):
         report.warn("Dotfiles location", "On the Windows drive; move to ~ (9P file access is slow)")
     else:
@@ -346,6 +377,7 @@ def run_doctor(fix: bool = False) -> int:
     check_cli_tools(report, fix=fix)
     check_locale(report)
     check_git_signing(report)
+    check_ssh(report, dotfiles, fix=fix)
     if is_wsl():
         check_wsl(report, dotfiles)
 
