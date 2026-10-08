@@ -4,15 +4,6 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-log "Installing Core CLI Utilities (ripgrep, fd, fzf, zoxide, spaceship, eza, atuin, bat)..."
-
-# Ensure local bin directory exists in PATH
-mkdir -p "$HOME/.local/bin"
-case ":$PATH:" in
-  *":$HOME/.local/bin:"*) ;;
-  *) export PATH="$HOME/.local/bin:$PATH" ;;
-esac
-
 REQUESTED_TOOLS=("$@")
 is_tool_requested() {
     local target="$1"
@@ -24,6 +15,39 @@ is_tool_requested() {
     done
     return 1
 }
+
+# install.sh --dry-run: report which requested tools are missing and change nothing
+if [ "${DOTFILES_DRY_RUN:-false}" = true ]; then
+    if command -v brew &>/dev/null && { [ "${#REQUESTED_TOOLS[@]}" -eq 0 ] || [ "${REQUESTED_TOOLS[0]}" = "--all" ]; }; then
+        brew bundle check --verbose --no-upgrade --file="$DOTFILES_DIR/Brewfile" 2>/dev/null | sed 's/^/    /' || true
+    else
+        # tool key:binary it provides
+        for pair in ripgrep:rg fd:fd fzf:fzf zoxide:zoxide eza:eza bat:bat atuin:atuin yazi:yazi dust:dust btop:btop \
+                    git-delta:delta lazygit:lazygit glow:glow tlrc:tldr tokei:tokei hyperfine:hyperfine trash-cli:trash; do
+            key="${pair%%:*}"
+            is_tool_requested "$key" || continue
+            if command -v "${pair##*:}" &>/dev/null; then
+                echo "    ✔ $key (installed)"
+            else
+                echo "    + $key (would install)"
+            fi
+        done
+        if [ -n "${WSL_DISTRO_NAME:-}" ] && is_tool_requested "wsl"; then
+            command -v win32yank.exe &>/dev/null && echo "    ✔ win32yank (installed)" || echo "    + win32yank (would install)"
+            command -v wslview &>/dev/null && echo "    ✔ wslu (installed)" || echo "    + wslu (would install)"
+        fi
+    fi
+    exit 0
+fi
+
+log "Installing Core CLI Utilities (ripgrep, fd, fzf, zoxide, spaceship, eza, atuin, bat)..."
+
+# Ensure local bin directory exists in PATH
+mkdir -p "$HOME/.local/bin"
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) ;;
+  *) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
 
 if command -v brew &>/dev/null; then
     ensure_homebrew
