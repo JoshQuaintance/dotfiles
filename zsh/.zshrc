@@ -326,6 +326,18 @@ unset LS_COLORS
 export EDITOR='nvim'
 export VISUAL='nvim'
 
+# SSH agent: macOS (launchd) and desktop Linux (gnome-keyring, systemd) already provide one. On WSL and
+# headless Linux, share one agent per user through a fixed socket instead of starting one per shell.
+if [[ "$OSTYPE" != darwin* && ! -S "$SSH_AUTH_SOCK" ]] && (( $+commands[ssh-agent] )); then
+    export SSH_AUTH_SOCK="$HOME/.ssh/agent.sock"
+    ssh-add -l &>/dev/null
+    if (( $? == 2 )); then  # 2 = nothing listening on the socket
+        mkdir -p -m 700 "$HOME/.ssh"
+        rm -f "$SSH_AUTH_SOCK"
+        ssh-agent -a "$SSH_AUTH_SOCK" &>/dev/null
+    fi
+fi
+
 # GPG & Git signing terminal pinentry support (routes passphrase prompt to active terminal)
 if [ -t 0 ] || [ -t 1 ]; then
     export GPG_TTY=$(tty 2>/dev/null || true)

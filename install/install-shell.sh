@@ -54,4 +54,14 @@ fi
 link_dotfile "config/git/.gitconfig" "$HOME/.gitconfig"
 link_dotfile "config/git/.gitignore_global" "$HOME/.gitignore_global"
 
+# Shared SSH defaults: prepend an Include so host entries in ~/.ssh/config stay personal
+SSH_INCLUDE="Include $DOTFILES_DIR/config/ssh/dotfiles.conf"
+mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+if ! grep -qsF "$SSH_INCLUDE" "$HOME/.ssh/config"; then
+    { echo "$SSH_INCLUDE"; echo; cat "$HOME/.ssh/config" 2>/dev/null; } > "$HOME/.ssh/config.tmp"
+    mv "$HOME/.ssh/config.tmp" "$HOME/.ssh/config"
+    chmod 600 "$HOME/.ssh/config"
+    success "Added shared SSH defaults to ~/.ssh/config"
+fi
+
 success "Zsh shell and Git environment setup complete!"
