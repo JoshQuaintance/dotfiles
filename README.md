@@ -12,6 +12,12 @@ curl -fsSL https://raw.githubusercontent.com/JoshQuaintance/dotfiles/main/instal
 
 Follow the interactive prompts to choose your profile (Full Workstation, Server/Minimal, or Custom).
 
+Add `--dry-run` (`-n`) to preview a profile first: it lists each install step, which tools are missing, and which config links would be created, without changing anything:
+
+```bash
+./install.sh --dry-run        # or: curl ... | bash -s -- --dry-run
+```
+
 ---
 
 ## Installing from a Specific Branch
