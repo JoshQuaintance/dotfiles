@@ -41,6 +41,16 @@
     line-numbers = true
     hyperlinks = true
     decorations = true
+    file-style = bold "#89b4fa"
+    file-decoration-style = "#45475a" ul
+    hunk-header-decoration-style = "#45475a" box ul
+    hunk-header-file-style = bold "#cba6f7"
+    hunk-header-line-number-style = bold "#a6e3a1"
+    blame-palette = "#1e1e2e #181825 #11111b #313244 #45475a"
+    merge-conflict-begin-symbol = ⌄
+    merge-conflict-end-symbol = ⌃
+    merge-conflict-ours-diff-header-style = "#f9e2af" bold
+    merge-conflict-theirs-diff-header-style = "#89b4fa" bold
 
 [help]
     autocorrect = prompt

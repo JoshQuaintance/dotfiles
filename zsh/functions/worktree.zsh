@@ -71,13 +71,14 @@ wt() {
   fi
 }
 
-# Shared helper to copy untracked .env / .env.* files from source worktree into a new worktree
+# Shared helper to copy untracked .env / .env.* files from source worktree into a target worktree
 _copy_worktree_env() {
   local src_wt="$1"
   local dest_wt="$2"
   local main_root="$3"
   local base_branch="$4"
   local auto_copy="${5:-false}"
+  local force_overwrite="${6:-false}"
   local candidate env_file rel_path dest_file chosen_src=""
   local -a sources=() pending_files=() pending_rels=()
 
@@ -86,7 +87,7 @@ _copy_worktree_env() {
     sources+=("$main_root/$base_branch")
   fi
   local first_wt
-  first_wt=$(git worktree list 2>/dev/null | awk '$3 != "(bare)" {print $1; exit}')
+  first_wt=$(git worktree list 2>/dev/null | awk -v d="$dest_wt" '$3 != "(bare)" && $1 != d {print $1; exit}')
   [ -n "$first_wt" ] && [ -d "$first_wt" ] && [ "$first_wt" != "$dest_wt" ] && sources+=("$first_wt")
 
   for candidate in "${(@u)sources}"; do
@@ -94,6 +95,9 @@ _copy_worktree_env() {
       rel_path="${env_file#$candidate/}"
       dest_file="$dest_wt/$rel_path"
       if [ ! -e "$dest_file" ]; then
+        pending_files+=("$env_file")
+        pending_rels+=("$rel_path")
+      elif [ "$force_overwrite" = true ] && ! git -C "$candidate" ls-files --error-unmatch "$rel_path" &>/dev/null; then
         pending_files+=("$env_file")
         pending_rels+=("$rel_path")
       fi
@@ -106,7 +110,7 @@ _copy_worktree_env() {
     fi
   done
 
-  (( ${#pending_files[@]} == 0 )) && return 0
+  (( ${#pending_files[@]} == 0 )) && return 1
 
   local src_name
   src_name="$(basename "$chosen_src")"
@@ -130,6 +134,67 @@ _copy_worktree_env() {
     cp -p "$env_file" "$dest_file"
     printf "  \033[32m✔\033[0m Copied \033[1m%s\033[0m from %s\n" "$rel_path" "$src_name"
   done
+  return 0
+}
+
+# Sync untracked .env files from base/source worktree into current worktree
+gwtenv() {
+  local auto_copy=false
+  local force_overwrite=false
+  local src_arg=""
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      -h|--help)
+        printf "Usage: gwtenv [-y|--yes] [-f|--force] [source-worktree]\n"
+        printf "  -y, --yes     Copy .env files without confirmation prompt\n"
+        printf "  -f, --force   Overwrite existing untracked .env files in current worktree\n"
+        return 0
+        ;;
+      -y|--yes|-e|--env)
+        auto_copy=true
+        ;;
+      -f|--force)
+        force_overwrite=true
+        ;;
+      *)
+        [ -z "$src_arg" ] && src_arg="$arg"
+        ;;
+    esac
+  done
+
+  _require_git_repo || return 1
+
+  local dest_wt main_root base_branch src_wt=""
+  dest_wt="$(git rev-parse --show-toplevel 2>/dev/null)"
+  if [ -z "$dest_wt" ] || [ ! -d "$dest_wt" ]; then
+    printf "\033[31m✖ Must be run inside an active git worktree.\033[0m\n" >&2
+    return 1
+  fi
+  main_root="$(_git_main_root)"
+  base_branch="$(_git_base_branch)"
+
+  if [ -n "$src_arg" ]; then
+    if [ -d "$src_arg" ]; then
+      src_wt="$(cd "$src_arg" && pwd)"
+    elif [ -d "$main_root/$src_arg" ]; then
+      src_wt="$main_root/$src_arg"
+    else
+      src_wt=$(git worktree list 2>/dev/null | awk -v q="$src_arg" 'tolower($1) ~ tolower(q) || tolower($3) ~ tolower(q) {print $1; exit}')
+    fi
+    if [ -z "$src_wt" ] || [ ! -d "$src_wt" ]; then
+      printf "\033[31m✖ Source worktree matching '%s' not found.\033[0m\n" "$src_arg" >&2
+      return 1
+    fi
+  fi
+
+  if ! _copy_worktree_env "$src_wt" "$dest_wt" "$main_root" "$base_branch" "$auto_copy" "$force_overwrite"; then
+    if [ "$force_overwrite" = true ]; then
+      printf "\033[33mNo untracked .env files found in source worktree.\033[0m\n"
+    else
+      printf "\033[32m✔ All .env files already present (use 'gwtenv -f' to overwrite from source).\033[0m\n"
+    fi
+  fi
 }
 
 # Git Worktree New / Create (gwtnew / gwtn)
@@ -274,7 +339,7 @@ gwtnew() {
   if [ "$branch_exists" = true ]; then
     printf "\033[1;34m==>\033[0m Creating worktree \033[1m%s\033[0m tracking branch \033[1;36m%s\033[0m...\n" "$target_folder" "$target_branch"
     if git worktree add "$target_wt_path" "$target_branch"; then
-      _copy_worktree_env "$src_wt" "$target_wt_path" "$main_root" "$base_branch" "$auto_env"
+      _copy_worktree_env "$src_wt" "$target_wt_path" "$main_root" "$base_branch" "$auto_env" || true
       printf "\033[32m✔ Worktree created successfully!\033[0m\n"
       cd "$target_wt_path" || return 1
       return 0
@@ -295,7 +360,7 @@ gwtnew() {
         ;;
       *)
         if git worktree add -b "$target_branch" "$target_wt_path" "$base_branch"; then
-          _copy_worktree_env "$src_wt" "$target_wt_path" "$main_root" "$base_branch" "$auto_env"
+          _copy_worktree_env "$src_wt" "$target_wt_path" "$main_root" "$base_branch" "$auto_env" || true
           printf "\033[32m✔ Worktree created successfully with new branch '%s'!\033[0m\n" "$target_branch"
           cd "$target_wt_path" || return 1
           return 0
@@ -739,7 +804,7 @@ _wt() {
   done < <(git worktree list 2>/dev/null)
   _describe 'worktree' wts
 }
-(( $+functions[compdef] )) && compdef _wt wt
+(( $+functions[compdef] )) && compdef _wt wt gwtenv
 
 # Tab completion for gwtnew: list available remote branches
 _gwtnew() {

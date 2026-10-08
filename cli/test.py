@@ -268,7 +268,7 @@ echo "COUNT:${#DOTFILES_FUNCTIONS[@]}"
 
     # Completions engine
     comp_check_code = """
-for comp in _git _uv _fzf_complete _up _wt _gwtnew _gwtdel; do
+for comp in _git _uv _fzf_complete _dot _conf _up _wt _gwtnew _gwtdel; do
     if ! (( $+functions[$comp] )); then
         echo "Missing completion: $comp"
     fi
@@ -277,7 +277,7 @@ done
     code, out, err = run_cmd(["zsh", "-i", "-c", comp_check_code], timeout=5, env=zsh_env)
     missing_comps = [line.strip() for line in out.splitlines() if line.startswith("Missing completion:")]
     if not missing_comps:
-        report.ok("Completions engine", "All completions active (_git, _uv, _fzf, _up, _wt, _gwtn, _gwtdel)")
+        report.ok("Completions engine", "All completions active (_git, _uv, _fzf, _dot, _conf, _up, _wt, _gwtn, _gwtdel)")
     else:
         report.fail("Completions engine", missing_comps[0])
 
@@ -317,11 +317,13 @@ print -l "${collisions[@]}"
     smoke_test_code = f"""
 set -e
 # Universal functions
+d -h >/dev/null
 up -h >/dev/null
 tree -h >/dev/null
 tree 1 "{dotfiles}/zsh" >/dev/null
 lt 1 "{dotfiles}/zsh" >/dev/null
 conf -h >/dev/null
+clone -h >/dev/null
 fa -p >/dev/null
 fenv -h >/dev/null
 cheath -h >/dev/null
@@ -347,6 +349,7 @@ dotbranch -s >/dev/null
     gmain >/dev/null
     gwts >/dev/null
     gwtnew -h >/dev/null
+    gwtenv -h >/dev/null
     gstash -h >/dev/null
     ga -h >/dev/null
     gfile -h >/dev/null

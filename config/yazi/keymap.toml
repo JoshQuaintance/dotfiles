@@ -60,3 +60,28 @@ desc = "Copy absolute path to system clipboard"
 on   = [ "D" ]
 run  = 'shell "nvim -d \"$@\"" --block --confirm'
 desc = "Diff selected files side-by-side in Neovim"
+
+[[mgr.prepend_keymap]]
+on   = [ "E" ]
+run  = 'shell "nvim \"${@:-.}\"" --block --confirm'
+desc = "Open selected item or directory in Neovim"
+
+[[mgr.prepend_keymap]]
+on   = [ "V" ]
+run  = 'shell "code \"${@:-.}\"" --confirm'
+desc = "Open selected item or directory in VS Code"
+
+[[mgr.prepend_keymap]]
+on   = [ "g", "r" ]
+run  = 'shell "ya emit cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"" --confirm'
+desc = "Jump to current Git repository root"
+
+[[mgr.prepend_keymap]]
+on   = [ "g", "D" ]
+run  = "cd ~/.dotfiles"
+desc = "Jump to ~/.dotfiles"
+
+[[mgr.prepend_keymap]]
+on   = [ "g", "c" ]
+run  = "cd ~/Codes"
+desc = "Jump to ~/Codes"

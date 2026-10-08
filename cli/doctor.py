@@ -148,7 +148,7 @@ def check_and_heal_symlinks(report: DoctorReport, dotfiles: Path, fix: bool = Fa
             else:
                 report.fail(f"{display_path} missing", "Run with --fix or ./install.sh to link")
 
-def check_cli_tools(report: DoctorReport):
+def check_cli_tools(report: DoctorReport, fix: bool = False):
     print(f"\n{C_BOLD}3. Core CLI & Runtime Tools{C_RESET}")
     tools = [
         ("git", "Git version control", ["git", "--version"]),
@@ -226,6 +226,36 @@ def check_cli_tools(report: DoctorReport):
         else:
             report.warn(plugin_label, f"{plugin_file} not found")
 
+    # Check Mise managed runtimes (declared in config/mise/config.toml)
+    if shutil.which("mise"):
+        import json as _json
+        code, raw_json = run_cmd(["mise", "ls", "--current", "--json"])
+        if code == 0 and raw_json:
+            try:
+                mise_data = _json.loads(raw_json)
+                active_tools = []
+                missing_tools = []
+                for tool_name, entries in mise_data.items():
+                    for item in entries:
+                        ver = item.get("version") or item.get("requested_version") or "unknown"
+                        if item.get("installed", False):
+                            active_tools.append(f"{tool_name}@{ver}")
+                        else:
+                            missing_tools.append(f"{tool_name}@{ver}")
+                if missing_tools:
+                    if fix:
+                        ic, _ = run_cmd(["mise", "install"])
+                        if ic == 0:
+                            report.fixed("Mise managed runtimes", f"Installed {', '.join(missing_tools)}")
+                        else:
+                            report.warn("Mise managed runtimes", f"Missing: {', '.join(missing_tools)} (run 'mise install')")
+                    else:
+                        report.warn("Mise managed runtimes", f"Missing: {', '.join(missing_tools)} (run 'mise install')")
+                elif active_tools:
+                    report.ok("Mise managed runtimes", ", ".join(active_tools)[:38])
+            except Exception:
+                pass
+
 def check_locale(report: DoctorReport):
     print(f"\n{C_BOLD}4. Locale & Multibyte Support{C_RESET}")
     lang = os.environ.get("LANG", "")
@@ -285,7 +315,7 @@ def run_doctor(fix: bool = False) -> int:
 
     check_repository(report, dotfiles)
     check_and_heal_symlinks(report, dotfiles, fix=fix)
-    check_cli_tools(report)
+    check_cli_tools(report, fix=fix)
     check_locale(report)
     check_git_signing(report)
 

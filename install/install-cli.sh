@@ -301,7 +301,7 @@ if [ "$OS" = "Darwin" ]; then
 fi
 link_dotfile "config/yazi" "$HOME/.config/yazi"
 
-# Symlink standalone bin utilities (dotupdate, dotcheck, dotdoctor, git-prompt-dir, esdiff, killport)
+# Symlink standalone bin utilities (dot, dotupdate, dotcheck, dotdoctor, dottest, esdiff, killport)
 if [ -d "$DOTFILES_DIR/bin" ]; then
     for tool in "$DOTFILES_DIR/bin/"*; do
         if [ -f "$tool" ] && [ -x "$tool" ]; then

@@ -31,6 +31,56 @@ bindkey -M viins '^K' kill-line
 bindkey -M viins '^U' backward-kill-line
 bindkey -M viins '^W' backward-kill-word
 
+# 5b. Native Vim Text-Objects (ci", da', ci(, da{) & Surround (cs, ds, ys, visual S)
+autoload -Uz select-quoted select-bracketed surround
+zle -N select-quoted
+zle -N select-bracketed
+for _km in visual viopp; do
+  for _c in {a,i}{\',\",\`}; do
+    bindkey -M $_km $_c select-quoted
+  done
+  for _c in {a,i}${(s..)^:-'()[]{}<>bB'}; do
+    bindkey -M $_km $_c select-bracketed
+  done
+done
+unset _km _c
+zle -N delete-surround surround
+zle -N add-surround surround
+zle -N change-surround surround
+bindkey -M vicmd 'cs' change-surround
+bindkey -M vicmd 'ds' delete-surround
+bindkey -M vicmd 'ys' add-surround
+bindkey -M visual 'S' add-surround
+
+# 5c. Sudo Prefix Toggle (double-Esc or Alt-s toggles 'sudo ' at start of command)
+zmodload zsh/datetime 2>/dev/null || true
+typeset -gF _vi_last_esc_time=0
+
+_vi_toggle_sudo() {
+  [[ -z "$BUFFER" ]] && LBUFFER="$(fc -ln -1)"
+  if [[ "$BUFFER" == sudo\ * ]]; then
+    BUFFER="${BUFFER#sudo }"
+    (( CURSOR = CURSOR >= 5 ? CURSOR - 5 : 0 ))
+  elif [[ -n "$BUFFER" ]]; then
+    BUFFER="sudo $BUFFER"
+    (( CURSOR += 5 ))
+  fi
+}
+zle -N _vi_toggle_sudo
+bindkey -M viins '^[s' _vi_toggle_sudo
+bindkey -M vicmd '^[s' _vi_toggle_sudo
+
+_vi_vicmd_esc() {
+  if [[ -n "$EPOCHREALTIME" ]] && (( EPOCHREALTIME - _vi_last_esc_time < 0.35 )); then
+    _vi_last_esc_time=0
+    _vi_toggle_sudo
+  else
+    _vi_last_esc_time="${EPOCHREALTIME:-0}"
+  fi
+}
+zle -N _vi_vicmd_esc
+bindkey -M vicmd '\e' _vi_vicmd_esc
+
 # 6. Re-bind Atuin or FZF interactive history search in viins
 # bindkey -v above resets the viins keymap, wiping all bindings registered by
 # atuin init zsh — restore them explicitly here.
@@ -63,8 +113,13 @@ function _vi_mode_sync_spaceship_char() {
 
 function _vi_mode_cursor_shape() {
   case "$KEYMAP" in
-    vicmd)      print -n '\e[2 q' ;; # Block cursor in normal mode
-    viins|main) print -n '\e[5 q' ;; # Beam cursor in insert mode
+    vicmd)
+      _vi_last_esc_time="${EPOCHREALTIME:-0}"
+      print -n '\e[2 q' # Block cursor in normal mode
+      ;;
+    viins|main)
+      print -n '\e[5 q' # Beam cursor in insert mode
+      ;;
   esac
   _vi_mode_sync_spaceship_char
   zle reset-prompt 2>/dev/null || true

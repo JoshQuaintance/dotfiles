@@ -39,16 +39,20 @@ cd ~/.dotfiles
 
 ## Workstation CLI (`dot`)
 
-The repository includes a Python-powered CLI running in an isolated `uv` virtual environment (`~/.dotfiles/.venv`):
+The repository includes a Python-powered CLI:
 
 ```bash
-dot doctor            # Comprehensive health check across symlinks, tools, and locale
+dot                   # Quick workstation, repo, symlink, and runtime overview (alias: dot status / .s)
+dot doctor            # Comprehensive health check across symlinks, tools, and locale (.doctor)
 dot doctor --fix      # Auto-heals broken/dangling symlinks (including VS Code configs)
-dot test              # Deep integration test suite (JSONC, TOML, headless Neovim, Zsh latency)
-dot update --all      # Upstream Git sync + Homebrew & Mise updates + automated test run
+dot test              # Deep integration test suite (JSONC, TOML, headless Neovim, Zsh latency) (.test)
+dot bench [-n N]      # Profile interactive Zsh startup latency by phase (.bench)
+dot clean [-n] [-a]   # Prune stale completion dumps, caches, and old scratch notes (.clean)
+dot update --all      # Upstream Git sync + Homebrew & Mise updates + automated test run (.update)
+dot link --fix        # Reconcile all declarative configuration symlinks
 ```
 
-*Note: Backward-compatible aliases `dotdoctor`, `dottest`, and `dotupdate` are also available.*
+*Note: Shorthand aliases (`.status`, `.doctor`, `.test`, `.bench`, `.clean`, `.check`, `.update`, `.branch`) and standalone scripts (`dotdoctor`, `dottest`, `dotcheck`, `dotupdate`) are also available.*
 
 ---
 

@@ -18,30 +18,80 @@ fa() {
   fi
 
   _gen_list() {
+    local -A alias_docs func_docs
+    local k v
+
+    # Extract inline '# comment' after alias definitions in .aliases / .aliases.local
+    while IFS=$'\t' read -r k v; do
+      [ -n "$k" ] && alias_docs[$k]="$v"
+    done < <(awk '
+      /^[[:space:]]*alias[[:space:]]+[A-Za-z0-9_.-]+=/ && /#[[:space:]]+/ {
+        line = $0
+        sub(/^[[:space:]]*alias[[:space:]]+/, "", line)
+        name = line
+        sub(/=.*/, "", name)
+        comment = line
+        sub(/^[^#]*#[[:space:]]*/, "", comment)
+        if (name != "" && comment != "") print name "\t" comment
+      }
+    ' "$dot_dir/zsh/.aliases" "$HOME/.aliases.local" 2>/dev/null)
+
+    # Extract header '# comment' above function definitions in zsh/functions/*.zsh
+    while IFS=$'\t' read -r k v; do
+      [ -n "$k" ] && func_docs[$k]="$v"
+    done < <(awk '
+      /^#[[:space:]]+/ {
+        line = $0
+        sub(/^#[[:space:]]+/, "", line)
+        if (line !~ /^(Usage:|===|---)/ && prev == "") prev = line
+        next
+      }
+      /^[A-Za-z0-9_-]+\(\)[[:space:]]*\{/ {
+        fn = $0
+        sub(/\(\).*/, "", fn)
+        if (prev != "") print fn "\t" prev
+        prev = ""
+        next
+      }
+      { prev = "" }
+    ' "$dot_dir"/zsh/functions/*.zsh 2>/dev/null)
+
     # 1. Custom dotfiles functions (sourced from canonical DOTFILES_FUNCTIONS registry)
+    local fn desc
     for fn in "${DOTFILES_FUNCTIONS[@]}"; do
       if (( $+functions[$fn] )); then
-        printf "function\t%-18s\t(shell function)\n" "$fn"
+        desc="${func_docs[$fn]:-(shell function)}"
+        printf "function\t%-18s\t%s\n" "$fn" "$desc"
       fi
     done
 
     # 2. Standalone dotfiles bin tools
     if [ -d "$dot_dir/bin" ]; then
+      local b bname
       for b in "$dot_dir/bin/"*; do
-        [ -x "$b" ] && printf "tool\t%-18s\t%s\n" "$(basename "$b")" "(CLI utility in ~/.local/bin)"
+        if [ -x "$b" ]; then
+          bname="$(basename "$b")"
+          printf "tool\t%-18s\t%s\n" "$bname" "(CLI utility in ~/.local/bin)"
+        fi
       done
     fi
 
-    # 3. Active shell aliases
+    # 3. Active shell aliases (with inline comment from .aliases when present)
+    local name val cmt
     alias | while IFS='=' read -r name val; do
-      printf "alias\t%-18s\t%s\n" "$name" "$val"
+      cmt="${alias_docs[$name]}"
+      if [ -n "$cmt" ]; then
+        printf "alias\t%-18s\t%s  # %s\n" "$name" "$val" "$cmt"
+      else
+        printf "alias\t%-18s\t%s\n" "$name" "$val"
+      fi
     done
   }
 
   if [ "$print_mode" = true ]; then
     # Text-filtered output for pipes or when -p is specified
     if [ -n "$query" ]; then
-      _gen_list | awk -F'\t' -v q="$query" 'tolower($2) ~ tolower(q) {
+      _gen_list | awk -F'\t' -v q="$query" 'tolower($2) ~ tolower(q) || tolower($3) ~ tolower(q) {
         if ($1 == "alias")    printf "\033[38;2;137;180;250m[%s]\033[0m \033[1;38;2;203;166;247m%-18s\033[0m %s\n", $1, $2, $3
         if ($1 == "function") printf "\033[38;2;166;227;161m[%s]\033[0m \033[1;38;2;203;166;247m%-18s\033[0m %s\n", $1, $2, $3
         if ($1 == "tool")     printf "\033[38;2;249;226;175m[%s]\033[0m \033[1;38;2;203;166;247m%-18s\033[0m %s\n", $1, $2, $3
@@ -51,17 +101,17 @@ fa() {
     fi
   elif command -v fzf &>/dev/null; then
     local -a fzf_mode_flags
-    _fzf_vim_mode "⚡ Aliases & Functions > " "  j/k: navigate │ /: search │ enter: paste │ q: quit" "paste" "" "$query"
+    _fzf_vim_mode "⚡ Aliases & Functions > " "  j/k: navigate │ /: search name or comment │ enter: paste │ q: quit" "paste" "" "$query"
 
     local selected
     selected=$(_gen_list | fzf \
       --delimiter='\t' \
-      --nth=2 \
+      --nth=2,3 \
       --with-nth=1,2,3 \
       --height=~45% \
       "${fzf_mode_flags[@]}" \
       --color="header:italic:dim,prompt:bold:magenta,pointer:bold:magenta" \
-      --preview='which {2} 2>/dev/null | if command -v bat &>/dev/null; then bat -l zsh --color=always --style=plain; else cat; fi' \
+      --preview='printf "# %s\n" {3}; which {2} 2>/dev/null | if command -v bat &>/dev/null; then bat -l zsh --color=always --style=plain; else cat; fi' \
       --preview-window='right:55%:wrap')
 
     if [ -n "$selected" ]; then
@@ -70,7 +120,7 @@ fa() {
       print -z "$cmd "
     fi
   else
-    _gen_list | awk -F'\t' -v q="$query" 'tolower($2) ~ tolower(q)'
+    _gen_list | awk -F'\t' -v q="$query" 'tolower($2) ~ tolower(q) || tolower($3) ~ tolower(q)'
   fi
 }
 

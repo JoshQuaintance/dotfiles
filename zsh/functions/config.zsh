@@ -331,3 +331,57 @@ _dotbranch_reload() {
   printf "\033[1;32m✔\033[0m Active dotfiles branch switched to \033[1;38;2;203;166;247m%s\033[0m and shell reloaded!\n" "$branch_name"
 }
 
+# Tab completion for dot CLI: subcommands and per-command flags
+_dot() {
+  local -a subcommands flags
+  if (( CURRENT == 2 )); then
+    subcommands=(
+      'status:Quick overview of dotfiles, symlinks, and runtimes'
+      'doctor:System & environment health check (--fix to repair symlinks)'
+      'test:Deep integration, parser & shell runtime test suite'
+      'bench:Profile interactive Zsh startup latency by phase'
+      'clean:Prune stale completion dumps, caches & old scratch files'
+      'update:Sync dotfiles repo & upgrade Brew / Mise tools'
+      'link:Verify and heal all declarative configuration symlinks'
+    )
+    _describe 'dot command' subcommands
+  else
+    case "${words[2]}" in
+      doctor|link)
+        flags=('--fix:Auto-repair broken or missing symlinks' '-f:Auto-repair broken or missing symlinks')
+        ;;
+      bench)
+        flags=('-n:Number of benchmark iterations' '--iterations:Number of benchmark iterations')
+        ;;
+      clean)
+        flags=(
+          '-n:Preview files to remove without deleting'
+          '--dry-run:Preview files to remove without deleting'
+          '-a:Also prune old scratch notes (>30 days)'
+          '--all:Also prune old scratch notes (>30 days)'
+        )
+        ;;
+      update)
+        flags=(
+          '-c:Check for upstream updates without applying'
+          '--check:Check for upstream updates without applying'
+          '-a:Upgrade all packages without prompting'
+          '--all:Upgrade all packages without prompting'
+        )
+        ;;
+    esac
+    (( ${#flags[@]} )) && _describe 'flag' flags
+  fi
+}
+(( $+functions[compdef] )) && compdef _dot dot
+
+# Tab completion for conf: list available configuration targets
+_conf() {
+  local -a targets
+  while IFS=$'\t' read -r k p; do
+    [ -n "$k" ] && targets+=("${k}:${p/$HOME/~}")
+  done < <(_conf_candidates 2>/dev/null | awk -F'\t' '!seen[$1]++')
+  _describe 'config target' targets
+}
+(( $+functions[compdef] )) && compdef _conf conf
+

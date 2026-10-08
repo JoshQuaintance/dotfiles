@@ -1,9 +1,91 @@
 # Git & Worktree Helpers
 
+# Smart Git Clone: supports full URLs, owner/repo shorthand, auto-cd, and -b/--bare worktree hub setup
 clone() {
-  local repo=$1
-  echo "Cloning $repo - git clone git@github.com:$repo.git"
-  git clone "git@github.com:$repo.git"
+  local bare_mode=false
+  local repo=""
+  local target_dir=""
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      -h|--help)
+        printf "Usage: clone [-b|--bare] <url|owner/repo|repo> [directory]\n"
+        printf "  clone owner/repo         Clone git@github.com:owner/repo.git and cd into it\n"
+        printf "  clone my-repo            Clone git@github.com:JoshQuaintance/my-repo.git and cd into it\n"
+        printf "  clone -b owner/repo      Clone as a .bare worktree hub and cd into its default branch worktree\n"
+        return 0
+        ;;
+      -b|--bare)
+        bare_mode=true
+        ;;
+      *)
+        if [ -z "$repo" ]; then
+          repo="$arg"
+        elif [ -z "$target_dir" ]; then
+          target_dir="$arg"
+        fi
+        ;;
+    esac
+  done
+
+  if [ -z "$repo" ]; then
+    printf "Usage: clone [-b|--bare] <url|owner/repo|repo> [directory]\n" >&2
+    return 1
+  fi
+
+  local clone_url=""
+  case "$repo" in
+    http://*|https://*|git@*|ssh://*|file://*)
+      clone_url="$repo"
+      ;;
+    */*)
+      clone_url="git@github.com:${repo%.git}.git"
+      ;;
+    *)
+      local gh_user
+      gh_user="$(git config --get github.user 2>/dev/null || echo "JoshQuaintance")"
+      clone_url="git@github.com:${gh_user}/${repo%.git}.git"
+      ;;
+  esac
+
+  if [ -z "$target_dir" ]; then
+    target_dir="$(basename "${clone_url%.git}")"
+  fi
+
+  if [ "$bare_mode" = true ]; then
+    printf "\033[1;34m==>\033[0m Cloning bare worktree hub \033[1m%s\033[0m into \033[1;36m%s\033[0m...\n" "$clone_url" "$target_dir"
+    mkdir -p "$target_dir" || return 1
+    if ! git clone --bare "$clone_url" "$target_dir/.bare"; then
+      rmdir "$target_dir" 2>/dev/null || true
+      return 1
+    fi
+    echo "gitdir: ./.bare" > "$target_dir/.git"
+    git -C "$target_dir" config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+    git -C "$target_dir" fetch origin --quiet 2>/dev/null || true
+
+    local def_branch
+    def_branch="$(git -C "$target_dir" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|^refs/remotes/origin/||')"
+    if [ -z "$def_branch" ]; then
+      if git -C "$target_dir" show-ref --verify --quiet refs/remotes/origin/develop; then
+        def_branch="develop"
+      elif git -C "$target_dir" show-ref --verify --quiet refs/remotes/origin/main; then
+        def_branch="main"
+      else
+        def_branch="master"
+      fi
+    fi
+
+    git -C "$target_dir" worktree add "$target_dir/$def_branch" "$def_branch" || return 1
+    printf "\033[32m✔ Bare worktree hub ready! Switching to %s/%s\033[0m\n" "$target_dir" "$def_branch"
+    cd "$target_dir/$def_branch"
+  else
+    printf "\033[1;34m==>\033[0m Cloning \033[1m%s\033[0m into \033[1;36m%s\033[0m...\n" "$clone_url" "$target_dir"
+    if git clone "$clone_url" "$target_dir"; then
+      cd "$target_dir"
+    else
+      return 1
+    fi
+  fi
 }
 
 gsearch() {

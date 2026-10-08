@@ -168,3 +168,53 @@ lt() {
     tree 2 "$@"
   fi
 }
+
+# Interactive Session Directory Stack Jumper (d)
+# Uses Zsh auto_pushd history (dirs -v) with modal-Vim FZF & eza tree preview
+d() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "Usage: d [index | query]\n"
+    printf "  d          → Browse session directory stack in modal-Vim FZF\n"
+    printf "  d 2        → Jump directly to directory stack entry #2\n"
+    printf "  d <query>  → Filter directory stack by query\n"
+    return 0
+  fi
+
+  if [[ "$1" =~ ^[0-9]+$ ]]; then
+    local target_dir
+    target_dir=$(dirs -l -p | sed -n "$(( $1 + 1 ))p")
+    if [ -n "$target_dir" ] && [ -d "$target_dir" ]; then
+      cd "$target_dir"
+      return 0
+    fi
+    printf "\033[31m✖ Directory stack index %s out of range.\033[0m\n" "$1" >&2
+    return 1
+  fi
+
+  local stack
+  stack=$(dirs -v | awk '!seen[$2]++')
+  if [ ! -t 1 ] || ! command -v fzf &>/dev/null; then
+    printf "%s\n" "$stack"
+    return 0
+  fi
+
+  local -a fzf_mode_flags
+  _fzf_vim_mode "📂 Directory Stack > " "  j/k: navigate │ /: search │ enter: cd │ q: quit" "cd" "" "$*"
+
+  local selected
+  selected=$(printf "%s\n" "$stack" | fzf \
+    --delimiter=$'\t' \
+    --height=~40% \
+    "${fzf_mode_flags[@]}" \
+    --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
+    --preview='p={2}; p="${p/#\~/$HOME}"; if command -v eza &>/dev/null; then eza --tree --level=2 --icons --color=always "$p" 2>/dev/null; else ls -la "$p" 2>/dev/null; fi' \
+    --preview-window='right:55%:wrap')
+
+  if [ -n "$selected" ]; then
+    local chosen
+    chosen=$(echo "$selected" | awk '{print $2}')
+    chosen="${chosen/#\~/$HOME}"
+    [ -d "$chosen" ] && cd "$chosen"
+  fi
+}
+

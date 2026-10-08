@@ -41,7 +41,7 @@ jobs:
 
       - name: Run Shellcheck on Core Utilities
         run: |
-          shellcheck -e SC1090,SC1091 bin/dotcheck bin/dotdoctor bin/git-prompt-dir || true
+          shellcheck -e SC1090,SC1091 bin/dot bin/dotcheck bin/dotdoctor bin/killport || true
 
   # 2. Test Full Workstation Installation on macOS (Homebrew runner)
   macos:
