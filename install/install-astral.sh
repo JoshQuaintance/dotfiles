@@ -9,6 +9,13 @@ log "Setting up Astral Python Development Tools (uv & ruff)..."
 # Ensure ~/.local/bin is in PATH
 export PATH="$HOME/.local/bin:$PATH"
 
+# uv & ruff are pinned in config/mise/config.toml; let mise own them when it's available
+if command -v mise &>/dev/null && mise ls --current uv &>/dev/null; then
+    mise install -y uv ruff
+    success "Astral Python tools (uv & ruff) managed by mise!"
+    exit 0
+fi
+
 DO_ASTRAL=true
 if command -v uv &>/dev/null; then
     UV_VER="$(uv --version 2>/dev/null | head -n 1 || true)"

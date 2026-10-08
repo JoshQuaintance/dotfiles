@@ -32,12 +32,11 @@ fi
 # 2. Symlink Mise Configuration
 link_dotfile "config/mise/config.toml" "$HOME/.config/mise/config.toml"
 
-# 3. Install & Set Default Node LTS
+# 3. Install every runtime pinned in config/mise/config.toml (node, python, bun, uv, ruff)
 if command -v mise &>/dev/null; then
-    log "Configuring Node LTS via mise..."
-    mise use -g node@lts
+    log "Installing pinned runtimes via mise..."
     mise install -y
-    success "Node LTS configured and set as default via mise!"
+    success "mise runtimes installed: $(mise ls --current 2>/dev/null | awk '{print $1"@"$2}' | tr '\n' ' ')"
 fi
 
 success "Mise setup complete!"

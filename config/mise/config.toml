@@ -1,5 +1,11 @@
+# Global runtimes, identical on macOS, Linux & WSL. Prefix pins take patch updates only;
+# bump them here deliberately (`dot update` prunes tools removed from this table).
 [tools]
 node = "lts"
+python = "3.12"
+bun = "1.3"
+uv = "0.12"
+ruff = "0.16"
 
 [settings]
 legacy_version_file = true

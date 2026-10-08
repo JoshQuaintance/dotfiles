@@ -228,9 +228,9 @@ if command -v ng &>/dev/null; then
     [ -s "$_ng_cache" ] && source "$_ng_cache"
 fi
 
-# Bun
+# Bun (appended so a mise-pinned bun wins; ~/.bun/bin still provides `bun add -g` binaries)
 export BUN_INSTALL="$HOME/.bun"
-[ -d "$BUN_INSTALL/bin" ] && export PATH="$BUN_INSTALL/bin:$PATH"
+[ -d "$BUN_INSTALL/bin" ] && export PATH="$PATH:$BUN_INSTALL/bin"
 [ -s "$BUN_INSTALL/_bun" ] && source "$BUN_INSTALL/_bun"
 
 # PNPM
