@@ -129,6 +129,18 @@ HISTFILE="${ZDOTDIR:-$HOME}/.zsh_history"
 HISTSIZE=50000
 SAVEHIST=50000
 setopt extended_history hist_expire_dups_first hist_ignore_dups hist_ignore_space hist_verify share_history
+setopt hist_reduce_blanks hist_find_no_dups
+
+# Keep secret assignments (FOO_TOKEN=..., export API_KEY=..., password=...) out of $HISTFILE.
+# Atuin applies the same rule via history_filter in config/atuin/config.toml.
+_dot_history_filter() {
+    emulate -L zsh -o extendedglob
+    # 2 = keep in this session's history (for up-arrow fixes) but never write it to disk
+    [[ $1 == (#i)*[[:alnum:]_]#(token|secret|passw(or|)d|api_#key)[[:alnum:]_]#=[^[:space:]]* ]] && return 2
+    return 0
+}
+autoload -Uz add-zsh-hook
+add-zsh-hook zshaddhistory _dot_history_filter
 
 # Terminal window / tab title updates (shows ~/dir when idle, ~/dir — cmd when running)
 if [[ "$TERM" != "dumb" ]] && [[ -t 1 ]]; then

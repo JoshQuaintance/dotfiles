@@ -366,6 +366,7 @@ if [ "$OS" = "Darwin" ]; then
     link_dotfile "config/eza/theme.yml" "$HOME/Library/Application Support/eza/theme.yml"
 fi
 link_dotfile "config/yazi" "$HOME/.config/yazi"
+link_dotfile "config/atuin/config.toml" "$HOME/.config/atuin/config.toml"
 if [ "$OS" = "Darwin" ] && [ -z "${XDG_CONFIG_HOME:-}" ]; then
     link_dotfile "config/lazygit/config.yml" "$HOME/Library/Application Support/lazygit/config.yml"
 else
