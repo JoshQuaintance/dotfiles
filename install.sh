@@ -318,10 +318,16 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
         "lazygit         - Terminal UI for git"
         "glow            - Render Markdown in the terminal"
         "fzf-tab         - Interactive zsh completion menu"
+        "zsh-autosuggestions     - Fish-like inline command suggestions"
+        "zsh-syntax-highlighting - Live command-line syntax highlighting"
+        "tlrc (tldr)     - Community cheat sheets for CLI tools"
+        "tokei           - Codebase line & language statistics"
+        "hyperfine       - Statistical command benchmarking"
         "genignore       - Smart gitignore generator"
     )
-    cli_keys=(ripgrep fd fzf zoxide eza bat spaceship atuin yazi dust btop git-delta lazygit glow fzf-tab genignore)
-    cli_defs=(1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1)
+    cli_keys=(ripgrep fd fzf zoxide eza bat spaceship atuin yazi dust btop git-delta lazygit glow fzf-tab
+              zsh-autosuggestions zsh-syntax-highlighting tlrc tokei hyperfine genignore)
+    cli_defs=(1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1)
 
     if [ -n "${WSL_DISTRO_NAME:-}" ] || grep -qi microsoft /proc/version 2>/dev/null; then
         cli_options+=("WSL integration - win32yank clipboard & wslview browser opener")
