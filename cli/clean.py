@@ -152,7 +152,7 @@ def run_clean(dry_run: bool = False, clean_all: bool = False) -> int:
     for tdir in tmp_dirs:
         if not tdir.is_dir():
             continue
-        for pattern in ("sdiff-left.*", "sdiff-right.*", "yazi-cwd.*", "test-smoke-*"):
+        for pattern in ("strdiff-left.*", "strdiff-right.*", "sdiff-left.*", "sdiff-right.*", "yazi-cwd.*", "test-smoke-*"):
             for match in tdir.glob(pattern):
                 tmp_bytes += remove_target(match, dry_run)
                 tmp_count += 1

@@ -23,7 +23,6 @@ alias ....="cd ../../.."
 alias codes="cd ~/Codes/" # Jump to ~/Codes workspace
 alias path="echo \$PATH | tr ':' '\n'" # Print each PATH entry on its own line
 alias x="extract" # Universal archive extractor
-alias strdiff="sdiff" # Colored character/word string & scratch diff
 alias kp="fkill" # Interactive process & port killer
 alias dps="fcon" # Interactive Docker/Podman container manager
 alias cheat="cheath" # Interactive tldr cheat-sheet browser
