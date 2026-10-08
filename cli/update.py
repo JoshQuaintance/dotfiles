@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from cli.doctor import DoctorReport, check_and_heal_symlinks
 from cli.manifest import get_dotfiles_dir
+from cli.prune import apply_prune, plan_prune, preview_prune
 from cli.test import run_tests
 from cli.ui import (
     C_BLUE,
@@ -42,7 +43,7 @@ def prompt_user(prompt: str, default: str = "y") -> str:
     except (EOFError, KeyboardInterrupt):
         return default
 
-def run_update(check_only: bool = False, auto_apply: bool = False, update_all: bool = False, tools_only: bool = False, test_after: bool = False) -> int:
+def run_update(check_only: bool = False, auto_apply: bool = False, update_all: bool = False, tools_only: bool = False, test_after: bool = False, prune: bool = True) -> int:
     dotfiles = get_dotfiles_dir()
 
     if tools_only:
@@ -94,6 +95,9 @@ def run_update(check_only: bool = False, auto_apply: bool = False, update_all: b
         print()
 
         if check_only:
+            if prune:
+                code, old_head = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "HEAD"])
+                preview_prune(dotfiles, old_head, upstream)
             print("Run 'dot update' to pull and apply these updates.")
             return 0
 
@@ -111,12 +115,16 @@ def run_update(check_only: bool = False, auto_apply: bool = False, update_all: b
 
         if do_apply:
             print(f"{C_BLUE}==>{C_RESET} Pulling updates via git pull --rebase...")
+            code, old_head = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "HEAD"])
             code, _ = run_cmd(["git", "-C", str(dotfiles), "pull", "--rebase", "origin", current_branch])
             if code == 0:
                 code, new_head = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "--short", "HEAD"])
                 print(f"{C_GREEN}✔{C_RESET} Dotfiles successfully updated to {C_CYAN}{new_head}{C_RESET}!")
                 # Automatically repair any configuration symlinks that moved in the pulled commit
                 check_and_heal_symlinks(DoctorReport(), dotfiles, fix=True)
+                # Remove links, caches and packages whose source was deleted between the old and new commit
+                if prune:
+                    apply_prune(dotfiles, plan_prune(dotfiles, old_head, "HEAD"))
                 updated_git = True
             else:
                 print(f"{C_RED}✖ Git pull failed. Please check {dotfiles}{C_RESET}", file=sys.stderr)

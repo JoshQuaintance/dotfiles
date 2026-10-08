@@ -3,6 +3,7 @@ import sys
 from cli.bench import run_bench
 from cli.clean import run_clean
 from cli.doctor import run_doctor
+from cli.prune import run_prune
 from cli.status import run_status
 from cli.test import run_tests
 from cli.update import run_update
@@ -33,6 +34,12 @@ def main():
     parser_clean.add_argument("-n", "--dry-run", action="store_true", help="Preview items and space to be reclaimed without deleting")
     parser_clean.add_argument("-a", "--all", action="store_true", help="Also remove legacy ~/.oh-my-zsh and prune uv/Homebrew caches")
 
+    # dot prune
+    parser_prune = subparsers.add_parser("prune", help="Remove links, caches and packages deleted from the dotfiles since a commit")
+    parser_prune.add_argument("ref", nargs="?", help="Commit to compare against HEAD (default: ORIG_HEAD, the commit before the last pull)")
+    parser_prune.add_argument("-n", "--dry-run", action="store_true", help="Preview what would be removed without deleting")
+    parser_prune.add_argument("-o", "--orphans", action="store_true", help="Also offer to uninstall brew packages and mise versions the dotfiles don't declare")
+
     # dot update
     parser_update = subparsers.add_parser("update", help="Check and apply dotfiles, Homebrew, and Mise updates")
     parser_update.add_argument("-c", "--check", action="store_true", help="Check for updates without applying")
@@ -40,6 +47,7 @@ def main():
     parser_update.add_argument("-a", "--all", action="store_true", help="Full workstation upgrade: git + Homebrew + Mise + test")
     parser_update.add_argument("-t", "--tools", action="store_true", help="Update Homebrew and Mise tools only")
     parser_update.add_argument("--test", action="store_true", help="Run deep integration tests after update")
+    parser_update.add_argument("--no-prune", action="store_true", help="Keep links, caches and packages removed upstream")
 
     # dot link
     parser_link = subparsers.add_parser("link", help="Audit or auto-heal declarative symlinks")
@@ -59,6 +67,8 @@ def main():
         sys.exit(run_bench(iterations=args.iterations))
     elif args.subcommand == "clean":
         sys.exit(run_clean(dry_run=args.dry_run, clean_all=args.all))
+    elif args.subcommand == "prune":
+        sys.exit(run_prune(ref=args.ref, dry_run=args.dry_run, orphans=args.orphans))
     elif args.subcommand == "update":
         sys.exit(run_update(
             check_only=args.check,
@@ -66,6 +76,7 @@ def main():
             update_all=args.all,
             tools_only=args.tools,
             test_after=args.test,
+            prune=not args.no_prune,
         ))
 
 if __name__ == "__main__":

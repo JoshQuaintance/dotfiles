@@ -48,11 +48,15 @@ dot doctor --fix      # Auto-heals broken/dangling symlinks (including VS Code c
 dot test              # Deep integration test suite (JSONC, TOML, headless Neovim, Zsh latency) (.test)
 dot bench [-n N]      # Profile interactive Zsh startup latency by phase (.bench)
 dot clean [-n] [-a]   # Prune stale completion dumps, caches, and old scratch notes (.clean)
+dot prune [REF] [-n]  # Remove links, caches & packages deleted since REF (default: before last pull) (.prune)
+dot prune --orphans   # ...and offer to uninstall brew packages & mise versions the dotfiles don't declare
 dot update --all      # Upstream Git sync + Homebrew & Mise updates + automated test run (.update)
 dot link --fix        # Reconcile all declarative configuration symlinks
 ```
 
-*Note: Shorthand aliases (`.status`, `.doctor`, `.test`, `.bench`, `.clean`, `.check`, `.update`, `.branch`) and standalone scripts (`dotdoctor`, `dottest`, `dotcheck`, `dotupdate`) are also available.*
+*Pruning:* after pulling, `dot update` removes what upstream deleted since your previous commit. Symlinks into removed repo files and stale zsh caches (`.zwc`, compdumps) are removed automatically. Homebrew formulae/casks dropped from the `Brewfile` and tools dropped from `config/mise/config.toml` are listed and only uninstalled after you confirm, even with `-y`. `dot update -c` previews the list; `--no-prune` skips it. Run the same cleanup on its own with `dot prune` (e.g. after a manual `git pull`).
+
+*Note: Shorthand aliases (`.status`, `.doctor`, `.test`, `.bench`, `.clean`, `.prune`, `.check`, `.update`, `.branch`) and standalone scripts (`dotdoctor`, `dottest`, `dotcheck`, `dotupdate`) are also available.*
 
 ---
 
