@@ -341,6 +341,7 @@ _dot() {
       'test:Deep integration, parser & shell runtime test suite'
       'bench:Profile interactive Zsh startup latency by phase'
       'clean:Prune stale completion dumps, caches & old scratch files'
+      'prune:Remove links, caches & packages deleted from the dotfiles'
       'update:Sync dotfiles repo & upgrade Brew / Mise tools'
       'link:Verify and heal all declarative configuration symlinks'
     )
@@ -361,12 +362,21 @@ _dot() {
           '--all:Also prune old scratch notes (>30 days)'
         )
         ;;
+      prune)
+        flags=(
+          '-n:Preview what would be removed without deleting'
+          '--dry-run:Preview what would be removed without deleting'
+          '-o:Also offer to uninstall packages the dotfiles do not declare'
+          '--orphans:Also offer to uninstall packages the dotfiles do not declare'
+        )
+        ;;
       update)
         flags=(
           '-c:Check for upstream updates without applying'
           '--check:Check for upstream updates without applying'
           '-a:Upgrade all packages without prompting'
           '--all:Upgrade all packages without prompting'
+          '--no-prune:Keep links, caches & packages removed upstream'
         )
         ;;
     esac
