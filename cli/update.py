@@ -2,6 +2,8 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
+
 from cli.doctor import DoctorReport, check_and_heal_symlinks
 from cli.manifest import get_dotfiles_dir
 from cli.prune import apply_prune, plan_prune, preview_prune
@@ -16,24 +18,25 @@ from cli.ui import (
     C_YELLOW,
 )
 
-def run_cmd(cmd: list[str], cwd: Path = None) -> tuple[int, str]:
+
+def run_cmd(cmd: list[str], cwd: Optional[Path] = None) -> tuple[int, str]:
     try:
-        res = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+        res = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=False)
         return res.returncode, res.stdout.strip()
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError) as e:
         return 1, str(e)
 
 def update_brew():
     if shutil.which("brew"):
         print(f"\n{C_BLUE}==>{C_RESET} Updating Homebrew formulas and packages...")
-        subprocess.run(["brew", "update"])
-        subprocess.run(["brew", "upgrade"])
+        subprocess.run(["brew", "update"], check=False)
+        subprocess.run(["brew", "upgrade"], check=False)
         print(f"{C_GREEN}✔{C_RESET} Homebrew packages updated successfully!")
 
 def update_mise():
     if shutil.which("mise"):
         print(f"\n{C_BLUE}==>{C_RESET} Upgrading Mise tools and runtimes...")
-        subprocess.run(["mise", "upgrade"])
+        subprocess.run(["mise", "upgrade"], check=False)
         print(f"{C_GREEN}✔{C_RESET} Mise tools upgraded successfully!")
 
 def prompt_user(prompt: str, default: str = "y") -> str:
@@ -85,13 +88,13 @@ def run_update(check_only: bool = False, auto_apply: bool = False, update_all: b
             print(f"{C_YELLOW}⚠ Note: You have local uncommitted changes in {dotfiles}{C_RESET}")
     elif behind > 0 and ahead > 0:
         print(f"{C_RED}✖ Dotfiles branch has diverged from {upstream} ({ahead} ahead, {behind} behind).{C_RESET}")
-        subprocess.run(["git", "-C", str(dotfiles), "log", "--graph", "--oneline", "-n", "10", "HEAD", upstream])
+        subprocess.run(["git", "-C", str(dotfiles), "log", "--graph", "--oneline", "-n", "10", "HEAD", upstream], check=False)
         return 1
     elif ahead > 0 and behind == 0:
         print(f"{C_GREEN}✔{C_RESET} Local dotfiles are ahead of {C_BOLD}{upstream}{C_RESET} by {ahead} commit(s) (unpushed).")
     else:
         print(f"{C_YELLOW}⬇ {behind} update(s) available for your dotfiles from {upstream}:{C_RESET}\n")
-        subprocess.run(["git", "-C", str(dotfiles), "log", "--format=  %C(yellow)%h%Creset %C(cyan)%cr%Creset %C(bold)%s%Creset %C(dim)(%an)%Creset", f"HEAD..{upstream}"])
+        subprocess.run(["git", "-C", str(dotfiles), "log", "--format=  %C(yellow)%h%Creset %C(cyan)%cr%Creset %C(bold)%s%Creset %C(dim)(%an)%Creset", f"HEAD..{upstream}"], check=False)
         print()
 
         if check_only:
@@ -103,7 +106,7 @@ def run_update(check_only: bool = False, auto_apply: bool = False, update_all: b
 
         if is_dirty:
             print(f"{C_YELLOW}⚠ You have uncommitted changes in {dotfiles}. Please commit or stash them before updating.{C_RESET}")
-            subprocess.run(["git", "-C", str(dotfiles), "status", "-s"])
+            subprocess.run(["git", "-C", str(dotfiles), "status", "-s"], check=False)
             return 1
 
         do_apply = True

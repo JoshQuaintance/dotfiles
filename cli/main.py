@@ -1,5 +1,6 @@
 import argparse
 import sys
+
 from cli.bench import run_bench
 from cli.clean import run_clean
 from cli.doctor import run_doctor
@@ -7,6 +8,7 @@ from cli.prune import run_prune
 from cli.status import run_status
 from cli.test import run_tests
 from cli.update import run_update
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -57,9 +59,7 @@ def main():
 
     if not args.subcommand or args.subcommand == "status":
         sys.exit(run_status())
-    elif args.subcommand == "doctor":
-        sys.exit(run_doctor(fix=args.fix))
-    elif args.subcommand == "link":
+    elif args.subcommand == "doctor" or args.subcommand == "link":
         sys.exit(run_doctor(fix=args.fix))
     elif args.subcommand == "test":
         sys.exit(run_tests())

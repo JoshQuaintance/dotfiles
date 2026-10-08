@@ -1,8 +1,8 @@
-from dataclasses import dataclass
 import os
-from pathlib import Path
 import platform
-from typing import List
+from dataclasses import dataclass
+from pathlib import Path
+
 
 @dataclass
 class SymlinkEntry:
@@ -37,13 +37,13 @@ def get_dotfiles_dir() -> Path:
     ensure_standard_path()
     return Path(__file__).resolve().parent.parent
 
-def get_symlink_manifest() -> List[SymlinkEntry]:
+def get_symlink_manifest() -> list[SymlinkEntry]:
     """Return the complete list of declarative symlinks for the current OS."""
-    dotfiles = get_dotfiles_dir()
+    get_dotfiles_dir()
     home = Path.home()
     os_type = platform.system()
 
-    entries: List[SymlinkEntry] = [
+    entries: list[SymlinkEntry] = [
         # Shell & Git core
         SymlinkEntry(home / ".zshrc", "zsh/.zshrc", "Zsh interactive configuration"),
         SymlinkEntry(home / ".zshenv", "zsh/.zshenv", "Zsh global environment (UTF-8)"),

@@ -4,22 +4,10 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Tuple
 
-try:
-    from rich.console import Console
-    from rich.panel import Panel
-    from rich.text import Text
-    console = Console()
-    HAS_RICH = True
-except ImportError:
-    console = None
-    HAS_RICH = False
-
-from cli.manifest import get_dotfiles_dir, get_symlink_manifest, SymlinkEntry
+from cli.manifest import get_dotfiles_dir, get_symlink_manifest
 from cli.ui import (
     C_BOLD,
-    C_CYAN,
     C_DIM,
     C_GREEN,
     C_RED,
@@ -27,6 +15,7 @@ from cli.ui import (
     C_YELLOW,
     print_header,
 )
+
 
 class DoctorReport:
     def __init__(self):
@@ -52,11 +41,11 @@ class DoctorReport:
         self.passed += 1
         print(f"  {C_GREEN}✔ [FIXED]{C_RESET} {label:<36} {C_GREEN}{detail}{C_RESET}")
 
-def run_cmd(cmd: list[str]) -> Tuple[int, str]:
+def run_cmd(cmd: list[str]) -> tuple[int, str]:
     try:
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=5, check=False)
         return res.returncode, res.stdout.strip()
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError) as e:
         return 1, str(e)
 
 def check_repository(report: DoctorReport, dotfiles: Path):
@@ -69,12 +58,12 @@ def check_repository(report: DoctorReport, dotfiles: Path):
         report.warn(f"Repository: {dotfiles.name}", "git binary not installed")
         return
 
-    code, branch = run_cmd(["git", "-C", str(dotfiles), "branch", "--show-current"])
+    _, branch = run_cmd(["git", "-C", str(dotfiles), "branch", "--show-current"])
     branch = branch or "detached"
-    code, commit = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "--short", "HEAD"])
+    _, commit = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "--short", "HEAD"])
     report.ok(f"Repository: {dotfiles.name}", f"{branch} ({commit})")
 
-    code, status = run_cmd(["git", "-C", str(dotfiles), "status", "--porcelain"])
+    _, status = run_cmd(["git", "-C", str(dotfiles), "status", "--porcelain"])
     if not status:
         report.ok("Working tree clean", "No uncommitted changes")
     else:
@@ -102,7 +91,7 @@ def check_and_heal_symlinks(report: DoctorReport, dotfiles: Path, fix: bool = Fa
         if link.is_symlink():
             try:
                 actual_target = link.resolve()
-            except Exception:
+            except (OSError, RuntimeError):
                 actual_target = None
 
             # 1. Broken / Dangling symlink
@@ -256,8 +245,8 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
                         report.warn("Mise managed runtimes", f"Missing: {', '.join(missing_tools)} (run 'mise install')")
                 elif active_tools:
                     report.ok("Mise managed runtimes", ", ".join(active_tools)[:38])
-            except Exception:
-                pass
+            except (ValueError, AttributeError, TypeError):
+                report.warn("Mise managed runtimes", "Unexpected 'mise ls --json' output")
 
 def check_locale(report: DoctorReport):
     print(f"\n{C_BOLD}4. Locale & Multibyte Support{C_RESET}")
@@ -272,7 +261,7 @@ def check_locale(report: DoctorReport):
 
     # Multibyte evaluation in Zsh
     if shutil.which("zsh"):
-        code, out = run_cmd(["zsh", "-c", '[ "${#${:-🐧}}" -eq 1 ]'])
+        code, _out = run_cmd(["zsh", "-c", '[ "${#${:-🐧}}" -eq 1 ]'])
         if code == 0:
             report.ok("Zsh multibyte parsing", "Single-char UTF-8 glyphs confirmed")
         else:
@@ -315,8 +304,8 @@ def check_git_signing(report: DoctorReport):
         report.warn("Git config", "git binary not installed")
         return
 
-    code, name = run_cmd(["git", "config", "--get", "user.name"])
-    code, email = run_cmd(["git", "config", "--get", "user.email"])
+    _, name = run_cmd(["git", "config", "--get", "user.name"])
+    _, email = run_cmd(["git", "config", "--get", "user.email"])
     if name:
         report.ok("Git user.name", name)
     else:
@@ -327,9 +316,9 @@ def check_git_signing(report: DoctorReport):
     else:
         report.warn("Git user.email", "Not set in git config")
 
-    code, sign = run_cmd(["git", "config", "--get", "commit.gpgsign"])
-    code, format_type = run_cmd(["git", "config", "--get", "gpg.format"])
-    code, signing_key = run_cmd(["git", "config", "--get", "user.signingkey"])
+    _, sign = run_cmd(["git", "config", "--get", "commit.gpgsign"])
+    _, format_type = run_cmd(["git", "config", "--get", "gpg.format"])
+    _, signing_key = run_cmd(["git", "config", "--get", "user.signingkey"])
 
     if sign == "true":
         key_desc = f"{format_type or 'gpg'} ({signing_key})" if signing_key else "Enabled"

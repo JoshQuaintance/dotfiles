@@ -1,21 +1,22 @@
+import contextlib
 import os
 import shutil
 import socket
 import subprocess
 from pathlib import Path
-from typing import List, Tuple
 
 from cli.manifest import get_dotfiles_dir
 from cli.ui import (
     C_BOLD,
-    C_CYAN,
     C_DIM,
     C_GREEN,
     C_RESET,
     C_YELLOW,
-    ICON_BULLET as ICON_INFO,
     ICON_OK,
     print_header,
+)
+from cli.ui import (
+    ICON_BULLET as ICON_INFO,
 )
 
 
@@ -29,10 +30,8 @@ def path_size(path: Path) -> int:
             for root, _, files in os.walk(path):
                 for f in files:
                     fp = Path(root) / f
-                    try:
+                    with contextlib.suppress(OSError):
                         total += fp.lstat().st_size
-                    except OSError:
-                        pass
             return total
     except OSError:
         pass
@@ -69,9 +68,9 @@ def get_active_zsh_version() -> str:
     if not shutil.which("zsh"):
         return ""
     try:
-        res = subprocess.run(["zsh", "-c", "printf '%s' $ZSH_VERSION"], capture_output=True, text=True, timeout=3)
+        res = subprocess.run(["zsh", "-c", "printf '%s' $ZSH_VERSION"], capture_output=True, text=True, timeout=3, check=False)
         return res.stdout.strip()
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         return ""
 
 
@@ -79,7 +78,7 @@ def run_clean(dry_run: bool = False, clean_all: bool = False) -> int:
     dotfiles = get_dotfiles_dir()
     home = Path.home()
     reclaimed_total = 0
-    cleaned_items: List[Tuple[str, str]] = []
+    cleaned_items: list[tuple[str, str]] = []
 
     mode_tag = " [DRY RUN]" if dry_run else ""
     print_header(f"Dotfiles Cleaner \u2014 Cache & State Pruner{mode_tag}")
@@ -182,7 +181,7 @@ def run_clean(dry_run: bool = False, clean_all: bool = False) -> int:
             if dry_run:
                 cleaned_items.append(("Astral uv cache", "Would run 'uv cache prune'"))
             else:
-                res = subprocess.run(["uv", "cache", "prune"], capture_output=True, text=True)
+                res = subprocess.run(["uv", "cache", "prune"], capture_output=True, text=True, check=False)
                 if res.returncode == 0:
                     cleaned_items.append(("Astral uv cache", "Pruned via 'uv cache prune'"))
 
@@ -190,7 +189,7 @@ def run_clean(dry_run: bool = False, clean_all: bool = False) -> int:
             if dry_run:
                 cleaned_items.append(("Homebrew cache", "Would run 'brew cleanup --prune=7'"))
             else:
-                res = subprocess.run(["brew", "cleanup", "--prune=7"], capture_output=True, text=True)
+                res = subprocess.run(["brew", "cleanup", "--prune=7"], capture_output=True, text=True, check=False)
                 if res.returncode == 0:
                     cleaned_items.append(("Homebrew cache", "Pruned via 'brew cleanup --prune=7'"))
 

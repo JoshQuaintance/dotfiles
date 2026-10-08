@@ -1,6 +1,5 @@
 import platform
 import shutil
-from pathlib import Path
 
 from cli.manifest import get_dotfiles_dir, get_symlink_manifest
 from cli.ui import (
@@ -9,11 +8,9 @@ from cli.ui import (
     C_DIM,
     C_GREEN,
     C_MAUVE,
-    C_RED,
     C_RESET,
     C_YELLOW,
     ICON_BULLET,
-    ICON_FAIL,
     ICON_OK,
     ICON_WARN,
     print_header,
@@ -61,7 +58,7 @@ def run_status() -> int:
             try:
                 if link.resolve() == target_expected and target_expected.exists():
                     linked_ok += 1
-            except Exception:
+            except (OSError, RuntimeError):
                 pass
 
     if linked_ok == total_links:

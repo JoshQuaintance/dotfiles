@@ -1,14 +1,9 @@
 import json
-import os
-import pty
 import re
-import select
 import shutil
-import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import List, Tuple
 
 try:
     import tomllib  # Python 3.11+
@@ -18,7 +13,6 @@ except ImportError:
 from cli.manifest import get_dotfiles_dir, get_symlink_manifest
 from cli.ui import (
     C_BOLD,
-    C_CYAN,
     C_DIM,
     C_GREEN,
     C_RED,
@@ -27,6 +21,7 @@ from cli.ui import (
     print_header,
     run_cmd,
 )
+
 
 class TestReport:
     def __init__(self):
@@ -112,7 +107,7 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
             data = parse_jsonc(vscode_settings)
             theme = data.get("workbench.colorTheme", "default")
             report.ok("VS Code settings (JSONC)", f"Valid schema (theme: {theme})")
-        except Exception as e:
+        except (OSError, ValueError, AttributeError) as e:
             report.fail("VS Code settings (JSONC)", f"Parse error: {e}")
     else:
         report.warn("VS Code settings (JSONC)", "File missing in repo")
@@ -123,7 +118,7 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
         try:
             json.loads(wt_settings.read_text(encoding="utf-8"))
             report.ok("Windows Terminal configuration", "settings.json valid JSON")
-        except Exception as e:
+        except (OSError, ValueError) as e:
             report.fail("Windows Terminal configuration", f"Invalid JSON: {e}")
 
     # Yazi TOML validation
@@ -138,7 +133,7 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
                 if keymap_toml.exists():
                     tomllib.loads(keymap_toml.read_text(encoding="utf-8"))
                 report.ok("Yazi configuration", "yazi.toml, theme.toml & keymap.toml valid TOML")
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 report.fail("Yazi configuration", f"TOML parse error: {e}")
         else:
             report.ok("Yazi configuration", "Files present (tomllib skipped)")
@@ -150,7 +145,7 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
     if not ghostty_bin and Path("/Applications/Ghostty.app/Contents/MacOS/ghostty").is_file():
         ghostty_bin = "/Applications/Ghostty.app/Contents/MacOS/ghostty"
     if ghostty_bin:
-        code, out, err = run_cmd([ghostty_bin, "+validate-config"])
+        code, _out, err = run_cmd([ghostty_bin, "+validate-config"])
         if code == 0:
             report.ok("Ghostty terminal configuration", "ghostty +validate-config valid")
         else:
@@ -160,7 +155,7 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
 
     # Neovim headless init
     if shutil.which("nvim"):
-        code, out, err = run_cmd(["nvim", "--headless", "+qa"])
+        code, _out, err = run_cmd(["nvim", "--headless", "+qa"])
         if code == 0 and not err.strip():
             report.ok("Neovim headless initialization", "Lua config & plugins clean")
         elif code == 0:
@@ -173,7 +168,7 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
     # Spaceship prompt config validation
     spaceship_cfg = dotfiles / "config" / "spaceship" / "spaceship.zsh"
     if spaceship_cfg.exists() and shutil.which("zsh"):
-        code, out, err = run_cmd(["zsh", "-n", str(spaceship_cfg)])
+        code, _out, err = run_cmd(["zsh", "-n", str(spaceship_cfg)])
         if code == 0:
             report.ok("Spaceship prompt configuration", "config/spaceship/spaceship.zsh valid Zsh")
         else:
@@ -199,13 +194,13 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
         try:
             tomllib.loads(mise_toml.read_text(encoding="utf-8"))
             report.ok("Mise runtime configuration", "config/mise/config.toml valid TOML")
-        except Exception as e:
+        except (OSError, ValueError) as e:
             report.fail("Mise runtime configuration", f"Invalid TOML: {e}")
 
     # Git config syntax validation
     gitconfig = dotfiles / "config" / "git" / ".gitconfig"
     if gitconfig.exists():
-        code, out, err = run_cmd(["git", "config", "-f", str(gitconfig), "--list"])
+        code, _out, err = run_cmd(["git", "config", "-f", str(gitconfig), "--list"])
         if code == 0:
             report.ok("Git configuration", ".gitconfig syntax valid")
         else:
@@ -375,14 +370,14 @@ def test_syntax_and_links(report: TestReport, dotfiles: Path):
         if not script.is_file():
             continue
         try:
-            with open(script, "r", encoding="utf-8", errors="ignore") as f:
+            with open(script, encoding="utf-8", errors="ignore") as f:
                 first_line = f.readline()
                 if not re.match(r"^#!.*(bash|sh)", first_line):
                     continue
-        except Exception:
+        except (OSError, ValueError):
             continue
 
-        code, out, err = run_cmd(["bash", "-n", str(script)])
+        code, _out, _err = run_cmd(["bash", "-n", str(script)])
         if code != 0:
             report.fail(f"Bash syntax: {script.name}", "Syntax error")
             bash_failed = True
@@ -399,7 +394,7 @@ def test_syntax_and_links(report: TestReport, dotfiles: Path):
         zsh_failed = False
         for zscript in zsh_scripts:
             if zscript.is_file():
-                code, out, err = run_cmd(["zsh", "-n", str(zscript)])
+                code, _out, _err = run_cmd(["zsh", "-n", str(zscript)])
                 if code != 0:
                     report.fail(f"Zsh syntax: {zscript.name}", "Syntax error")
                     zsh_failed = True
@@ -408,7 +403,7 @@ def test_syntax_and_links(report: TestReport, dotfiles: Path):
 
     # Declarative symlink integrity & dangling checks (Includes VS Code)
     manifest = get_symlink_manifest()
-    dangling: List[str] = []
+    dangling: list[str] = []
     for entry in manifest:
         link = entry.link_path
         if link.is_symlink():
@@ -416,7 +411,7 @@ def test_syntax_and_links(report: TestReport, dotfiles: Path):
                 dest = link.resolve()
                 if not dest.exists():
                     dangling.append(str(link).replace(str(Path.home()), "~"))
-            except Exception:
+            except (OSError, RuntimeError):
                 dangling.append(str(link).replace(str(Path.home()), "~"))
 
     if not dangling:
