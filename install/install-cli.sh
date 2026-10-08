@@ -143,7 +143,7 @@ elif [ "$OS" = "Linux" ]; then
         if ! command -v yazi &>/dev/null; then
             log "Installing yazi..."
             YAZI_ARCH="x86_64-unknown-linux-musl"
-            [ "$ARCH" = "aarch64" -o "$ARCH" = "arm64" ] && YAZI_ARCH="aarch64-unknown-linux-musl"
+            { [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; } && YAZI_ARCH="aarch64-unknown-linux-musl"
             rm -rf "/tmp/yazi-${YAZI_ARCH}" "/tmp/yazi.zip"
             if curl -fsSL "https://github.com/sxyazi/yazi/releases/latest/download/yazi-${YAZI_ARCH}.zip" -o "/tmp/yazi.zip" 2>/dev/null; then
                 unzip -q "/tmp/yazi.zip" -d "/tmp" 2>/dev/null || true
@@ -165,7 +165,7 @@ elif [ "$OS" = "Linux" ]; then
         if ! command -v dust &>/dev/null; then
             log "Installing dust..."
             DUST_ARCH="x86_64-unknown-linux-musl"
-            [ "$ARCH" = "aarch64" -o "$ARCH" = "arm64" ] && DUST_ARCH="aarch64-unknown-linux-musl"
+            { [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; } && DUST_ARCH="aarch64-unknown-linux-musl"
             DUST_TAG="$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/bootandy/dust/releases/latest 2>/dev/null | awk -F'/' '{print $NF}')"
             [ -z "$DUST_TAG" ] && DUST_TAG="v1.2.6"
             rm -rf "/tmp/dust-extract" && mkdir -p "/tmp/dust-extract"
@@ -191,7 +191,7 @@ elif [ "$OS" = "Linux" ]; then
             fi
             if ! command -v delta &>/dev/null; then
                 DELTA_ARCH="x86_64-unknown-linux-musl"
-                [ "$ARCH" = "aarch64" -o "$ARCH" = "arm64" ] && DELTA_ARCH="aarch64-unknown-linux-gnu"
+                { [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; } && DELTA_ARCH="aarch64-unknown-linux-gnu"
                 DELTA_TAG="$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/dandavison/delta/releases/latest 2>/dev/null | awk -F'/' '{print $NF}')"
                 [ -z "$DELTA_TAG" ] && DELTA_TAG="0.20.1"
                 rm -rf "/tmp/delta-extract" && mkdir -p "/tmp/delta-extract"
@@ -224,7 +224,7 @@ elif [ "$OS" = "Linux" ]; then
         if ! command -v tldr &>/dev/null; then
             log "Installing tlrc (tldr)..."
             TLRC_ARCH="x86_64-unknown-linux-musl"
-            [ "$ARCH" = "aarch64" -o "$ARCH" = "arm64" ] && TLRC_ARCH="aarch64-unknown-linux-musl"
+            { [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; } && TLRC_ARCH="aarch64-unknown-linux-musl"
             TLRC_TAG="$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/tldr-pages/tlrc/releases/latest 2>/dev/null | awk -F'/' '{print $NF}')"
             [ -z "$TLRC_TAG" ] && TLRC_TAG="v1.13.1"
             curl -fsSL "https://github.com/tldr-pages/tlrc/releases/download/${TLRC_TAG}/tlrc-${TLRC_TAG}-${TLRC_ARCH}.tar.gz" 2>/dev/null | tar -xz -C "$HOME/.local/bin" tldr 2>/dev/null || \

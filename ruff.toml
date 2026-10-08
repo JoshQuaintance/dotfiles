@@ -1,0 +1,17 @@
+# Lint config for the `dot` CLI (cli/). Runs on the system Python of each platform,
+# so stay compatible with 3.9 (macOS Command Line Tools): Optional[X], no match statements.
+target-version = "py39"
+line-length = 120
+
+[lint]
+select = [
+    "E4", "E7", "E9", "F",  # pyflakes & pycodestyle errors
+    "I",                    # import order
+    "UP",                   # pyupgrade (bounded by target-version)
+    "B",                    # bugbear
+    "SIM",                  # simplifications
+    "RUF",                  # ruff-specific
+    "BLE",                  # blind except
+    "PLW1510",              # subprocess.run without explicit check=
+    "S110", "S112",         # silent try/except/pass|continue
+]

@@ -78,8 +78,10 @@ read_input() {
     local var_name="$2"
     printf "%s" "$prompt"
     if [ -e /dev/tty ] && [ -r /dev/tty ] && (true < /dev/tty) 2>/dev/null; then
+        # shellcheck disable=SC2229  # reads into the variable *named* by $var_name
         read -r "$var_name" < /dev/tty
     else
+        # shellcheck disable=SC2229
         read -r "$var_name"
     fi
 }
@@ -160,11 +162,13 @@ if [[ "$CHOICE" == "1" || "$CHOICE" == "--workstation" || "$CHOICE" == "--all" ]
     selected_editors=(nvim vscode)
     if [[ "$1" != "-y" && "$1" != "--yes" && "$1" != "--unattended" ]] && [ -t 0 ] && [ -e /dev/tty ]; then
         echo ""
+        # shellcheck disable=SC2034  # read by name in multiselect
         editor_opts=(
             "Neovim & Configuration   - Modern Lua setup, Lazy, Treesitter, LSP"
             "Visual Studio Code       - Settings, keybindings & snippets"
         )
         editor_keys=(nvim vscode)
+        # shellcheck disable=SC2034  # read by name in multiselect
         editor_defs=(1 1)
         chosen_editor_idx=()
         multiselect "Select Editors to set up:" editor_opts editor_defs chosen_editor_idx
@@ -294,6 +298,7 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
 
     # Step 2: Main Environments & Development Tools
     echo ""
+    # shellcheck disable=SC2034  # read by name in multiselect
     env_options=(
         "Zsh Shell & Config      - Portable .zshrc, .aliases & Oh My Zsh"
         "Neovim & Configuration   - Modern Lua setup, Lazy, Treesitter, LSP"
@@ -303,6 +308,7 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
         "Astral Python Tools      - uv package manager & ruff linter/formatter"
     )
     env_keys=(shell nvim vscode mise nvm astral)
+    # shellcheck disable=SC2034  # read by name in multiselect
     env_defs=(1 1 1 1 1 1)
     chosen_env_indices=()
     multiselect "Step 2/2: Select Development Environments to install" env_options env_defs chosen_env_indices
@@ -317,10 +323,12 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
     for env_item in "${selected_envs[@]}"; do
         if [ "$env_item" = "nvim" ]; then
             echo ""
+            # shellcheck disable=SC2034  # read by name in multiselect
             nvim_opts=(
                 "Full Workstation  - Complete plugin suite (Treesitter, Telescope, Git, Markdown)"
                 "Server / Minimal  - Lightweight configuration for headless servers"
             )
+            # shellcheck disable=SC2034  # read by name in multiselect
             nvim_defs=(1 0)
             chosen_nvim_idx=()
             multiselect "Select Neovim Profile:" nvim_opts nvim_defs chosen_nvim_idx

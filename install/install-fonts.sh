@@ -20,15 +20,11 @@ type error &>/dev/null || error() { printf "\033[38;2;243;139;168m✖\033[0m %s\
 # Detect environment
 IS_MAC=false
 IS_WSL=false
-IS_LINUX=false
 
 if [[ "$OSTYPE" == darwin* ]] || [ "$(uname -s)" = "Darwin" ]; then
     IS_MAC=true
 elif [ -n "${WSL_DISTRO_NAME:-}" ] || grep -qi microsoft /proc/version 2>/dev/null; then
     IS_WSL=true
-    IS_LINUX=true
-elif [ "$(uname -s)" = "Linux" ]; then
-    IS_LINUX=true
 fi
 
 info "Detected environment: $( $IS_MAC && echo "macOS" || ($IS_WSL && echo "WSL (Windows Subsystem for Linux)" || echo "Native Linux") )"

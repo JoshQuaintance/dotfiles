@@ -4,13 +4,11 @@ import shutil
 import statistics
 import subprocess
 import time
-from typing import Dict, List
 
 from cli.manifest import get_dotfiles_dir
 from cli.ui import (
     C_BLUE,
     C_BOLD,
-    C_CYAN,
     C_DIM,
     C_GREEN,
     C_MAUVE,
@@ -18,8 +16,6 @@ from cli.ui import (
     C_RESET,
     C_YELLOW,
     ICON_FAIL,
-    ICON_OK,
-    ICON_WARN,
     print_header,
 )
 
@@ -45,9 +41,9 @@ def run_bench(iterations: int = 5) -> int:
 
     print(f"\n{C_BOLD}1. Interactive Boot Runs ({iterations} iterations){C_RESET}")
 
-    run_totals: List[float] = []
-    step_order: List[str] = []
-    step_samples: Dict[str, List[float]] = {}
+    run_totals: list[float] = []
+    step_order: list[str] = []
+    step_samples: dict[str, list[float]] = {}
 
     for i in range(1, iterations + 1):
         t0 = time.perf_counter()
@@ -57,6 +53,7 @@ def run_bench(iterations: int = 5) -> int:
             text=True,
             timeout=10,
             env=env,
+            check=False,
         )
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
         run_totals.append(elapsed_ms)
@@ -98,7 +95,7 @@ def run_bench(iterations: int = 5) -> int:
         for name in step_order:
             avg_ms = step_avgs[name]
             pct = (avg_ms / total_step_ms) * 100.0
-            filled = int(round((avg_ms / total_step_ms) * bar_width))
+            filled = round((avg_ms / total_step_ms) * bar_width)
             filled = max(0, min(bar_width, filled))
             bar = (f"{C_MAUVE}" + ("\u2588" * filled) + f"{C_DIM}" + ("\u2591" * (bar_width - filled)) + f"{C_RESET}")
             print(f"  {name:<42} {bar} {C_BLUE}{avg_ms:5.1f}ms{C_RESET} {C_DIM}({pct:4.1f}%){C_RESET}")

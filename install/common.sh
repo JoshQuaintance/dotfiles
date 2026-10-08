@@ -6,8 +6,9 @@ disable -r log 2>/dev/null || true
 
 # Base dotfiles directory
 export DOTFILES_DIR="${DOTFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd || echo "$HOME/.dotfiles")}"
-export OS="$(uname -s)"
-export ARCH="$(uname -m)"
+OS="$(uname -s)"
+ARCH="$(uname -m)"
+export OS ARCH
 
 # Color helpers
 BLUE='\033[0;34m'
@@ -39,8 +40,10 @@ read_input() {
     local var_name="$2"
     printf "%s" "$prompt"
     if [ -e /dev/tty ] && [ -r /dev/tty ] && (true < /dev/tty) 2>/dev/null; then
+        # shellcheck disable=SC2229  # reads into the variable *named* by $var_name
         read -r "$var_name" < /dev/tty
     else
+        # shellcheck disable=SC2229
         read -r "$var_name"
     fi
 }

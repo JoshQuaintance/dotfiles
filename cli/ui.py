@@ -1,7 +1,7 @@
 import os
 import subprocess
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 # Catppuccin Mocha ANSI color constants
 C_GREEN = "\033[38;2;166;227;161m"
@@ -32,11 +32,11 @@ def print_header(title: str) -> None:
 
 
 def run_cmd(
-    cmd: List[str],
+    cmd: list[str],
     cwd: Optional[Path] = None,
     timeout: int = 10,
-    env: Optional[Dict[str, str]] = None,
-) -> Tuple[int, str, str]:
+    env: Optional[dict[str, str]] = None,
+) -> tuple[int, str, str]:
     """Execute a subprocess safely and return (returncode, stdout, stderr)."""
     merged_env = os.environ.copy()
     if env:
@@ -49,9 +49,10 @@ def run_cmd(
             text=True,
             timeout=timeout,
             env=merged_env,
+            check=False,
         )
         return res.returncode, res.stdout.strip(), res.stderr.strip()
     except subprocess.TimeoutExpired:
         return 124, "", f"Timed out after {timeout}s"
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError) as e:
         return 1, "", str(e)

@@ -99,8 +99,11 @@ else
     fi
 fi
 
-# Remove duplicates from TARGETS array
-UNIQUE_TARGETS=($(echo "${TARGETS[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+# Remove duplicates from TARGETS array (read loop: macOS ships bash 3.2 without mapfile)
+UNIQUE_TARGETS=()
+while IFS= read -r target; do
+    [ -n "$target" ] && UNIQUE_TARGETS+=("$target")
+done < <(printf '%s\n' "${TARGETS[@]}" | sort -u)
 
 if [ "${#UNIQUE_TARGETS[@]}" -eq 0 ]; then
     warn "No specific technologies detected. Using default OS & Editor ignores."
@@ -172,7 +175,7 @@ pnpm-debug.log*
 # Python & UV
 __pycache__/
 *.py[cod]
-*$py.class
+*\$py.class
 *.so
 .Python
 .venv/
