@@ -1,0 +1,20 @@
+# Atuin shell history (macOS, Linux & WSL). Only non-default settings live here.
+# Reference: https://docs.atuin.sh/configuration/config/
+
+## Run the selected command immediately instead of placing it on the prompt
+enter_accept = true
+
+## Fuzzy search served by the background daemon (started on demand)
+search_mode = "daemon-fuzzy"
+
+## Never record well-known credential formats (AWS keys, GitHub/Slack/Stripe tokens, ...)
+secrets_filter = true
+
+## Also skip secret-looking assignments; mirrors _dot_history_filter in zsh/.zshrc
+history_filter = [
+  '(?i)[[:alnum:]_]*(token|secret|passw(or)?d|api_*key)[[:alnum:]_]*=\S',
+]
+
+[daemon]
+enabled = true
+autostart = true

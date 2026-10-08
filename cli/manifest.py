@@ -59,6 +59,7 @@ def get_symlink_manifest() -> List[SymlinkEntry]:
         SymlinkEntry(home / ".config" / "eza" / "theme.yml", "config/eza/theme.yml", "Eza modern ls color theme"),
         SymlinkEntry(home / ".config" / "mise" / "config.toml", "config/mise/config.toml", "Mise polyglot runtime manifest"),
         SymlinkEntry(home / ".config" / "yazi", "config/yazi", "Yazi terminal file manager", is_directory=True),
+        SymlinkEntry(home / ".config" / "atuin" / "config.toml", "config/atuin/config.toml", "Atuin shell history settings"),
     ]
 
     # lazygit ignores ~/.config on macOS unless XDG_CONFIG_HOME is set
