@@ -266,6 +266,17 @@ elif [ "$OS" = "Linux" ]; then
             elif command -v dnf &>/dev/null; then
                 run_sudo dnf install -y tokei 2>/dev/null || true
             fi
+            # Ubuntu 24.04+ dropped tokei, and releases after v12.1.2 ship no prebuilt binaries
+            if ! command -v tokei &>/dev/null; then
+                TOKEI_ARCH="x86_64-unknown-linux-musl"
+                { [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; } && TOKEI_ARCH="aarch64-unknown-linux-gnu"
+                curl -fsSL "https://github.com/XAMPPRocky/tokei/releases/download/v12.1.2/tokei-${TOKEI_ARCH}.tar.gz" 2>/dev/null | tar -xz -C "$HOME/.local/bin" tokei 2>/dev/null || true
+                if [ -f "$HOME/.local/bin/tokei" ]; then
+                    chmod +x "$HOME/.local/bin/tokei"
+                    [ "$(id -u)" -eq 0 ] && ln -sf "$HOME/.local/bin/tokei" "/usr/local/bin/tokei" 2>/dev/null || true
+                    success "tokei ready!"
+                fi
+            fi
         fi
     fi
 
