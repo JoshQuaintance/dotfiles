@@ -11,6 +11,8 @@ Icon
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+# Alternate-data-stream sidecars Windows creates when downloaded files are copied into WSL
+*:Zone.Identifier
 
 # Linux & editor backup files
 *~
