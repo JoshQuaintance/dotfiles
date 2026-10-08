@@ -7,11 +7,15 @@
     rebase = true
 
 [push]
+    default = current
     autoSetupRemote = true
     followTags = true
 
 [branch]
     sort = -committerdate
+
+[column]
+    ui = auto
 
 [tag]
     sort = version:refname
@@ -26,14 +30,17 @@
 [diff]
     colorMoved = zebra
     algorithm = histogram
+    renames = true
+    mnemonicPrefix = true
 
 [core]
     excludesfile = ~/.gitignore_global
     autocrlf = input
-    pager = delta
+    # Fall back to less / plain output when delta isn't installed (fresh machines, partial installs)
+    pager = "command -v delta >/dev/null 2>&1 && exec delta || exec less -FRX"
 
 [interactive]
-    diffFilter = delta --color-only
+    diffFilter = "command -v delta >/dev/null 2>&1 && exec delta --color-only || exec cat"
 
 [delta]
     navigate = true
@@ -60,6 +67,7 @@
 
 [rerere]
     enabled = true
+    autoupdate = true
 
 [commit]
     verbose = true
