@@ -357,6 +357,17 @@ dotbranch -s >/dev/null
     else:
         report.fail("Function runtime execution", f"Smoke test failed (exit {code}): {err.strip()}")
 
+    # Unit tests for zsh/functions (tests/zsh/test_*.zsh)
+    runner = dotfiles / "tests" / "zsh" / "run.zsh"
+    if runner.is_file():
+        code, out, err = run_cmd(["zsh", str(runner)], timeout=120)
+        summary = next((line for line in reversed(out.splitlines()) if line.endswith("failed")), "no summary")
+        if code == 0:
+            report.ok("Zsh function unit tests", summary)
+        else:
+            failing = [line.strip().lstrip("✖ ") for line in out.splitlines() if "✖" in line]
+            report.fail("Zsh function unit tests", f"{summary}: {', '.join(failing)[:60] or err.strip()[:60]}")
+
 def test_syntax_and_links(report: TestReport, dotfiles: Path):
     print(f"\n{C_BOLD}3. Script Syntax & Link Integrity{C_RESET}")
 

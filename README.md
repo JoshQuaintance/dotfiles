@@ -45,7 +45,7 @@ The repository includes a Python-powered CLI:
 dot                   # Quick workstation, repo, symlink, and runtime overview (alias: dot status / .s)
 dot doctor            # Comprehensive health check across symlinks, tools, and locale (.doctor)
 dot doctor --fix      # Auto-heals broken/dangling symlinks (including VS Code configs)
-dot test              # Deep integration test suite (JSONC, TOML, headless Neovim, Zsh latency) (.test)
+dot test              # Deep integration test suite (JSONC, TOML, headless Neovim, Zsh latency, zsh unit tests) (.test)
 dot bench [-n N]      # Profile interactive Zsh startup latency by phase (.bench)
 dot clean [-n] [-a]   # Prune stale completion dumps, caches, and old scratch notes (.clean)
 dot prune [REF] [-n]  # Remove links, caches & packages deleted since REF (default: before last pull) (.prune)
@@ -55,6 +55,8 @@ dot link --fix        # Reconcile all declarative configuration symlinks
 ```
 
 *Pruning:* after pulling, `dot update` removes what upstream deleted since your previous commit. Symlinks into removed repo files and stale zsh caches (`.zwc`, compdumps) are removed automatically. Homebrew formulae/casks dropped from the `Brewfile` and tools dropped from `config/mise/config.toml` are listed and only uninstalled after you confirm, even with `-y`. `dot update -c` previews the list; `--no-prune` skips it. Run the same cleanup on its own with `dot prune` (e.g. after a manual `git pull`).
+
+*Shell function tests:* `zsh tests/zsh/run.zsh [filter]` runs the unit tests in `tests/zsh/` (each test gets a throwaway `$HOME`); CI runs them along with strict `shellcheck` and `ruff`.
 
 *Note: Shorthand aliases (`.status`, `.doctor`, `.test`, `.bench`, `.clean`, `.prune`, `.check`, `.update`, `.branch`) and standalone scripts (`dotdoctor`, `dottest`, `dotcheck`, `dotupdate`) are also available.*
 

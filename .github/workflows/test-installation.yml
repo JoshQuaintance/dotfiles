@@ -21,6 +21,12 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y zsh shellcheck
 
+      # Oldest Python the CLI supports (macOS Command Line Tools ship 3.9)
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
       - name: Validate Bash Script Syntax
         run: |
           bash -n install.sh
@@ -35,13 +41,25 @@ jobs:
           zsh -n zsh/*.zsh
           zsh -n zsh/functions/*.zsh
 
-      - name: Validate Python CLI Syntax
+      - name: Validate Python CLI Syntax (3.9)
         run: |
           python3 -m py_compile cli/*.py
 
-      - name: Run Shellcheck on Core Utilities
+      - name: Lint Python CLI (ruff, pinned to config/mise/config.toml)
         run: |
-          shellcheck -e SC1090,SC1091 bin/dot bin/dotcheck bin/dotdoctor bin/killport || true
+          pipx run "ruff==0.16.*" check cli/
+
+      - name: Shellcheck All Shell Scripts
+        run: |
+          scripts=()
+          for f in bin/* install/*.sh install.sh; do
+            head -1 "$f" | grep -qE '^#!.*(bash|/sh)' && scripts+=("$f")
+          done
+          shellcheck -S warning -e SC1090,SC1091 "${scripts[@]}"
+
+      - name: Zsh Function Unit Tests
+        run: |
+          zsh tests/zsh/run.zsh
 
   # 2. Test Full Workstation Installation on macOS (Homebrew runner)
   macos:
@@ -64,6 +82,9 @@ jobs:
           ls -la ~/.config/eza/theme.yml
           ls -la ~/.config/mise/config.toml
           ls -la ~/.config/yazi
+          ls -la ~/.config/atuin/config.toml
+          ls -la ~/Library/Application\ Support/lazygit/config.yml
+          grep -q "config/ssh/dotfiles.conf" ~/.ssh/config
 
       - name: Verify Core CLI Tools
         run: |
@@ -112,6 +133,9 @@ jobs:
           ls -la ~/.config/eza/theme.yml
           ls -la ~/.config/mise/config.toml
           ls -la ~/.config/yazi
+          ls -la ~/.config/atuin/config.toml
+          ls -la ~/.config/lazygit/config.yml
+          grep -q "config/ssh/dotfiles.conf" ~/.ssh/config
 
       - name: Run Dotfiles Health Doctor
         run: |
