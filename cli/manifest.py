@@ -61,6 +61,15 @@ def get_symlink_manifest() -> List[SymlinkEntry]:
         SymlinkEntry(home / ".config" / "yazi", "config/yazi", "Yazi terminal file manager", is_directory=True),
     ]
 
+    # lazygit ignores ~/.config on macOS unless XDG_CONFIG_HOME is set
+    xdg_config = os.environ.get("XDG_CONFIG_HOME")
+    if os_type == "Darwin" and not xdg_config:
+        lazygit_dir = home / "Library" / "Application Support" / "lazygit"
+    else:
+        lazygit_dir = Path(xdg_config) if xdg_config else home / ".config"
+        lazygit_dir = lazygit_dir / "lazygit"
+    entries.append(SymlinkEntry(lazygit_dir / "config.yml", "config/lazygit/config.yml", "lazygit terminal UI settings"))
+
     # Visual Studio Code configurations
     if os_type == "Darwin":
         vscode_dir = home / "Library" / "Application Support" / "Code" / "User"

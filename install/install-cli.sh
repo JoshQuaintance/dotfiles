@@ -39,7 +39,7 @@ if command -v brew &>/dev/null; then
         # Install only specifically requested tools
         for pkg in "${REQUESTED_TOOLS[@]}"; do
             case "$pkg" in
-                ripgrep|fd|fzf|zoxide|spaceship|eza|atuin|bat|yazi|dust|btop|tlrc|tokei|hyperfine|fzf-tab|zsh-autosuggestions|zsh-syntax-highlighting|git|git-delta|lazygit)
+                ripgrep|fd|fzf|zoxide|spaceship|eza|atuin|bat|yazi|dust|btop|tlrc|tokei|hyperfine|fzf-tab|zsh-autosuggestions|zsh-syntax-highlighting|git|git-delta|lazygit|glow|trash-cli)
                     if brew list "$pkg" &>/dev/null; then
                         ask_update_tool "$pkg" "$(brew info "$pkg" 2>/dev/null | head -n 1 | awk '{print $3}')" DO_UPD
                         [ "$DO_UPD" = true ] && brew upgrade "$pkg" 2>/dev/null || true
@@ -70,7 +70,7 @@ elif [ "$OS" = "Linux" ]; then
         # Ubuntu / Debian
         log "Ensuring base CLI packages via apt..."
         run_sudo apt-get update -y
-        run_sudo apt-get install -y curl wget git build-essential ripgrep fd-find fzf bat tar gzip unzip
+        run_sudo apt-get install -y curl wget git build-essential ripgrep fd-find fzf bat trash-cli tar gzip unzip
         
         # Link fdfind -> fd and batcat -> bat if necessary on Debian/Ubuntu
         if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
@@ -84,14 +84,14 @@ elif [ "$OS" = "Linux" ]; then
     elif command -v dnf &>/dev/null; then
         # Fedora / RHEL
         log "Ensuring base CLI packages via dnf..."
-        run_sudo dnf install -y curl wget git make gcc ripgrep fd-find fzf eza bat tar gzip unzip
+        run_sudo dnf install -y curl wget git make gcc ripgrep fd-find fzf eza bat trash-cli tar gzip unzip
         if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
             ln -sf "$(which fdfind)" "$HOME/.local/bin/fd"
             [ "$(id -u)" -eq 0 ] && ln -sf "$(which fdfind)" "/usr/local/bin/fd" 2>/dev/null || true
         fi
     elif command -v pacman &>/dev/null; then
         # Arch Linux
-        run_sudo pacman -S --noconfirm --needed curl wget git base-devel ripgrep fd fzf eza atuin bat git-delta tlrc tokei hyperfine zsh-autosuggestions zsh-syntax-highlighting tar gzip unzip
+        run_sudo pacman -S --noconfirm --needed curl wget git base-devel ripgrep fd fzf eza atuin bat git-delta glow tlrc tokei hyperfine zsh-autosuggestions zsh-syntax-highlighting trash-cli tar gzip unzip
     fi
 
     # 1. eza
@@ -256,7 +256,48 @@ elif [ "$OS" = "Linux" ]; then
         fi
     fi
 
-    # 8. Spaceship Prompt & Zsh Plugins: fzf-tab, zsh-autosuggestions, zsh-syntax-highlighting
+    # 8. glow (Markdown renderer, standalone binary; Ubuntu/Debian don't package it)
+    if is_tool_requested "glow"; then
+        if ! command -v glow &>/dev/null; then
+            log "Installing glow..."
+            GLOW_ARCH="x86_64"
+            { [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; } && GLOW_ARCH="arm64"
+            GLOW_TAG="$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/charmbracelet/glow/releases/latest 2>/dev/null | awk -F'/' '{print $NF}')"
+            [ -z "$GLOW_TAG" ] && GLOW_TAG="v3.0.0"
+            GLOW_VER="${GLOW_TAG#v}"
+            rm -rf "/tmp/glow-extract" && mkdir -p "/tmp/glow-extract"
+            curl -fsSL "https://github.com/charmbracelet/glow/releases/download/${GLOW_TAG}/glow_${GLOW_VER}_Linux_${GLOW_ARCH}.tar.gz" 2>/dev/null | tar -xz --strip-components=1 -C "/tmp/glow-extract" 2>/dev/null || true
+            if [ -f "/tmp/glow-extract/glow" ]; then
+                mv "/tmp/glow-extract/glow" "$HOME/.local/bin/glow"
+                chmod +x "$HOME/.local/bin/glow"
+                [ "$(id -u)" -eq 0 ] && ln -sf "$HOME/.local/bin/glow" "/usr/local/bin/glow" 2>/dev/null || true
+                success "glow ready!"
+            fi
+            rm -rf "/tmp/glow-extract"
+        fi
+    fi
+
+    # 9. lazygit (standalone binary; not packaged on Ubuntu 24.04 / Debian stable)
+    if is_tool_requested "lazygit"; then
+        if ! command -v lazygit &>/dev/null; then
+            log "Installing lazygit..."
+            LG_ARCH="x86_64"
+            { [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; } && LG_ARCH="arm64"
+            LG_TAG="$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/jesseduffield/lazygit/releases/latest 2>/dev/null | awk -F'/' '{print $NF}')"
+            [ -z "$LG_TAG" ] && LG_TAG="v0.66.0"
+            rm -rf "/tmp/lazygit-extract" && mkdir -p "/tmp/lazygit-extract"
+            curl -fsSL "https://github.com/jesseduffield/lazygit/releases/download/${LG_TAG}/lazygit_${LG_TAG#v}_linux_${LG_ARCH}.tar.gz" 2>/dev/null | tar -xz -C "/tmp/lazygit-extract" lazygit 2>/dev/null || true
+            if [ -f "/tmp/lazygit-extract/lazygit" ]; then
+                mv "/tmp/lazygit-extract/lazygit" "$HOME/.local/bin/lazygit"
+                chmod +x "$HOME/.local/bin/lazygit"
+                [ "$(id -u)" -eq 0 ] && ln -sf "$HOME/.local/bin/lazygit" "/usr/local/bin/lazygit" 2>/dev/null || true
+                success "lazygit ready!"
+            fi
+            rm -rf "/tmp/lazygit-extract"
+        fi
+    fi
+
+    # 10. Spaceship Prompt & Zsh Plugins: fzf-tab, zsh-autosuggestions, zsh-syntax-highlighting
     if is_tool_requested "spaceship" && [ ! -d "$HOME/.spaceship-prompt" ]; then
         log "Installing Spaceship Zsh prompt..."
         git clone --depth 1 https://github.com/spaceship-prompt/spaceship-prompt.git "$HOME/.spaceship-prompt" 2>/dev/null || true
@@ -279,10 +320,35 @@ elif [ "$OS" = "Linux" ]; then
         success "zsh-syntax-highlighting ready!"
     fi
 
-    # 9. Developer Fonts (Miracode, FiraCode NF, Monocraft)
+    # 11. Developer Fonts (Miracode, FiraCode NF, Monocraft)
     if is_tool_requested "fonts" || is_tool_requested "font-miracode" || is_tool_requested "font-fira-code-nerd-font"; then
         if [ -x "$DOTFILES_DIR/install/install-fonts.sh" ]; then
             bash "$DOTFILES_DIR/install/install-fonts.sh"
+        fi
+    fi
+fi
+
+# WSL integration (any package manager): win32yank for a UTF-8-safe clipboard, wslu for wslview/BROWSER
+if [ -n "${WSL_DISTRO_NAME:-}" ] || grep -qi microsoft /proc/version 2>/dev/null; then
+    if is_tool_requested "wsl" && ! command -v win32yank.exe &>/dev/null; then
+        log "Installing win32yank (WSL clipboard)..."
+        rm -rf "/tmp/win32yank-extract" && mkdir -p "/tmp/win32yank-extract"
+        if curl -fsSL "https://github.com/equalsraf/win32yank/releases/latest/download/win32yank-x64.zip" -o "/tmp/win32yank-extract/win32yank.zip" 2>/dev/null; then
+            unzip -q -o "/tmp/win32yank-extract/win32yank.zip" -d "/tmp/win32yank-extract" 2>/dev/null || true
+            if [ -f "/tmp/win32yank-extract/win32yank.exe" ]; then
+                mv "/tmp/win32yank-extract/win32yank.exe" "$HOME/.local/bin/win32yank.exe"
+                chmod +x "$HOME/.local/bin/win32yank.exe"
+                success "win32yank ready!"
+            fi
+        fi
+        rm -rf "/tmp/win32yank-extract"
+    fi
+    if is_tool_requested "wsl" && ! command -v wslview &>/dev/null; then
+        log "Installing wslu (wslview)..."
+        if command -v apt-get &>/dev/null; then
+            run_sudo apt-get install -y wslu 2>/dev/null || true
+        else
+            warn "wslu isn't packaged for this distro; 'open' falls back to explorer.exe"
         fi
     fi
 fi
@@ -300,6 +366,11 @@ if [ "$OS" = "Darwin" ]; then
     link_dotfile "config/eza/theme.yml" "$HOME/Library/Application Support/eza/theme.yml"
 fi
 link_dotfile "config/yazi" "$HOME/.config/yazi"
+if [ "$OS" = "Darwin" ] && [ -z "${XDG_CONFIG_HOME:-}" ]; then
+    link_dotfile "config/lazygit/config.yml" "$HOME/Library/Application Support/lazygit/config.yml"
+else
+    link_dotfile "config/lazygit/config.yml" "${XDG_CONFIG_HOME:-$HOME/.config}/lazygit/config.yml"
+fi
 
 # Symlink standalone bin utilities (dot, dotupdate, dotcheck, dotdoctor, dottest, esdiff, killport)
 if [ -d "$DOTFILES_DIR/bin" ]; then
