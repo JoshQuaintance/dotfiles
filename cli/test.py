@@ -346,6 +346,7 @@ dotbranch -s >/dev/null
     groot >/dev/null
     gmain >/dev/null
     gwts >/dev/null
+    gwtnew -h >/dev/null
     gstash -h >/dev/null
     ga -h >/dev/null
     gfile -h >/dev/null
