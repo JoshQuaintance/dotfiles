@@ -11,10 +11,10 @@ typeset -ga DOTFILES_FUNCTIONS=(
   port fkill fcon fssh
   wt gwtnew gwtenv gwts gwtdel gwtclean
   gbclean gstash ga gfile gl gco gsearch
-  y copy paste scratch extract pack
+  y copy clippaste scratch extract pack
   npmr bunr pnpmr
   fa fenv cheath
-  toggle-autols toggle-autonotify notify sdiff
+  toggle-autols toggle-autonotify notify strdiff
 )
 
 # ==========================================

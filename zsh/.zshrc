@@ -87,6 +87,11 @@ elif [ -d "/home/linuxbrew/.linuxbrew" ]; then
     fpath=("/home/linuxbrew/.linuxbrew/share/zsh/site-functions" $fpath)
 fi
 
+# WSL: let gh, git & co. open links in the Windows browser
+if [[ -n "$WSL_DISTRO_NAME" && -z "$BROWSER" ]] && (( $+commands[wslview] )); then
+    export BROWSER="wslview"
+fi
+
 # Resolve canonical dotfiles repository directory (follows ~/.zshrc symlink in CI or custom checkouts)
 export DOTFILES_DIR="${DOTFILES_DIR:-${${(%):-%x}:A:h:h}}"
 

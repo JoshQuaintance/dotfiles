@@ -337,8 +337,8 @@ take /tmp/test-smoke-take >/dev/null && cd - >/dev/null && rm -rf /tmp/test-smok
 notify "test" "dottest" >/dev/null
 extract >/dev/null 2>&1 || true
 pack -h >/dev/null
-sdiff -h >/dev/null
-sdiff "feat/SALES-1234/my-branch" "feat/SALES-1235/my_branch " >/dev/null
+strdiff -h >/dev/null
+strdiff "feat/SALES-1234/my-branch" "feat/SALES-1235/my_branch " >/dev/null
 dotbranch -h >/dev/null
 dotbranch -s >/dev/null
 

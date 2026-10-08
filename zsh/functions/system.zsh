@@ -467,9 +467,13 @@ y() {
 }
 
 # Cross-Platform Clipboard Helpers (macOS, Linux Wayland, Linux X11, WSL)
+# WSL prefers win32yank.exe: clip.exe mangles UTF-8, and Get-Clipboard is slow and adds CRLF.
+# The paste side is `clippaste` so coreutils `paste` keeps working.
 copy() {
   if command -v pbcopy &>/dev/null; then
     pbcopy "$@"
+  elif [[ -n "$WSL_DISTRO_NAME" ]] && command -v win32yank.exe &>/dev/null; then
+    win32yank.exe -i --crlf
   elif command -v wl-copy &>/dev/null; then
     wl-copy "$@"
   elif command -v xclip &>/dev/null; then
@@ -477,18 +481,21 @@ copy() {
   elif command -v xsel &>/dev/null; then
     xsel --clipboard --input "$@"
   elif command -v clip.exe &>/dev/null; then
-    clip.exe "$@"
+    # clip.exe reads the console code page unless given UTF-16LE with a BOM
+    { printf '\xff\xfe'; iconv -f UTF-8 -t UTF-16LE; } | clip.exe
   elif [ -n "$TMUX" ]; then
     tmux load-buffer -
   else
-    printf "\033[33mNo clipboard utility found (pbcopy, wl-copy, xclip, clip.exe)\033[0m\n" >&2
+    printf "\033[33mNo clipboard utility found (pbcopy, win32yank.exe, wl-copy, xclip, clip.exe)\033[0m\n" >&2
     return 1
   fi
 }
 
-paste() {
+clippaste() {
   if command -v pbpaste &>/dev/null; then
     pbpaste "$@"
+  elif [[ -n "$WSL_DISTRO_NAME" ]] && command -v win32yank.exe &>/dev/null; then
+    win32yank.exe -o --lf
   elif command -v wl-paste &>/dev/null; then
     wl-paste "$@"
   elif command -v xclip &>/dev/null; then
@@ -496,12 +503,44 @@ paste() {
   elif command -v xsel &>/dev/null; then
     xsel --clipboard --output "$@"
   elif command -v powershell.exe &>/dev/null; then
-    powershell.exe -NoProfile -Command Get-Clipboard "$@"
+    powershell.exe -NoProfile -Command '[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-Clipboard -Raw' | tr -d '\r'
   else
-    printf "\033[33mNo clipboard utility found (pbpaste, wl-paste, xclip, powershell.exe)\033[0m\n" >&2
+    printf "\033[33mNo clipboard utility found (pbpaste, win32yank.exe, wl-paste, xclip, powershell.exe)\033[0m\n" >&2
     return 1
   fi
 }
+
+# Cross-platform `open` for Linux & WSL (macOS ships one; Debian's `open` is openvt)
+#   open                 -> Open the current directory in the file manager
+#   open <file|dir|url>  -> Open with the default app (WSL: Windows default app)
+if [[ "$OSTYPE" != darwin* ]]; then
+  DOTFILES_FUNCTIONS+=(open)
+  open() {
+    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+      printf "Usage: open [file|dir|url...]   Open with the default app (defaults to .)\n"
+      return 0
+    fi
+    (( $# )) || set -- .
+    local target
+    for target in "$@"; do
+      if [[ -n "$WSL_DISTRO_NAME" ]]; then
+        if command -v wslview &>/dev/null; then
+          wslview "$target"
+        else
+          # explorer.exe needs Windows paths and always exits 1
+          [[ -e "$target" ]] && target="$(wslpath -w "$target")"
+          explorer.exe "$target"
+        fi
+      elif command -v xdg-open &>/dev/null; then
+        xdg-open "$target" &>/dev/null &!
+      else
+        printf "\033[33mNo opener found (xdg-open)\033[0m\n" >&2
+        return 1
+      fi
+    done
+    return 0
+  }
+fi
 
 # Universal Archive Extractor (extract / x)
 extract() {
@@ -745,13 +784,13 @@ if [[ -o interactive ]]; then
   add-zsh-hook precmd _auto_notify_precmd
 fi
 
-# String & Snippet Diff Helper (sdiff / strdiff)
+# String & Snippet Diff Helper (strdiff)
 # Usage:
-#   sdiff "str1" "str2"       -> Character-level inline diff in terminal
-#   sdiff -w "str1" "str2"    -> Word-level inline diff in terminal
-#   sdiff "str2"              -> Compare system clipboard against "str2"
-#   sdiff [-i] ["s1" "s2"]    -> Open side-by-side scratch buffers in nvim -d
-sdiff() {
+#   strdiff "str1" "str2"       -> Character-level inline diff in terminal
+#   strdiff -w "str1" "str2"    -> Word-level inline diff in terminal
+#   strdiff "str2"              -> Compare system clipboard against "str2"
+#   strdiff [-i] ["s1" "s2"]    -> Open side-by-side scratch buffers in nvim -d
+strdiff() {
   local mode="char"
   local interactive=false
   local args=()
@@ -759,12 +798,12 @@ sdiff() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       -h|--help)
-        printf "\033[1;38;2;137;180;250msdiff\033[0m (alias: \033[1mstrdiff\033[0m) — Compare strings, clipboard, or snippets\n\n"
+        printf "\033[1;38;2;137;180;250mstrdiff\033[0m — Compare strings, clipboard, or snippets\n\n"
         printf "\033[1mUsage:\033[0m\n"
-        printf "  sdiff <str1> <str2>        Character-level inline diff in terminal\n"
-        printf "  sdiff -w <str1> <str2>     Word-level inline diff in terminal\n"
-        printf "  sdiff <str2>               Compare clipboard content against <str2>\n"
-        printf "  sdiff [-i] [str1] [str2]   Interactive side-by-side diff in nvim -d\n\n"
+        printf "  strdiff <str1> <str2>        Character-level inline diff in terminal\n"
+        printf "  strdiff -w <str1> <str2>     Word-level inline diff in terminal\n"
+        printf "  strdiff <str2>               Compare clipboard content against <str2>\n"
+        printf "  strdiff [-i] [str1] [str2]   Interactive side-by-side diff in nvim -d\n\n"
         printf "\033[1mInteractive Controls (nvim -d):\033[0m\n"
         printf "  Paste/edit in either pane  Live diff updates automatically\n"
         printf "  Ctrl-w h / Ctrl-w l        Switch between left & right panes\n"
@@ -805,8 +844,8 @@ sdiff() {
   local str2=""
 
   if [ "${#args[@]}" -eq 1 ]; then
-    if ! str1="$(paste 2>/dev/null)"; then
-      printf "\033[31m✖ Could not read from clipboard. Provide two strings: sdiff <str1> <str2>\033[0m\n" >&2
+    if ! str1="$(clippaste 2>/dev/null)"; then
+      printf "\033[31m✖ Could not read from clipboard. Provide two strings: strdiff <str1> <str2>\033[0m\n" >&2
       return 1
     fi
     str2="${args[1]}"
@@ -821,8 +860,8 @@ sdiff() {
 
   if [ "$interactive" = true ]; then
     local tmp_left tmp_right
-    tmp_left="$(mktemp -t "sdiff-left.XXXXXX")"
-    tmp_right="$(mktemp -t "sdiff-right.XXXXXX")"
+    tmp_left="$(mktemp -t "strdiff-left.XXXXXX")"
+    tmp_right="$(mktemp -t "strdiff-right.XXXXXX")"
     [ -n "$str1" ] && printf "%s\n" "$str1" > "$tmp_left"
     [ -n "$str2" ] && printf "%s\n" "$str2" > "$tmp_right"
 

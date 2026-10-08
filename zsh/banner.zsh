@@ -150,7 +150,7 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
         "'gbclean'         → Interactive merged git branch cleaner"
         "'gco' / 'gl'      → Modal Vim branch switcher & commit browser"
         "'ga' / 'gstash'   → Interactive git staging & stash manager"
-        "'sdiff <a> <b>'   → Colored character/word diff & scratch diff"
+        "'strdiff <a> <b>' → Colored character/word diff & scratch diff"
         "'take <dir>'      → mkdir -p and cd in one step"
         "'sz' / 'als'      → Reload ~/.zshrc or toggle auto-ls on cd"
         "'autonotify'      → Toggle desktop alerts for long commands (>15s)"
