@@ -177,16 +177,7 @@ if [ "$TERM" != "dumb" ]; then
             async_stop_worker "spaceship" "spaceship_1" "spaceship_2" "spaceship_3" 2>/dev/null || true
         fi
         source "$_spaceship_entry"
-        # Harden prompt_spaceship_chpwd so 'cd' inside subshells or under 'set -e' never fails
-        if (( $+functions[prompt_spaceship_chpwd] )); then
-            prompt_spaceship_chpwd() {
-                setopt localoptions noerrexit
-                (( ZSH_SUBSHELL == 0 )) && [[ -o zle ]] || return 0
-                spaceship::worker::init
-                spaceship::worker::eval builtin cd -q "$PWD"
-                spaceship_exec_time_start
-            }
-        fi
+        source "${DOTFILES_DIR:-$HOME/.dotfiles}/zsh/spaceship-patches.zsh"
     else
         # Fallback Git prompt if Spaceship is not installed
         autoload -Uz vcs_info add-zsh-hook
@@ -196,16 +187,6 @@ if [ "$TERM" != "dumb" ]; then
         PROMPT='%F{cyan}%~%F{yellow}${vcs_info_msg_0_}%F{reset} %# '
     fi
     unset _spaceship_entry _sp_candidate
-
-    # Guard against zsh-async zpty bug (mafredri/zsh-async#35): if a zpty worker
-    # collides on a name whose child already exited, zsh runs _async_worker in the
-    # parent shell and redirects fd 2 (stderr) to /dev/null, breaking Atuin & git hooks.
-    [[ -t 1 && ! -t 2 ]] && exec 2>&1
-    _heal_stderr_precmd() {
-        [[ -t 1 && ! -t 2 ]] && exec 2>&1 || true
-    }
-    autoload -Uz add-zsh-hook
-    add-zsh-hook precmd _heal_stderr_precmd
 fi
 _step "Spaceship prompt (async)"
 
@@ -286,7 +267,17 @@ if command -v fzf &>/dev/null; then
         export FZF_ALT_C_OPTS="--preview 'eza --tree --level=2 --color=always {} 2>/dev/null'"
     fi
 
-    source <(fzf --zsh 2>/dev/null) 2>/dev/null || true
+    # fzf >= 0.48 ships 'fzf --zsh'; older distro builds (e.g. Debian/Ubuntu apt) only ship example scripts
+    if fzf --zsh &>/dev/null; then
+        source <(fzf --zsh)
+    else
+        for _fzf_script in \
+            /usr/share/doc/fzf/examples/{key-bindings,completion}.zsh \
+            /usr/share/fzf/{key-bindings,completion}.zsh; do
+            [ -f "$_fzf_script" ] && source "$_fzf_script"
+        done
+        unset _fzf_script
+    fi
 
     # FZF-Tab (interactive completion menu)
     for _fzf_tab in \
