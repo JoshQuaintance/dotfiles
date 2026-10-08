@@ -298,7 +298,37 @@ def check_ssh(report: DoctorReport, dotfiles: Path, fix: bool = False):
     else:
         report.warn("SSH agent", "Not reachable; open a new shell to start the shared agent")
 
-def check_git_signing(report: DoctorReport):
+# gpg-agent forgets passphrases after 10 minutes by default, so signing from editors and TUIs
+# (which can't show a terminal pinentry) breaks soon after an unlock. Remember them for a working day.
+GPG_CACHE_TTL = {"default-cache-ttl": 28800, "max-cache-ttl": 86400}
+
+
+def check_gpg_cache(report: DoctorReport, fix: bool = False):
+    home = Path(os.environ.get("GNUPGHOME", Path.home() / ".gnupg"))
+    conf = home / "gpg-agent.conf"
+    try:
+        lines = conf.read_text().splitlines()
+    except OSError:
+        lines = []
+    current = {}
+    for line in lines:
+        parts = line.split()
+        if len(parts) == 2 and parts[0] in GPG_CACHE_TTL and parts[1].isdigit():
+            current[parts[0]] = int(parts[1])
+    ttl = current.get("default-cache-ttl", 600)
+    if ttl >= GPG_CACHE_TTL["default-cache-ttl"]:
+        report.ok("GPG passphrase cache", f"{ttl // 3600}h after unlock")
+    elif fix:
+        kept = [line for line in lines if not line.split() or line.split()[0] not in GPG_CACHE_TTL]
+        kept += [f"{key} {value}" for key, value in GPG_CACHE_TTL.items()]
+        home.mkdir(mode=0o700, parents=True, exist_ok=True)
+        conf.write_text("\n".join(kept) + "\n")
+        run_cmd(["gpg-connect-agent", "reloadagent", "/bye"])
+        report.fixed("GPG passphrase cache", "Raised to 8h (max 24h); unlock once to start it")
+    else:
+        report.warn("GPG passphrase cache", f"Only {ttl // 60} min; signing outside a terminal fails. Run with --fix")
+
+def check_git_signing(report: DoctorReport, fix: bool = False):
     print(f"\n{C_BOLD}5. Git Identity & Commit Signing{C_RESET}")
     if not shutil.which("git"):
         report.warn("Git config", "git binary not installed")
@@ -323,6 +353,8 @@ def check_git_signing(report: DoctorReport):
     if sign == "true":
         key_desc = f"{format_type or 'gpg'} ({signing_key})" if signing_key else "Enabled"
         report.ok("Commit signing", key_desc)
+        if format_type in ("", "openpgp") and shutil.which("gpg"):
+            check_gpg_cache(report, fix=fix)
     else:
         report.ok("Commit signing", "Disabled (optional)")
 
@@ -365,7 +397,7 @@ def run_doctor(fix: bool = False) -> int:
     check_and_heal_symlinks(report, dotfiles, fix=fix)
     check_cli_tools(report, fix=fix)
     check_locale(report)
-    check_git_signing(report)
+    check_git_signing(report, fix=fix)
     check_ssh(report, dotfiles, fix=fix)
     if is_wsl():
         check_wsl(report, dotfiles)
