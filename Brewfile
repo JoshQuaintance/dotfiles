@@ -26,6 +26,7 @@ brew "btop"         # Resource monitor (CPU, memory, disks, network)
 brew "dust"         # More intuitive du in Rust
 brew "tlrc"         # Official tldr client in Rust (community cheat sheets)
 brew "tokei"        # Fast codebase line-of-code & language statistics
+brew "glow"         # Render Markdown in the terminal
 brew "hyperfine"    # Statistical command-line benchmarking tool
 brew "fzf-tab"      # Interactive zsh completion menu
 brew "zsh-autosuggestions"     # Fish-like fast/unobtrusive autosuggestions for zsh
@@ -39,6 +40,10 @@ brew "git-delta"    # Syntax-highlighting pager for git, diff, and grep output
 brew "lazygit"      # Terminal UI for git
 brew "dura"         # Background automated snapshot daemon for git
 brew "neovim"       # Extensible text editor
+
+# Trash CLI behind the `del` alias (macOS 15+ ships /usr/bin/trash, which uses the Finder Trash)
+brew "trash-cli" if OS.linux?                                  # freedesktop Trash on Linux & WSL
+brew "trash" if OS.mac? && MacOS.version < :sequoia            # Finder Trash on older macOS
 
 # ----------------------------------------------------------------------
 # macOS GUI Applications & Fonts (Ignored on Linux & WSL)

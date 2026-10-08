@@ -169,6 +169,9 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
         ("tldr", "tlrc cheat sheets (tldr)", ["tldr", "--version"]),
         ("tokei", "tokei codebase statistics", ["tokei", "--version"]),
         ("hyperfine", "hyperfine CLI benchmark", ["hyperfine", "--version"]),
+        ("lazygit", "lazygit git terminal UI", ["lazygit", "--version"]),
+        ("glow", "glow Markdown renderer", ["glow", "--version"]),
+        ("trash", "trash (del alias)", ["sh", "-c", "command -v trash"]),
         ("uv", "uv Astral Python manager", ["uv", "--version"]),
     ]
 
@@ -303,6 +306,31 @@ def check_git_signing(report: DoctorReport):
     else:
         report.ok("Commit signing", "Disabled (optional)")
 
+def is_wsl() -> bool:
+    if os.environ.get("WSL_DISTRO_NAME"):
+        return True
+    try:
+        return "microsoft" in Path("/proc/version").read_text().lower()
+    except OSError:
+        return False
+
+def check_wsl(report: DoctorReport, dotfiles: Path):
+    print(f"\n{C_BOLD}6. WSL Integration{C_RESET}")
+    if str(dotfiles.resolve()).startswith("/mnt/"):
+        report.warn("Dotfiles location", "On the Windows drive; move to ~ (9P file access is slow)")
+    else:
+        report.ok("Dotfiles location", "Linux filesystem")
+
+    if shutil.which("win32yank.exe"):
+        report.ok("Clipboard (win32yank)", "UTF-8 safe copy / clippaste")
+    else:
+        report.warn("Clipboard (win32yank)", "Missing; falls back to clip.exe. Run install-cli.sh wsl")
+
+    if shutil.which("wslview"):
+        report.ok("Browser opener (wslview)", "open & $BROWSER use the Windows browser")
+    else:
+        report.warn("Browser opener (wslview)", "Missing; 'open' falls back to explorer.exe. Install wslu")
+
 def run_doctor(fix: bool = False) -> int:
     dotfiles = get_dotfiles_dir()
     report = DoctorReport()
@@ -318,6 +346,8 @@ def run_doctor(fix: bool = False) -> int:
     check_cli_tools(report, fix=fix)
     check_locale(report)
     check_git_signing(report)
+    if is_wsl():
+        check_wsl(report, dotfiles)
 
     print(f"\n{C_BOLD}Summary:{C_RESET} {C_GREEN}{report.passed} passed{C_RESET}", end="")
     if report.repaired > 0:

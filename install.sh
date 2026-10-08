@@ -250,11 +250,20 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
         "yazi            - Blazingly fast terminal file manager"
         "dust            - Intuitive disk usage analyzer"
         "btop            - Modern resource & performance monitor"
+        "git-delta       - Syntax-highlighting pager for git diffs"
+        "lazygit         - Terminal UI for git"
+        "glow            - Render Markdown in the terminal"
         "fzf-tab         - Interactive zsh completion menu"
         "genignore       - Smart gitignore generator"
     )
-    cli_keys=(ripgrep fd fzf zoxide eza bat spaceship atuin yazi dust btop fzf-tab genignore)
-    cli_defs=(1 1 1 1 1 1 1 1 1 1 1 1 1)
+    cli_keys=(ripgrep fd fzf zoxide eza bat spaceship atuin yazi dust btop git-delta lazygit glow fzf-tab genignore)
+    cli_defs=(1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1)
+
+    if [ -n "${WSL_DISTRO_NAME:-}" ] || grep -qi microsoft /proc/version 2>/dev/null; then
+        cli_options+=("WSL integration - win32yank clipboard & wslview browser opener")
+        cli_keys+=(wsl)
+        cli_defs+=(1)
+    fi
 
     if [ "$OS" = "Darwin" ]; then
         cli_options+=(

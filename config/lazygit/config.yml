@@ -1,0 +1,32 @@
+# lazygit (macOS, Linux & WSL) — Catppuccin Mocha, delta diffs, Neovim editing
+# Reference: https://github.com/jesseduffield/lazygit/blob/master/docs/Config.md
+
+gui:
+  nerdFontsVersion: "3"
+  theme:
+    activeBorderColor: ["#89b4fa", bold]
+    inactiveBorderColor: ["#a6adc8"]
+    searchingActiveBorderColor: ["#f9e2af"]
+    optionsTextColor: ["#89b4fa"]
+    selectedLineBgColor: ["#313244"]
+    cherryPickedCommitBgColor: ["#45475a"]
+    cherryPickedCommitFgColor: ["#89b4fa"]
+    unstagedChangesColor: ["#f38ba8"]
+    defaultFgColor: ["#cdd6f4"]
+    authorColors:
+      "*": "#b4befe"
+
+git:
+  # Cycle with `|`. The delta entry falls back to git's plain colored diff when delta isn't installed.
+  diffRenderers:
+    - name: delta
+      command: >-
+        command -v delta >/dev/null 2>&1
+        && exec delta --{{colorScheme}} --paging=never --hyperlinks-file-link-format="lazygit-edit://{path}:{line}"
+        || exec cat
+    - type: rawGit
+      name: color-words
+      args: [--color-words]
+
+os:
+  editPreset: nvim
