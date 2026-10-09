@@ -58,7 +58,12 @@ link_dotfile "config/git/.gitignore_global" "$HOME/.gitignore_global"
 SSH_INCLUDE="Include $DOTFILES_DIR/config/ssh/dotfiles.conf"
 mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
 if ! grep -qsF "$SSH_INCLUDE" "$HOME/.ssh/config"; then
-    { echo "$SSH_INCLUDE"; echo; cat "$HOME/.ssh/config" 2>/dev/null; } > "$HOME/.ssh/config.tmp"
+    # Fresh machines have no ~/.ssh/config yet; a failing `cat` here would abort the installer under set -e
+    {
+        echo "$SSH_INCLUDE"
+        echo
+        if [ -f "$HOME/.ssh/config" ]; then cat "$HOME/.ssh/config"; fi
+    } > "$HOME/.ssh/config.tmp"
     mv "$HOME/.ssh/config.tmp" "$HOME/.ssh/config"
     chmod 600 "$HOME/.ssh/config"
     success "Added shared SSH defaults to ~/.ssh/config"
