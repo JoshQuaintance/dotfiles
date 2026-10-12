@@ -192,7 +192,7 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
             report.ok(label, first_line[:38])
         elif fix and shutil.which("brew") and bin_name in brew_formula_map:
             formula = brew_formula_map[bin_name]
-            code, out = run_cmd(["brew", "install", formula])
+            code, _ = run_cmd(["brew", "install", formula])
             if code == 0:
                 report.fixed(label, f"Installed {formula} via brew")
             else:
