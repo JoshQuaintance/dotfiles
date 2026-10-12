@@ -92,8 +92,7 @@ scratch() {
         "${fzf_mode_flags[@]}" \
         --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green,marker:bold:red" \
         --preview="if command -v bat &>/dev/null; then bat --style=plain --color=always '$scratch_dir/{}'; else cat '$scratch_dir/{}'; fi" \
-        --preview-window='right:60%:wrap' \
-        --expect="x")
+        --preview-window='right:60%:wrap')
 
       [ -z "$selection" ] && return 0
 

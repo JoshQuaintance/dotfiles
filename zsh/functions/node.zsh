@@ -92,8 +92,7 @@ _pkg_script_select() {
     "${fzf_mode_flags[@]}" \
     --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
     --preview="$preview_cmd" \
-    --preview-window="right:50%:wrap" \
-    --expect="e,y")
+    --preview-window="right:50%:wrap")
 
   [ -z "$selection" ] && return 0
 

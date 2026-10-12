@@ -122,7 +122,7 @@ gl() {
   local preview_cmd='h=$(echo {} | grep -oE "[a-f0-9]{7,40}" | head -n1); if [ -n "$h" ]; then if command -v delta &>/dev/null; then git show --stat -p "$h" 2>/dev/null | delta --paging=never --width="${FZF_PREVIEW_COLUMNS:-80}"; else git show --color=always --stat -p "$h" 2>/dev/null; fi; fi'
 
   local -a fzf_mode_flags
-  _fzf_vim_mode "📜 Git Graph > " "j/k: move • /: search • Enter: diff • Ctrl-V: nvim diffview • Ctrl-Y: copy hash • q: quit" "diff"
+  _fzf_vim_mode "📜 Git Graph > " "j/k: move • /: search • Enter: diff • Ctrl-V: nvim diffview • Ctrl-Y: copy hash • q: quit" "diff" "ctrl-v,ctrl-y"
 
   local selection
   selection=$(eval "$git_log_cmd" | fzf \
@@ -131,8 +131,7 @@ gl() {
     "${fzf_mode_flags[@]}" \
     --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
     --preview="$preview_cmd" \
-    --preview-window="right:60%:wrap" \
-    --expect="ctrl-v,ctrl-y") || return 0
+    --preview-window="right:60%:wrap") || return 0
 
   [ -z "$selection" ] && return 0
 
@@ -273,8 +272,7 @@ gstash() {
     "${fzf_mode_flags[@]}" \
     --color="header:italic:dim,prompt:bold:magenta,pointer:bold:cyan,marker:bold:red" \
     --preview='s=$(echo {} | grep -oE "stash@\{[0-9]+\}" | head -n1); if [ -n "$s" ]; then if command -v delta &>/dev/null; then git stash show --stat -p "$s" 2>/dev/null | delta --paging=never --width="${FZF_PREVIEW_COLUMNS:-80}"; else git stash show --color=always --stat -p "$s" 2>/dev/null; fi; fi' \
-    --preview-window="right:60%:wrap" \
-    --expect="p,x")
+    --preview-window="right:60%:wrap")
 
   [ -z "$selection" ] && return 0
 
@@ -376,8 +374,7 @@ ga() {
     "${fzf_mode_flags[@]}" \
     --color="header:italic:dim,prompt:bold:green,pointer:bold:cyan,marker:bold:yellow" \
     --preview="$preview_cmd" \
-    --preview-window="right:60%:wrap" \
-    --expect="u,x,e")
+    --preview-window="right:60%:wrap")
 
   [ -z "$selection" ] && return 0
 
@@ -502,7 +499,7 @@ gfile() {
   "
 
   local -a fzf_mode_flags
-  _fzf_vim_mode "🕰  History ($target_file) > " "$hdr" "diff" "r,y"
+  _fzf_vim_mode "🕰  History ($target_file) > " "$hdr" "diff" "ctrl-v,r,y"
 
   local selection
   selection=$(printf "%s\n" "$commits" | fzf \
@@ -511,8 +508,7 @@ gfile() {
     "${fzf_mode_flags[@]}" \
     --color="header:italic:dim,prompt:bold:magenta,pointer:bold:green" \
     --preview="$preview_cmd" \
-    --preview-window="right:60%:wrap" \
-    --expect="ctrl-v,r,y")
+    --preview-window="right:60%:wrap")
 
   [ -z "$selection" ] && return 0
 

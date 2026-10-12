@@ -195,8 +195,7 @@ fenv() {
     "${fzf_mode_flags[@]}" \
     --color="header:italic:dim,prompt:bold:blue,pointer:bold:magenta" \
     --preview="$preview_cmd" \
-    --preview-window='right:55%:wrap' \
-    --expect="y,n,e")
+    --preview-window='right:55%:wrap')
 
   [ -z "$selection" ] && return 0
 
@@ -274,8 +273,7 @@ cheath() {
     "${fzf_mode_flags[@]}" \
     --color="header:italic:dim,prompt:bold:magenta,pointer:bold:cyan" \
     --preview='tldr --color always {} 2>/dev/null' \
-    --preview-window='right:65%:wrap' \
-    --expect="e")
+    --preview-window='right:65%:wrap')
 
   [ -z "$selection" ] && return 0
 

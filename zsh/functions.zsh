@@ -36,7 +36,26 @@ _fzf_vim_mode() {
   [ -n "$extra_keys" ] && key_list="${key_list},${extra_keys}"
   key_list="${key_list},i,/"
 
-  local base_binds="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort,enter:accept"
+  # Keys from extra_keys that are not bound to in-fzf actions (e.g. toggle) act as expect keys
+  local -a expect_keys=()
+  if [ -n "$extra_keys" ]; then
+    local -a ek_list=(${(s:,:)extra_keys})
+    for k in "${ek_list[@]}"; do
+      if [ -n "$k" ] && [ "$k" != "space" ] && [[ ",${extra_binds}," != *",${k}:"* ]]; then
+        expect_keys+=("$k")
+      fi
+    done
+  fi
+
+  local base_binds="j:down,k:up,g:first,G:last,q:abort,ctrl-c:abort"
+  if (( ${#expect_keys[@]} > 0 )); then
+    base_binds="${base_binds},enter:print()+accept"
+    for ek in "${expect_keys[@]}"; do
+      base_binds="${base_binds},${ek}:print(${ek})+accept"
+    done
+  else
+    base_binds="${base_binds},enter:accept"
+  fi
   [ -n "$extra_binds" ] && base_binds="${base_binds},${extra_binds}"
 
   local search_header="  type to filter │ esc: normal mode │ enter: ${enter_action}"
@@ -62,8 +81,14 @@ _fzf_vim_mode() {
       "--bind=esc:${to_normal}"
     )
   else
-    fzf_mode_flags+=("--query=${initial_query}")
-    [ -n "$extra_binds" ] && fzf_mode_flags+=("--bind=${extra_binds}")
+    fzf_mode_flags+=(
+      "--query=${initial_query}"
+      "--bind=start:unbind(${key_list})"
+      "--bind=${base_binds}"
+      "--bind=/:clear-query+${to_search}"
+      "--bind=i:${to_search}"
+      "--bind=esc:${to_normal}"
+    )
   fi
 }
 

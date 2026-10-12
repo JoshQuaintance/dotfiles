@@ -187,8 +187,7 @@ fkill() {
     "${fzf_mode_flags[@]}" \
     --color="header:italic:dim,prompt:bold:red,pointer:bold:red,marker:bold:yellow" \
     --preview='pid=$(echo {1} | tr -d " "); if [ -n "$pid" ]; then ps -p "$pid" -o pid,ppid,user,%cpu,%mem,etime,command 2>/dev/null; echo ""; if command -v lsof &>/dev/null; then lsof -p "$pid" -i -P -n 2>/dev/null | head -n 15; fi; fi' \
-    --preview-window='right:50%:wrap' \
-    --expect="x")
+    --preview-window='right:50%:wrap')
 
   [ -z "$selection" ] && return 0
 
@@ -295,8 +294,7 @@ fcon() {
     "${fzf_mode_flags[@]}" \
     --color="header:italic:dim,prompt:bold:cyan,pointer:bold:blue,marker:bold:yellow" \
     --preview="cid=\$(echo {1} | sed 's/\x1b\[[0-9;]*m//g' | tr -d ' '); [ -n \"\$cid\" ] && '$rt' logs --tail 60 \"\$cid\" 2>&1" \
-    --preview-window='right:55%:wrap' \
-    --expect="l,s,r,x")
+    --preview-window='right:55%:wrap')
 
   [ -z "$selection" ] && return 0
 
@@ -414,8 +412,7 @@ fssh() {
     "${fzf_mode_flags[@]}" \
     --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
     --preview="$preview_cmd" \
-    --preview-window='right:50%:wrap' \
-    --expect="y,e")
+    --preview-window='right:50%:wrap')
 
   [ -z "$selection" ] && return 0
 
