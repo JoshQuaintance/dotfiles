@@ -219,7 +219,7 @@ def test_shell_runtime(report: TestReport, dotfiles: Path):
 
     # Interactive boot test & stderr inspection
     t0 = time.perf_counter()
-    code, out, err = run_cmd(["zsh", "-i", "-c", "exit"], timeout=10, env=zsh_env)
+    code, out, err = run_cmd(["zsh", "-i", "+m", "-c", "exit"], timeout=10, env=zsh_env)
     elapsed_ms = int((time.perf_counter() - t0) * 1000)
 
     # Filter benign terminal warnings in headless CI
@@ -252,7 +252,7 @@ for fn in "${DOTFILES_FUNCTIONS[@]}"; do
 done
 echo "COUNT:${#DOTFILES_FUNCTIONS[@]}"
 """
-    code, out, err = run_cmd(["zsh", "-i", "-c", func_check_code], timeout=5, env=zsh_env)
+    code, out, err = run_cmd(["zsh", "-i", "+m", "-c", func_check_code], timeout=5, env=zsh_env)
     missing_funcs = [line.strip() for line in out.splitlines() if line.startswith("Missing function:")]
     count_lines = [line.split(":", 1)[1] for line in out.splitlines() if line.startswith("COUNT:")]
     fn_count = count_lines[0] if count_lines else "all"
@@ -269,7 +269,7 @@ for comp in _git _uv _fzf_complete _dot _conf _up _wt _gwtnew _gwtdel; do
     fi
 done
 """
-    code, out, err = run_cmd(["zsh", "-i", "-c", comp_check_code], timeout=5, env=zsh_env)
+    code, out, err = run_cmd(["zsh", "-i", "+m", "-c", comp_check_code], timeout=5, env=zsh_env)
     missing_comps = [line.strip() for line in out.splitlines() if line.startswith("Missing completion:")]
     if not missing_comps:
         report.ok("Completions engine", "All completions active (_git, _uv, _fzf, _dot, _conf, _up, _wt, _gwtn, _gwtdel)")
@@ -280,7 +280,7 @@ done
     reload_code = """
 source ~/.zshrc
 """
-    code, out, err = run_cmd(["zsh", "-i", "-c", reload_code], timeout=10, env=zsh_env)
+    code, out, err = run_cmd(["zsh", "-i", "+m", "-c", reload_code], timeout=10, env=zsh_env)
     reload_errors = []
     for line in err.splitlines():
         line_clean = line.strip()
@@ -301,7 +301,7 @@ for a in ${(k)aliases}; do
 done
 print -l "${collisions[@]}"
 """
-    code, out, err = run_cmd(["zsh", "-i", "-c", collision_check_code], timeout=5, env=zsh_env)
+    code, out, err = run_cmd(["zsh", "-i", "+m", "-c", collision_check_code], timeout=5, env=zsh_env)
     collisions = [line.strip() for line in out.splitlines() if line.strip()]
     if not collisions:
         report.ok("Alias & function namespaces", "Clean separation (0 colliding names)")
@@ -351,7 +351,7 @@ dotbranch -s >/dev/null
     gl -n 1 >/dev/null
 )
 """
-    code, out, err = run_cmd(["zsh", "-i", "-c", smoke_test_code], timeout=10, env=zsh_env)
+    code, out, err = run_cmd(["zsh", "-i", "+m", "-c", smoke_test_code], timeout=10, env=zsh_env)
     if code == 0:
         report.ok("Function runtime execution", "Core custom functions run cleanly (smoke test)")
     else:

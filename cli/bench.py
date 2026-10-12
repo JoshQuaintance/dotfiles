@@ -48,7 +48,8 @@ def run_bench(iterations: int = 5) -> int:
     for i in range(1, iterations + 1):
         t0 = time.perf_counter()
         proc = subprocess.run(
-            ["zsh", "-i", "-c", "exit"],
+            ["zsh", "-i", "+m", "-c", "exit"],
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             timeout=10,

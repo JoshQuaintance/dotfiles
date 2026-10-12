@@ -43,7 +43,7 @@ class DoctorReport:
 
 def run_cmd(cmd: list[str]) -> tuple[int, str]:
     try:
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=5, check=False)
+        res = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=5, check=False)
         return res.returncode, res.stdout.strip()
     except (OSError, subprocess.SubprocessError) as e:
         return 1, str(e)

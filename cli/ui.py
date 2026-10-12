@@ -1,7 +1,7 @@
 import os
 import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 # Catppuccin Mocha ANSI color constants
 C_GREEN = "\033[38;2;166;227;161m"
@@ -36,6 +36,7 @@ def run_cmd(
     cwd: Optional[Path] = None,
     timeout: int = 10,
     env: Optional[dict[str, str]] = None,
+    stdin: Optional[Any] = subprocess.DEVNULL,
 ) -> tuple[int, str, str]:
     """Execute a subprocess safely and return (returncode, stdout, stderr)."""
     merged_env = os.environ.copy()
@@ -45,6 +46,7 @@ def run_cmd(
         res = subprocess.run(
             cmd,
             cwd=cwd,
+            stdin=stdin,
             capture_output=True,
             text=True,
             timeout=timeout,
