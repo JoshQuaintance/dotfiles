@@ -3,20 +3,30 @@
 # Smart Git Clone: supports full URLs, owner/repo shorthand, auto-cd, and -b/--bare worktree hub setup
 clone() {
   local bare_mode=false
+  local shallow_mode=false
+  local recursive_mode=false
   local repo=""
   local target_dir=""
   local arg
   for arg in "$@"; do
     case "$arg" in
       -h|--help)
-        printf "Usage: clone [-b|--bare] <url|owner/repo|repo> [directory]\n"
+        printf "Usage: clone [-b|--bare] [-s|--shallow] [-r|--recursive] <url|owner/repo|repo> [directory]\n"
         printf "  clone owner/repo         Clone git@github.com:owner/repo.git and cd into it\n"
         printf "  clone my-repo            Clone git@github.com:JoshQuaintance/my-repo.git and cd into it\n"
         printf "  clone -b owner/repo      Clone as a .bare worktree hub and cd into its default branch worktree\n"
+        printf "  clone -s owner/repo      Clone shallow (--depth 1) for fast checkout of large repos\n"
+        printf "  clone -r owner/repo      Clone recursively including all submodules\n"
         return 0
         ;;
       -b|--bare)
         bare_mode=true
+        ;;
+      -s|--shallow)
+        shallow_mode=true
+        ;;
+      -r|--recursive)
+        recursive_mode=true
         ;;
       *)
         if [ -z "$repo" ]; then
@@ -52,10 +62,18 @@ clone() {
     target_dir="$(basename "${clone_url%.git}")"
   fi
 
+  local -a clone_extra_opts
+  if [ "$shallow_mode" = true ]; then
+    clone_extra_opts+=("--depth" "1")
+  fi
+  if [ "$recursive_mode" = true ]; then
+    clone_extra_opts+=("--recurse-submodules")
+  fi
+
   if [ "$bare_mode" = true ]; then
     printf "\033[1;34m==>\033[0m Cloning bare worktree hub \033[1m%s\033[0m into \033[1;36m%s\033[0m...\n" "$clone_url" "$target_dir"
     mkdir -p "$target_dir" || return 1
-    if ! git clone --bare "$clone_url" "$target_dir/.bare"; then
+    if ! git clone "${clone_extra_opts[@]}" --bare "$clone_url" "$target_dir/.bare"; then
       rmdir "$target_dir" 2>/dev/null || true
       return 1
     fi
@@ -80,7 +98,7 @@ clone() {
     cd "$target_dir/$def_branch"
   else
     printf "\033[1;34m==>\033[0m Cloning \033[1m%s\033[0m into \033[1;36m%s\033[0m...\n" "$clone_url" "$target_dir"
-    if git clone "$clone_url" "$target_dir"; then
+    if git clone "${clone_extra_opts[@]}" "$clone_url" "$target_dir"; then
       cd "$target_dir"
     else
       return 1
@@ -200,32 +218,60 @@ gco() {
   local current_branch
   current_branch="$(git branch --show-current 2>/dev/null)"
 
-  local branches=()
+  local -A local_branch_map
+  local -a branches
   while IFS= read -r b; do
     local b_clean="$(echo "$b" | sed 's/^[ *+]*//')"
     [[ -z "$b_clean" || "$b_clean" == "$current_branch" || "$b_clean" == "HEAD"* || "$b_clean" == dura/* ]] && continue
+    local_branch_map[$b_clean]=1
     branches+=("$b_clean")
   done < <(git branch --format='%(refname:short)' 2>/dev/null)
 
+  while IFS= read -r b; do
+    local b_clean="$(echo "$b" | sed 's/^[ *+]*//')"
+    [[ -z "$b_clean" || "$b_clean" == *"HEAD"* || "$b_clean" == */HEAD || "$b_clean" == */dura/* ]] && continue
+    local branch_name="${b_clean#*/}"
+    [[ -n "${local_branch_map[$branch_name]}" || "$branch_name" == "$current_branch" ]] && continue
+    branches+=("$b_clean")
+  done < <(git branch -r --format='%(refname:short)' 2>/dev/null)
+
   if [ "${#branches[@]}" -eq 0 ]; then
-    printf "\033[33mNo other local branches found to switch to.\033[0m\n"
+    printf "\033[33mNo other local or remote branches found to switch to.\033[0m\n"
     return 0
   fi
 
   local -a fzf_mode_flags
-  _fzf_vim_mode "🌿 Checkout Branch > " "  j/k: navigate │ /: search │ enter: checkout │ q: quit" "checkout"
+  _fzf_vim_mode "🌿 Checkout Branch > " "  j/k: navigate │ /: search │ enter: checkout │ y: copy │ q: quit" "checkout" "y"
 
-  local target
-  target=$(printf "%s\n" "${branches[@]}" | fzf \
+  local selection
+  selection=$(printf "%s\n" "${branches[@]}" | fzf \
     --height=~45% \
     "${fzf_mode_flags[@]}" \
     --color="header:italic:dim,prompt:bold:cyan,pointer:bold:cyan" \
     --preview='git log -n 10 --oneline --color=always {} 2>/dev/null' \
     --preview-window='right:55%:wrap')
 
-  if [ -n "$target" ]; then
-    git checkout "$target"
-  fi
+  [ -z "$selection" ] && return 0
+
+  local key
+  key=$(echo "$selection" | head -n1)
+  local target
+  target=$(echo "$selection" | sed '1d')
+  [ -z "$target" ] && return 0
+
+  case "$key" in
+    y)
+      _copy_or_print "$target" "branch name: $target"
+      ;;
+    *)
+      if [[ "$target" == */* ]]; then
+        local local_name="${target#*/}"
+        git checkout --track "$target" 2>/dev/null || git checkout -b "$local_name" "$target" 2>/dev/null || git checkout "$local_name"
+      else
+        git checkout "$target"
+      fi
+      ;;
+  esac
 }
 
 # Interactive Git Stash Manager (gstash / gstl)
@@ -363,7 +409,7 @@ ga() {
   '
 
   local -a fzf_mode_flags
-  _fzf_vim_mode "📂 Git Stage/Unstage > " "  j/k: move │ space: select │ enter: stage │ u: unstage │ x: discard │ e: edit │ /: search │ q: quit" "stage" "space,u,x,e" "" "space:toggle+down"
+  _fzf_vim_mode "📂 Git Stage/Unstage > " "  j/k: move │ space: select │ enter: stage │ u: unstage │ x: discard │ d: diff │ c: commit │ e: edit │ /: search │ q: quit" "stage" "space,u,x,d,c,e" "" "space:toggle+down"
 
   local selection
   selection=$(printf "%s\n" "$status_lines" | fzf \
@@ -403,6 +449,16 @@ ga() {
   [ ${#files[@]} -eq 0 ] && return 0
 
   case "$key" in
+    d)
+      if command -v delta &>/dev/null; then
+        { git diff -- "${files[@]}" 2>/dev/null; git diff --staged -- "${files[@]}" 2>/dev/null; } | delta --paging=always
+      else
+        { git diff --color=always -- "${files[@]}" 2>/dev/null; git diff --staged --color=always -- "${files[@]}" 2>/dev/null; } | ${PAGER:-less -FRX}
+      fi
+      ;;
+    c)
+      git add -- "${files[@]}" && git commit -v
+      ;;
     u)
       git restore --staged -- "${files[@]}"
       printf "\033[33m↺ Unstaged %d file(s):\033[0m %s\n" "${#files[@]}" "${(j:, :)files}"

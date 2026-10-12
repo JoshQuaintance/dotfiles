@@ -3,6 +3,7 @@ import os
 import shutil
 import socket
 import subprocess
+import time
 from pathlib import Path
 
 from cli.manifest import get_dotfiles_dir
@@ -18,6 +19,46 @@ from cli.ui import (
 from cli.ui import (
     ICON_BULLET as ICON_INFO,
 )
+
+
+def clean_stale_builds(dry_run: bool, max_age_days: int = 30) -> tuple[int, int]:
+    """Scan common code directories for stale project build artifacts older than max_age_days."""
+    home = Path.home()
+    candidate_roots = [
+        home / "Codes",
+        home / "code",
+        home / "Projects",
+        home / "Developer",
+        home / "src",
+        home / "workspace",
+    ]
+    search_roots = [d for d in candidate_roots if d.is_dir()]
+    if not search_roots:
+        return 0, 0
+
+    target_names = {"target", ".next", ".turbo", "dist", ".angular", "build"}
+    cutoff_time = time.time() - (max_age_days * 86400)
+
+    total_bytes = 0
+    total_count = 0
+
+    for root_dir in search_roots:
+        for root, dirs, _ in os.walk(root_dir):
+            dirs[:] = [d for d in dirs if d not in {".git", ".bare", "node_modules", ".venv", "venv"}]
+            matches = [d for d in dirs if d in target_names]
+            for d in matches:
+                dirs.remove(d)
+                target_dir = Path(root) / d
+                try:
+                    mtime = target_dir.stat().st_mtime
+                    if mtime < cutoff_time:
+                        sz = remove_target(target_dir, dry_run)
+                        total_bytes += sz
+                        total_count += 1
+                except OSError:
+                    continue
+
+    return total_count, total_bytes
 
 
 def path_size(path: Path) -> int:
@@ -74,7 +115,7 @@ def get_active_zsh_version() -> str:
         return ""
 
 
-def run_clean(dry_run: bool = False, clean_all: bool = False) -> int:
+def run_clean(dry_run: bool = False, clean_all: bool = False, clean_builds: bool = False) -> int:
     dotfiles = get_dotfiles_dir()
     home = Path.home()
     reclaimed_total = 0
@@ -193,7 +234,18 @@ def run_clean(dry_run: bool = False, clean_all: bool = False) -> int:
                 if res.returncode == 0:
                     cleaned_items.append(("Homebrew cache", "Pruned via 'brew cleanup --prune=7'"))
 
-    # 7. Dotfiles Python __pycache__ (cleaned last)
+    # 7. Project build artifacts (--builds or --all)
+    if clean_builds or clean_all:
+        build_count, build_bytes = clean_stale_builds(dry_run, max_age_days=30)
+        if build_count > 0:
+            reclaimed_total += build_bytes
+            cleaned_items.append(("Stale build artifacts (>30d inactive)", f"{build_count} dir(s) ({fmt_bytes(build_bytes)})"))
+        else:
+            print(f"  {C_GREEN}{ICON_OK}{C_RESET} {'Project build artifacts':<42} {C_DIM}Clean (no stale build caches >30d){C_RESET}")
+    else:
+        print(f"  {C_YELLOW}{ICON_INFO}{C_RESET} {'Project build artifacts':<42} {C_DIM}Pass -b/--builds to prune caches >30d{C_RESET}")
+
+    # 8. Dotfiles Python __pycache__ (cleaned last)
     pycache_dir = dotfiles / "cli" / "__pycache__"
     if pycache_dir.is_dir():
         py_sz = remove_target(pycache_dir, dry_run)

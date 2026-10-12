@@ -35,6 +35,7 @@ def main():
     parser_clean = subparsers.add_parser("clean", help="Clean stale Zsh dumps, completion caches, oversized logs, and temp files")
     parser_clean.add_argument("-n", "--dry-run", action="store_true", help="Preview items and space to be reclaimed without deleting")
     parser_clean.add_argument("-a", "--all", action="store_true", help="Also remove legacy ~/.oh-my-zsh and prune uv/Homebrew caches")
+    parser_clean.add_argument("-b", "--builds", action="store_true", help="Clean stale build directories (target, .next, .turbo, dist, .angular) inactive >30 days")
 
     # dot prune
     parser_prune = subparsers.add_parser("prune", help="Remove links, caches and packages deleted from the dotfiles since a commit")
@@ -66,7 +67,7 @@ def main():
     elif args.subcommand == "bench":
         sys.exit(run_bench(iterations=args.iterations))
     elif args.subcommand == "clean":
-        sys.exit(run_clean(dry_run=args.dry_run, clean_all=args.all))
+        sys.exit(run_clean(dry_run=args.dry_run, clean_all=args.all, clean_builds=args.builds))
     elif args.subcommand == "prune":
         sys.exit(run_prune(ref=args.ref, dry_run=args.dry_run, orphans=args.orphans))
     elif args.subcommand == "update":

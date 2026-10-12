@@ -1,3 +1,6 @@
+# Ensure path arrays stay unique across all subshells & re-sources
+typeset -U path fpath manpath cdpath
+
 # Ensure UTF-8 locale is always active and valid for Unicode & multibyte rendering
 if [[ "$OSTYPE" == darwin* ]] || [ "$(uname -s 2>/dev/null)" = "Darwin" ]; then
     _def_locale="en_US.UTF-8"

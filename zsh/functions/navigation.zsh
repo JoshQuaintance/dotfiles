@@ -1,11 +1,44 @@
 # Directory Navigation Functions
 
 take() {
-  mkdir -p "$1" && cd "$1"
+  if [ -z "$1" ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    printf "Usage: take <dir/|file|path/to/name>\n"
+    printf "  take path/to/dir/      → Create directory and cd into it\n"
+    printf "  take path/to/file.ext  → Create parent directory, cd into it, and touch file\n"
+    printf "  take my-project        → Create directory and cd into it\n"
+    return 0
+  fi
+
+  local target="$1"
+  local base="${target:t}"
+
+  # 1. Existing file or directory
+  if [ -d "$target" ]; then
+    cd "$target"
+    return 0
+  elif [ -f "$target" ]; then
+    cd "${target:h}" && return 0
+  fi
+
+  # 2. Trailing slash, or extensionless name -> Directory mode
+  if [[ "$target" == */ || ( "$base" != *.* && "$base" != Dockerfile && "$base" != Makefile && "$base" != Procfile ) || "$base" == .* ]]; then
+    mkdir -p "$target" && cd "$target"
+  else
+    # 3. File with extension -> Create parent dir, cd, and touch file
+    local parent_dir="${target:h}"
+    if [ "$parent_dir" = "$target" ] || [ -z "$parent_dir" ] || [ "$parent_dir" = "." ]; then
+      touch "$base"
+    else
+      mkdir -p "$parent_dir" && cd "$parent_dir" && touch "$base"
+    fi
+  fi
 }
 
 groot() {
-  cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+  _require_git_repo || return 1
+  local root
+  root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+  cd "$root"
 }
 
 # Jump from any worktree or subdirectory to the primary repository root
@@ -199,7 +232,7 @@ d() {
   fi
 
   local -a fzf_mode_flags
-  _fzf_vim_mode "📂 Directory Stack > " "  j/k: navigate │ /: search │ enter: cd │ q: quit" "cd" "" "$*"
+  _fzf_vim_mode "📂 Directory Stack > " "  j/k: navigate │ /: search │ enter: cd │ e: edit in editor │ y: copy path │ q: quit" "cd" "e,y" "$*"
 
   local selected
   selected=$(printf "%s\n" "$stack" | fzf \
@@ -210,11 +243,28 @@ d() {
     --preview='p={2}; p="${p/#\~/$HOME}"; if command -v eza &>/dev/null; then eza --tree --level=2 --icons --color=always "$p" 2>/dev/null; else ls -la "$p" 2>/dev/null; fi' \
     --preview-window='right:55%:wrap')
 
-  if [ -n "$selected" ]; then
-    local chosen
-    chosen=$(echo "$selected" | awk '{print $2}')
-    chosen="${chosen/#\~/$HOME}"
-    [ -d "$chosen" ] && cd "$chosen"
-  fi
+  [ -z "$selected" ] && return 0
+
+  local key
+  key=$(echo "$selected" | head -n1)
+  local chosen_line
+  chosen_line=$(echo "$selected" | sed '1d')
+  local chosen
+  chosen=$(echo "$chosen_line" | awk '{print $2}')
+  chosen="${chosen/#\~/$HOME}"
+
+  [ -z "$chosen" ] && return 0
+
+  case "$key" in
+    e)
+      "${EDITOR:-nvim}" "$chosen"
+      ;;
+    y)
+      _copy_or_print "$chosen" "directory path: $chosen"
+      ;;
+    *)
+      [ -d "$chosen" ] && cd "$chosen"
+      ;;
+  esac
 }
 

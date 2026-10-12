@@ -41,23 +41,45 @@ wt() {
 
   if command -v fzf &>/dev/null; then
     local -a fzf_mode_flags
-    _fzf_vim_mode "🌿 Worktree > " "  j/k: navigate │ /: search │ enter: cd │ q: quit" "cd" "" "$query"
+    _fzf_vim_mode "🌿 Worktree > " "  j/k: navigate │ /: search │ enter: cd │ e: edit │ y: copy path │ d/x: delete │ q: quit" "cd" "e,y,d,x" "" ""
 
     local selected
     selected=$(echo "$worktrees" | fzf \
-      --height=~40% \
+      --height=~45% \
       "${fzf_mode_flags[@]}" \
       --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
       --preview='git -C {1} status -sb 2>/dev/null' \
       --preview-window='right:50%:wrap')
 
-    if [ -n "$selected" ]; then
-      local target_dir
-      target_dir=$(echo "$selected" | awk '{print $1}')
-      if [ -n "$target_dir" ] && [ -d "$target_dir" ]; then
-        cd "$target_dir"
-      fi
-    fi
+    [ -z "$selected" ] && return 0
+
+    local key
+    key=$(echo "$selected" | head -n1)
+    local selected_line
+    selected_line=$(echo "$selected" | sed '1d')
+    local target_dir
+    target_dir=$(echo "$selected_line" | awk '{print $1}')
+    local target_branch
+    target_branch=$(echo "$selected_line" | grep -oE '\[.*\]' | tr -d '[]')
+
+    [ -z "$target_dir" ] && return 0
+
+    case "$key" in
+      e)
+        "${EDITOR:-nvim}" "$target_dir"
+        ;;
+      y)
+        _copy_or_print "$target_dir" "worktree path: $target_dir"
+        ;;
+      d|x)
+        gwtdel "$target_dir"
+        ;;
+      *)
+        if [ -n "$target_dir" ] && [ -d "$target_dir" ]; then
+          cd "$target_dir"
+        fi
+        ;;
+    esac
   else
     echo "$worktrees" | awk '{printf "%2d) %s\n", NR, $0}'
     local choice

@@ -5,6 +5,29 @@ test_take_creates_nested_dir_and_enters_it() {
   assert_eq "${HOME:A}/a/b/c" "${PWD:A}"
 }
 
+test_take_with_file_extension_creates_file_and_enters_dir() {
+  take src/components/Button.tsx
+  assert_eq "${HOME:A}/src/components" "${PWD:A}"
+  assert_file "Button.tsx"
+}
+
+test_take_without_extension_creates_dir() {
+  take my-folder
+  assert_eq "${HOME:A}/my-folder" "${PWD:A}"
+}
+
+test_take_with_trailing_slash_creates_dir() {
+  take site.com/
+  assert_eq "${HOME:A}/site.com" "${PWD:A}"
+}
+
+test_groot_outside_git_repo_fails() {
+  local out
+  out="$(groot 2>&1)" || local rc=$?
+  assert_eq 1 $rc
+  assert_contains "$out" "Not inside a git repository"
+}
+
 test_up_by_count() {
   mkdir -p x/y/z && cd x/y/z
   up 2 >/dev/null

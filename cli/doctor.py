@@ -164,11 +164,39 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
         ("uv", "uv Astral Python manager", ["uv", "--version"]),
     ]
 
+    brew_formula_map = {
+        "delta": "git-delta",
+        "rg": "ripgrep",
+        "fd": "fd",
+        "fzf": "fzf",
+        "bat": "bat",
+        "eza": "eza",
+        "zoxide": "zoxide",
+        "atuin": "atuin",
+        "yazi": "yazi",
+        "btop": "btop",
+        "dust": "dust",
+        "tldr": "tlrc",
+        "tokei": "tokei",
+        "glow": "glow",
+        "hyperfine": "hyperfine",
+        "lazygit": "lazygit",
+        "nvim": "neovim",
+        "git": "git",
+    }
+
     for bin_name, label, cmd in tools:
         if shutil.which(bin_name):
             code, ver = run_cmd(cmd)
             first_line = ver.splitlines()[0] if ver else "installed"
             report.ok(label, first_line[:38])
+        elif fix and shutil.which("brew") and bin_name in brew_formula_map:
+            formula = brew_formula_map[bin_name]
+            code, out = run_cmd(["brew", "install", formula])
+            if code == 0:
+                report.fixed(label, f"Installed {formula} via brew")
+            else:
+                report.warn(label, f"brew install {formula} failed")
         else:
             report.warn(label, f"{bin_name} binary not found")
 
@@ -185,6 +213,12 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
     if sp_found:
         zwc_status = " (.zwc compiled)" if sp_found.with_name("spaceship.zsh.zwc").is_file() else ""
         report.ok("Spaceship Zsh prompt", f"{sp_found.parent.name}{zwc_status}")
+    elif fix and shutil.which("brew"):
+        code, _ = run_cmd(["brew", "install", "spaceship"])
+        if code == 0:
+            report.fixed("Spaceship Zsh prompt", "Installed spaceship via brew")
+        else:
+            report.warn("Spaceship Zsh prompt", "spaceship.zsh not found (using vcs_info fallback)")
     else:
         report.warn("Spaceship Zsh prompt", "spaceship.zsh not found (using vcs_info fallback)")
 
@@ -215,6 +249,13 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
         found = next((p for p in candidates if p.is_file()), None)
         if found:
             report.ok(plugin_label, str(found).replace(str(home), "~")[:38])
+        elif fix and shutil.which("brew") and plugin_file in {"fzf-tab.zsh", "zsh-autosuggestions.zsh", "zsh-syntax-highlighting.zsh"}:
+            pkg = plugin_file.replace(".zsh", "")
+            code, _ = run_cmd(["brew", "install", pkg])
+            if code == 0:
+                report.fixed(plugin_label, f"Installed {pkg} via brew")
+            else:
+                report.warn(plugin_label, f"{plugin_file} not found")
         else:
             report.warn(plugin_label, f"{plugin_file} not found")
 
