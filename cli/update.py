@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from cli.doctor import DoctorReport, check_and_heal_symlinks
+from cli.doctor import DoctorReport, check_and_heal_symlinks, check_cli_tools
 from cli.manifest import get_dotfiles_dir
 from cli.prune import apply_prune, plan_prune, preview_prune
 from cli.test import run_tests
@@ -26,12 +26,17 @@ def run_cmd(cmd: list[str], cwd: Optional[Path] = None) -> tuple[int, str]:
     except (OSError, subprocess.SubprocessError) as e:
         return 1, str(e)
 
-def update_brew():
+def update_brew(auto_apply: bool = False):
     if shutil.which("brew"):
         print(f"\n{C_BLUE}==>{C_RESET} Updating Homebrew formulas and packages...")
         subprocess.run(["brew", "update"], check=False)
         subprocess.run(["brew", "upgrade"], check=False)
         print(f"{C_GREEN}✔{C_RESET} Homebrew packages updated successfully!")
+
+        # Check for missing binaries and offer to install them
+        print(f"\n{C_BLUE}==>{C_RESET} Auditing workstation CLI tools...")
+        report = DoctorReport()
+        check_cli_tools(report, fix=auto_apply)
 
 def update_mise():
     if shutil.which("mise"):
@@ -50,7 +55,7 @@ def run_update(check_only: bool = False, auto_apply: bool = False, update_all: b
     dotfiles = get_dotfiles_dir()
 
     if tools_only:
-        update_brew()
+        update_brew(auto_apply=auto_apply or update_all)
         update_mise()
         if test_after or update_all:
             run_tests()
@@ -137,13 +142,13 @@ def run_update(check_only: bool = False, auto_apply: bool = False, update_all: b
         return 0
 
     if update_all:
-        update_brew()
+        update_brew(auto_apply=True)
         update_mise()
         run_tests()
     elif not auto_apply:
         ans = prompt_user("\nWould you also like to update Homebrew packages and Mise runtimes? [y/N]: ", default="n")
         if ans.lower().startswith("y"):
-            update_brew()
+            update_brew(auto_apply=False)
             update_mise()
             run_tests()
     elif test_after:

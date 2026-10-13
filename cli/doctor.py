@@ -187,18 +187,33 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
         "git": "git",
     }
 
+    def _should_install(item_name: str, package: str) -> bool:
+        if fix:
+            return True
+        if sys.stdin.isatty():
+            try:
+                ans = input(f"  {C_YELLOW}?{C_RESET} {item_name} is missing. Install '{package}' via brew? [y/N]: ")
+                return ans.strip().lower().startswith("y")
+            except (EOFError, KeyboardInterrupt):
+                return False
+        return False
+
     for bin_name, label, cmd in tools:
         if shutil.which(bin_name):
             code, ver = run_cmd(cmd)
             first_line = ver.splitlines()[0] if ver else "installed"
             report.ok(label, first_line[:38])
-        elif fix and shutil.which("brew") and bin_name in brew_formula_map:
+        elif shutil.which("brew") and bin_name in brew_formula_map:
             formula = brew_formula_map[bin_name]
-            code, _ = run_cmd(["brew", "install", formula])
-            if code == 0:
-                report.fixed(label, f"Installed {formula} via brew")
+            if _should_install(label, formula):
+                print(f"  \033[1;34m==>\033[0m Installing {formula} via brew...")
+                code, _ = run_cmd(["brew", "install", formula])
+                if code == 0:
+                    report.fixed(label, f"Installed {formula} via brew")
+                else:
+                    report.warn(label, f"brew install {formula} failed")
             else:
-                report.warn(label, f"brew install {formula} failed")
+                report.warn(label, f"{bin_name} binary not found")
         else:
             report.warn(label, f"{bin_name} binary not found")
 
@@ -215,10 +230,14 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
     if sp_found:
         zwc_status = " (.zwc compiled)" if sp_found.with_name("spaceship.zsh.zwc").is_file() else ""
         report.ok("Spaceship Zsh prompt", f"{sp_found.parent.name}{zwc_status}")
-    elif fix and shutil.which("brew"):
-        code, _ = run_cmd(["brew", "install", "spaceship"])
-        if code == 0:
-            report.fixed("Spaceship Zsh prompt", "Installed spaceship via brew")
+    elif shutil.which("brew"):
+        if _should_install("Spaceship Zsh prompt", "spaceship"):
+            print("  \033[1;34m==>\033[0m Installing spaceship via brew...")
+            code, _ = run_cmd(["brew", "install", "spaceship"])
+            if code == 0:
+                report.fixed("Spaceship Zsh prompt", "Installed spaceship via brew")
+            else:
+                report.warn("Spaceship Zsh prompt", "spaceship.zsh not found (using vcs_info fallback)")
         else:
             report.warn("Spaceship Zsh prompt", "spaceship.zsh not found (using vcs_info fallback)")
     else:
@@ -251,11 +270,15 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
         found = next((p for p in candidates if p.is_file()), None)
         if found:
             report.ok(plugin_label, str(found).replace(str(home), "~")[:38])
-        elif fix and shutil.which("brew") and plugin_file in {"fzf-tab.zsh", "zsh-autosuggestions.zsh", "zsh-syntax-highlighting.zsh"}:
+        elif shutil.which("brew") and plugin_file in {"fzf-tab.zsh", "zsh-autosuggestions.zsh", "zsh-syntax-highlighting.zsh"}:
             pkg = plugin_file.replace(".zsh", "")
-            code, _ = run_cmd(["brew", "install", pkg])
-            if code == 0:
-                report.fixed(plugin_label, f"Installed {pkg} via brew")
+            if _should_install(plugin_label, pkg):
+                print(f"  \033[1;34m==>\033[0m Installing {pkg} via brew...")
+                code, _ = run_cmd(["brew", "install", pkg])
+                if code == 0:
+                    report.fixed(plugin_label, f"Installed {pkg} via brew")
+                else:
+                    report.warn(plugin_label, f"{plugin_file} not found")
             else:
                 report.warn(plugin_label, f"{plugin_file} not found")
         else:
@@ -305,15 +328,30 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
                 check=False,
             )
             content = Path(tmp_path).read_text(encoding="utf-8", errors="replace") if Path(tmp_path).exists() else ""
-            errors = [line.strip() for line in content.splitlines() if "ERROR" in line or "❌" in line]
-            warnings = [line.strip() for line in content.splitlines() if "WARNING" in line or "⚠️" in line]
+            sections = content.split("==============================================================================")
+            errors = []
+            warnings = []
+            for s in sections:
+                s = s.strip()
+                if not s:
+                    continue
+                lines = s.splitlines()
+                header = lines[0].strip()
+                is_optional_provider = "vim.provider" in header
+                for line in lines[1:]:
+                    item_line = line.strip()
+                    if (item_line.startswith(("- ❌", "- ERROR")) or "ERROR" in item_line) and not is_optional_provider:
+                        errors.append(item_line)
+                    elif (item_line.startswith(("- ⚠️", "- WARNING")) or "WARNING" in item_line) and not is_optional_provider:
+                        warnings.append(item_line)
+
             if res.returncode != 0 and not content:
                 report.warn("Neovim healthcheck (:checkhealth)", "Non-zero exit running headless checkhealth")
             elif errors:
-                first_err = errors[0].replace("- ❌ ERROR ", "").replace("- ERROR ", "")[:38]
+                first_err = errors[0].replace("- ❌ ERROR ", "").replace("- ❌ ", "").replace("- ERROR ", "")[:38]
                 report.fail("Neovim healthcheck (:checkhealth)", f"{len(errors)} error(s): {first_err}")
             elif warnings:
-                first_warn = warnings[0].replace("- ⚠️ WARNING ", "").replace("- WARNING ", "")[:38]
+                first_warn = warnings[0].replace("- ⚠️ WARNING ", "").replace("- ⚠️ ", "").replace("- WARNING ", "")[:38]
                 report.warn("Neovim healthcheck (:checkhealth)", f"{len(warnings)} warning(s): {first_warn}")
             else:
                 report.ok("Neovim healthcheck (:checkhealth)", "0 errors, 0 warnings")
