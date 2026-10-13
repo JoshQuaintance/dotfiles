@@ -71,6 +71,7 @@ alias localip="ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | a
 alias .status="dot status" # Quick workstation & dotfiles overview
 alias .s="dot status" # Quick workstation & dotfiles overview
 alias .doctor="dotdoctor" # Full system & symlink health check
+alias .health="dotdoctor" # Full system & symlink health check (alias for .doctor)
 alias .check="dotcheck" # Check if dotfiles repo has upstream updates
 alias .update="dotupdate" # Pull dotfiles & upgrade Brew / Mise packages
 alias .bench="dot bench" # Profile interactive Zsh startup latency

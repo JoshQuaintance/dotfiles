@@ -671,11 +671,11 @@ gwtclean() {
     selected_candidates=("${candidates[@]}")
   elif command -v fzf &>/dev/null && [ -t 1 ]; then
     local fzf_input=""
-    local item
+    local item="" wt_path="" wt_branch="" dirty_tag=""
     for item in "${candidates[@]}"; do
-      local wt_path="${item%%|*}"
-      local wt_branch="${item##*|}"
-      local dirty_tag=""
+      wt_path="${item%%|*}"
+      wt_branch="${item##*|}"
+      dirty_tag=""
       if [ -n "$(git -C "$wt_path" status --porcelain 2>/dev/null)" ]; then
         dirty_tag=" *dirty*"
       fi
@@ -700,8 +700,8 @@ gwtclean() {
       return 0
     fi
 
+    local sel_line="" sel_path=""
     while IFS= read -r sel_line || [ -n "$sel_line" ]; do
-      local sel_path
       sel_path=$(echo "$sel_line" | awk -F'\t' '{print $1}')
       for item in "${candidates[@]}"; do
         if [ "${item%%|*}" = "$sel_path" ]; then
@@ -771,16 +771,18 @@ gwtclean() {
 
   printf "\n\033[1;34m==>\033[0m Processing %d selected worktree(s)...\n" "$num_selected"
 
+  local is_dirty=false
+  local -a rm_opts
   for item in "${selected_candidates[@]}"; do
-    local wt_path="${item%%|*}"
-    local wt_branch="${item##*|}"
+    wt_path="${item%%|*}"
+    wt_branch="${item##*|}"
 
     if [ "$PWD" = "$wt_path" ] || [[ "$PWD" == "$wt_path"/* ]]; then
       printf "  \033[33m⚠ Skipping active worktree (currently inside):\033[0m %s\n" "$wt_path"
       continue
     fi
 
-    local is_dirty=false
+    is_dirty=false
     if [ -n "$(git -C "$wt_path" status --porcelain 2>/dev/null)" ]; then
       is_dirty=true
     fi
@@ -793,7 +795,7 @@ gwtclean() {
     fi
 
     printf "  Removing worktree \033[1m%s\033[0m..." "$wt_path"
-    local rm_opts=()
+    rm_opts=()
     [ "$is_dirty" = true ] && rm_opts+=("--force")
     [ "$force" = true ] && rm_opts+=("--force")
 
@@ -819,9 +821,10 @@ gwtclean() {
 # Tab completion for wt: list active worktree names
 _wt() {
   local -a wts
+  local line="" p="" b=""
   while IFS= read -r line; do
-    local p="$(echo "$line" | awk '{print $1}')"
-    local b="$(basename "$p")"
+    p="$(echo "$line" | awk '{print $1}')"
+    b="$(basename "$p")"
     [[ "$b" != ".bare" && "$b" != ".git" ]] && wts+=("$b")
   done < <(git worktree list 2>/dev/null)
   _describe 'worktree' wts
@@ -831,8 +834,9 @@ _wt() {
 # Tab completion for gwtnew: list available remote branches
 _gwtnew() {
   local -a branches
+  local b="" b_clean=""
   while IFS= read -r b; do
-    local b_clean="${b#origin/}"
+    b_clean="${b#origin/}"
     [[ "$b_clean" != "HEAD"* ]] && branches+=("$b_clean")
   done < <(git branch -r 2>/dev/null | sed 's/^[ *]*//')
   _describe 'remote branch' branches
@@ -843,10 +847,11 @@ _gwtnew() {
 _gwtdel() {
   local -a wts
   local active_wt="$(git rev-parse --show-toplevel 2>/dev/null)"
+  local line="" p="" b="" br=""
   while IFS= read -r line; do
-    local p="$(echo "$line" | awk '{print $1}')"
-    local b="$(basename "$p")"
-    local br="$(echo "$line" | awk '{print $3}' | tr -d '[]')"
+    p="$(echo "$line" | awk '{print $1}')"
+    b="$(basename "$p")"
+    br="$(echo "$line" | awk '{print $3}' | tr -d '[]')"
     [[ "$b" == ".bare" || "$b" == ".git" || "$p" == "$active_wt" ]] && continue
     [[ "$br" =~ ^(main|master|develop|qa|stage|staging)$ ]] && continue
     wts+=("$b")

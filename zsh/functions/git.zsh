@@ -161,8 +161,8 @@ gl() {
   [ -z "$selected_lines" ] && return 0
 
   local hashes=()
+  local line="" h=""
   while IFS= read -r line; do
-    local h
     h=$(echo "$line" | grep -oE "[a-f0-9]{7,40}" | head -n1)
     [ -n "$h" ] && hashes+=("$h")
   done <<< "$selected_lines"
@@ -220,17 +220,18 @@ gco() {
 
   local -A local_branch_map
   local -a branches
+  local b="" b_clean="" branch_name=""
   while IFS= read -r b; do
-    local b_clean="$(echo "$b" | sed 's/^[ *+]*//')"
+    b_clean="$(echo "$b" | sed 's/^[ *+]*//')"
     [[ -z "$b_clean" || "$b_clean" == "$current_branch" || "$b_clean" == "HEAD"* || "$b_clean" == dura/* ]] && continue
     local_branch_map[$b_clean]=1
     branches+=("$b_clean")
   done < <(git branch --format='%(refname:short)' 2>/dev/null)
 
   while IFS= read -r b; do
-    local b_clean="$(echo "$b" | sed 's/^[ *+]*//')"
+    b_clean="$(echo "$b" | sed 's/^[ *+]*//')"
     [[ -z "$b_clean" || "$b_clean" == *"HEAD"* || "$b_clean" == */HEAD || "$b_clean" == */dura/* ]] && continue
-    local branch_name="${b_clean#*/}"
+    branch_name="${b_clean#*/}"
     [[ -n "${local_branch_map[$branch_name]}" || "$branch_name" == "$current_branch" ]] && continue
     branches+=("$b_clean")
   done < <(git branch -r --format='%(refname:short)' 2>/dev/null)
@@ -329,8 +330,8 @@ gstash() {
   [ -z "$selected_lines" ] && return 0
 
   local refs=()
+  local line="" r=""
   while IFS= read -r line; do
-    local r
     r=$(echo "$line" | grep -oE 'stash@\{[0-9]+\}' | head -n1)
     [ -n "$r" ] && refs+=("$r")
   done <<< "$selected_lines"
@@ -431,8 +432,8 @@ ga() {
   [ -z "$selected_lines" ] && return 0
 
   local -a files untracked_files tracked_files
+  local clean_line="" st="" fpath=""
   while IFS= read -r line; do
-    local clean_line st fpath
     clean_line=$(printf "%s" "$line" | sed $'s/\x1b\\[[0-9;]*m//g')
     st="${clean_line:0:2}"
     fpath=$(printf "%s" "$clean_line" | sed -E 's/^.. //; s/.* -> //; s/^"(.*)"$/\1/')
@@ -621,8 +622,9 @@ gbclean() {
   active_branches=$(git worktree list 2>/dev/null | awk '{print $3}' | tr -d '[]')
 
   local merged_branches=()
+  local b="" b_clean=""
   while IFS= read -r b; do
-    local b_clean="$(echo "$b" | sed 's/^[ *+]*//')"
+    b_clean="$(echo "$b" | sed 's/^[ *+]*//')"
     [[ -z "$b_clean" ]] && continue
     # Protect main, master, develop, qa, stage, staging
     [[ "$b_clean" =~ ^(main|master|develop|qa|stage|staging|HEAD)$ ]] && continue
@@ -663,7 +665,6 @@ gbclean() {
     done <<< "$fzf_output"
   else
     printf "\n\033[1;33mFound %d local branch(es) merged into %s:\033[0m\n" "${#merged_branches[@]}" "$base"
-    local b
     for b in "${merged_branches[@]}"; do
       printf "  • %s\n" "$b"
     done

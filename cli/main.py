@@ -20,8 +20,8 @@ def main():
     # dot status
     subparsers.add_parser("status", help="Show quick 1-screen workstation & dotfiles status overview")
 
-    # dot doctor
-    parser_doctor = subparsers.add_parser("doctor", help="Run system health checks and audit symlinks")
+    # dot doctor / dot health
+    parser_doctor = subparsers.add_parser("doctor", aliases=["health"], help="Run system health checks and audit symlinks")
     parser_doctor.add_argument("-f", "--fix", action="store_true", help="Automatically repair broken or missing symlinks")
 
     # dot test
@@ -60,7 +60,7 @@ def main():
 
     if not args.subcommand or args.subcommand == "status":
         sys.exit(run_status())
-    elif args.subcommand == "doctor" or args.subcommand == "link":
+    elif args.subcommand in ("doctor", "health") or args.subcommand == "link":
         sys.exit(run_doctor(fix=args.fix))
     elif args.subcommand == "test":
         sys.exit(run_tests())

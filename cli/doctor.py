@@ -1,7 +1,9 @@
+import contextlib
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -288,6 +290,41 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
                     report.ok("Mise managed runtimes", ", ".join(active_tools)[:38])
             except (ValueError, AttributeError, TypeError):
                 report.warn("Mise managed runtimes", "Unexpected 'mise ls --json' output")
+
+    # Check Neovim health (:checkhealth)
+    if shutil.which("nvim"):
+        with tempfile.NamedTemporaryFile(mode="w+", prefix="nvim_health_", suffix=".txt", delete=False) as tmp:
+            tmp_path = tmp.name
+        try:
+            res = subprocess.run(
+                ["nvim", "--headless", "+checkhealth", f"+w! {tmp_path}", "+qa"],
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+            content = Path(tmp_path).read_text(encoding="utf-8", errors="replace") if Path(tmp_path).exists() else ""
+            errors = [line.strip() for line in content.splitlines() if "ERROR" in line or "❌" in line]
+            warnings = [line.strip() for line in content.splitlines() if "WARNING" in line or "⚠️" in line]
+            if res.returncode != 0 and not content:
+                report.warn("Neovim healthcheck (:checkhealth)", "Non-zero exit running headless checkhealth")
+            elif errors:
+                first_err = errors[0].replace("- ❌ ERROR ", "").replace("- ERROR ", "")[:38]
+                report.fail("Neovim healthcheck (:checkhealth)", f"{len(errors)} error(s): {first_err}")
+            elif warnings:
+                first_warn = warnings[0].replace("- ⚠️ WARNING ", "").replace("- WARNING ", "")[:38]
+                report.warn("Neovim healthcheck (:checkhealth)", f"{len(warnings)} warning(s): {first_warn}")
+            else:
+                report.ok("Neovim healthcheck (:checkhealth)", "0 errors, 0 warnings")
+        except subprocess.TimeoutExpired:
+            report.warn("Neovim healthcheck (:checkhealth)", "Timed out after 15s")
+        except (OSError, subprocess.SubprocessError) as e:
+            report.warn("Neovim healthcheck (:checkhealth)", f"Check error: {e}")
+        finally:
+            with contextlib.suppress(OSError):
+                Path(tmp_path).unlink(missing_ok=True)
+
 
 def check_locale(report: DoctorReport):
     print(f"\n{C_BOLD}4. Locale & Multibyte Support{C_RESET}")

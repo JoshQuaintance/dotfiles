@@ -86,10 +86,11 @@ up() {
   fi
 
   # 2. Search upward: Pass 1 - Exact match (case-insensitive)
+  local base_name=""
   local p="$curr"
   p="$(dirname "$p")"
   while [ "$p" != "/" ] && [ -n "$p" ]; do
-    local base_name="$(basename "$p")"
+    base_name="$(basename "$p")"
     if [[ "${(L)base_name}" == "${(L)target}" ]]; then
       cd "$p" || return 1
       return 0
@@ -101,7 +102,7 @@ up() {
   p="$curr"
   p="$(dirname "$p")"
   while [ "$p" != "/" ] && [ -n "$p" ]; do
-    local base_name="$(basename "$p")"
+    base_name="$(basename "$p")"
     if [[ "${(L)base_name}" == *"${(L)target}"* ]]; then
       cd "$p" || return 1
       return 0

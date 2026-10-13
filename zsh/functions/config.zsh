@@ -24,15 +24,15 @@ _conf_candidates() {
   [ -d "${SCRATCH_DIR:-$HOME/.scratch}" ] && printf "scratch\t%s\n" "${SCRATCH_DIR:-$HOME/.scratch}"
 
   # 2. Dynamic discovery in ~/.dotfiles/config and ~/.config
-  local search_dir
+  local search_dir="" item="" bname="" primary="" sub="" stripped="" mod="" mname=""
   for search_dir in "$dot_dir/config" "$cfg_dir"; do
     [ -d "$search_dir" ] || continue
     for item in "$search_dir"/*(N); do
-      local bname="$(basename "$item")"
+      bname="$(basename "$item")"
       [[ "$bname" == .* ]] && continue
 
       if [ -d "$item" ]; then
-        local primary=""
+        primary=""
         for sub in "$item"/config*(N) "$item"/spaceship.zsh(N) "$item"/settings.json(N) "$item"/theme.yml(N) "$item"/init.lua(N) "$item"/.gitconfig(N); do
           if [ -f "$sub" ]; then
             primary="$sub"
@@ -45,7 +45,7 @@ _conf_candidates() {
           printf "%s\t%s\n" "$bname" "$item"
         fi
       elif [ -f "$item" ]; then
-        local stripped="${bname%.*}"
+        stripped="${bname%.*}"
         printf "%s\t%s\n" "$stripped" "$item"
       fi
     done
@@ -54,7 +54,7 @@ _conf_candidates() {
   # 3. Modular dotfiles functions
   if [ -d "$dot_dir/zsh/functions" ]; then
     for mod in "$dot_dir/zsh/functions"/*.zsh(N); do
-      local mname="$(basename "$mod" .zsh)"
+      mname="$(basename "$mod" .zsh)"
       printf "%s\t%s\n" "$mname" "$mod"
     done
   fi

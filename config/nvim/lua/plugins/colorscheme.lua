@@ -23,6 +23,7 @@ return {
     opts = {
       flavour = "mocha", -- mocha, macchiato, frappe, latte
       transparent_background = false,
+      auto_integrations = false,
       integrations = {
         cmp = true,
         gitsigns = true,

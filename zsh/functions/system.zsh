@@ -110,9 +110,10 @@ port() {
 
   [ -z "$selected" ] && return 0
 
+  local p_clean="" pid_clean=""
   while IFS=$'\t' read -r p_col pid_col proc_col addr_col; do
-    local p_clean="${p_col// /}"
-    local pid_clean="${pid_col// /}"
+    p_clean="${p_col// /}"
+    pid_clean="${pid_col// /}"
     if [ -n "$pid_clean" ] && [ "$pid_clean" != "-" ]; then
       if kill -15 "$pid_clean" 2>/dev/null || kill -9 "$pid_clean" 2>/dev/null; then
         printf "  \033[32m✔\033[0m Killed \033[1m%s\033[0m (PID %s) on port \033[1;36m%s\033[0m\n" "${proc_col// /}" "$pid_clean" "$p_clean"
@@ -204,9 +205,10 @@ fkill() {
     sig_name="SIGKILL (-9)"
   fi
 
+  local pid_clean="" proc_clean=""
   while IFS=$'\t' read -r pid_col cpu_col mem_col proc_col cmd_col; do
-    local pid_clean="${pid_col// /}"
-    local proc_clean="${proc_col// /}"
+    pid_clean="${pid_col// /}"
+    proc_clean="${proc_col// /}"
     if [ -n "$pid_clean" ]; then
       if kill "$sig" "$pid_clean" 2>/dev/null; then
         printf "  \033[32m✔\033[0m Sent \033[1m%s\033[0m to \033[1;36m%s\033[0m (PID %s)\n" "$sig_name" "$proc_clean" "$pid_clean"
@@ -305,8 +307,8 @@ fcon() {
   [ -z "$selected_lines" ] && return 0
 
   local -a cids cnames
+  local cid="" cname=""
   while IFS=$'\t' read -r id_col name_col rest; do
-    local cid cname
     cid=$(printf "%s" "$id_col" | sed $'s/\x1b\\[[0-9;]*m//g' | tr -d ' ')
     cname=$(printf "%s" "$name_col" | sed $'s/\x1b\\[[0-9;]*m//g' | tr -d ' ')
     if [ -n "$cid" ]; then

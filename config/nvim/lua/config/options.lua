@@ -35,3 +35,10 @@ opt.undofile = true
 opt.splitright = true
 opt.splitbelow = true
 opt.wrap = false
+
+-- Providers
+vim.g.loaded_perl_provider = 0
+vim.g.loaded_ruby_provider = 0
+if vim.fn.executable("python3") == 1 then
+  vim.g.python3_host_prog = vim.fn.exepath("python3")
+end
