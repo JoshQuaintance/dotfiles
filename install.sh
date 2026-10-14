@@ -237,14 +237,26 @@ if [[ "$CHOICE" == "1" || "$CHOICE" == "--workstation" || "$CHOICE" == "--all" ]
         done
     fi
 
+    # Provision Editors and Runtime Managers in parallel
+    dev_labels=()
+    dev_cmds=()
     for ed in "${selected_editors[@]}"; do
         case "$ed" in
-            nvim)   run_step "$DOTFILES_DIR/install/install-nvim.sh" "--full" ;;
-            vscode) run_step "$DOTFILES_DIR/install/install-vscode.sh" ;;
+            nvim)
+                dev_labels+=("Neovim & Plugins")
+                dev_cmds+=("\"$DOTFILES_DIR/install/install-nvim.sh\" --full")
+                ;;
+            vscode)
+                dev_labels+=("VS Code Configuration")
+                dev_cmds+=("\"$DOTFILES_DIR/install/install-vscode.sh\"")
+                ;;
         esac
     done
+    dev_labels+=("Mise & Runtimes")
+    dev_cmds+=("\"$DOTFILES_DIR/install/install-mise.sh\"")
 
-    run_step "$DOTFILES_DIR/install/install-mise.sh"
+    run_parallel_steps "Development Environments" dev_labels dev_cmds
+
     if ! command -v mise &>/dev/null && [ ! -x "$HOME/.local/bin/mise" ]; then
         run_step "$DOTFILES_DIR/install/install-nvm.sh"
     fi
@@ -423,29 +435,51 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
         run_step "$DOTFILES_DIR/install/install-cli.sh" "${selected_cli_tools[@]}"
     fi
 
-    # Run selected environments
+    # Run selected environments: Shell first (sequential), then environments concurrently
+    parallel_env_labels=()
+    parallel_env_cmds=()
+    has_shell=false
+    has_astral=false
+
     for env_item in "${selected_envs[@]}"; do
         case "$env_item" in
-            shell)
-                run_step "$DOTFILES_DIR/install/install-shell.sh"
-                ;;
+            shell)  has_shell=true ;;
+            astral) has_astral=true ;;
+        esac
+    done
+
+    if [ "$has_shell" = true ]; then
+        run_step "$DOTFILES_DIR/install/install-shell.sh"
+    fi
+
+    for env_item in "${selected_envs[@]}"; do
+        case "$env_item" in
             nvim)
-                run_step "$DOTFILES_DIR/install/install-nvim.sh" "$nvim_mode"
+                parallel_env_labels+=("Neovim & Plugins")
+                parallel_env_cmds+=("\"$DOTFILES_DIR/install/install-nvim.sh\" \"$nvim_mode\"")
                 ;;
             vscode)
-                run_step "$DOTFILES_DIR/install/install-vscode.sh"
+                parallel_env_labels+=("VS Code Configuration")
+                parallel_env_cmds+=("\"$DOTFILES_DIR/install/install-vscode.sh\"")
                 ;;
             mise)
-                run_step "$DOTFILES_DIR/install/install-mise.sh"
+                parallel_env_labels+=("Mise & Runtimes")
+                parallel_env_cmds+=("\"$DOTFILES_DIR/install/install-mise.sh\"")
                 ;;
             nvm)
-                run_step "$DOTFILES_DIR/install/install-nvm.sh"
-                ;;
-            astral)
-                run_step "$DOTFILES_DIR/install/install-astral.sh"
+                parallel_env_labels+=("NVM")
+                parallel_env_cmds+=("\"$DOTFILES_DIR/install/install-nvm.sh\"")
                 ;;
         esac
     done
+
+    if [ "${#parallel_env_labels[@]}" -gt 0 ]; then
+        run_parallel_steps "Development Environments" parallel_env_labels parallel_env_cmds
+    fi
+
+    if [ "$has_astral" = true ]; then
+        run_step "$DOTFILES_DIR/install/install-astral.sh"
+    fi
 
     [ "$DRY_RUN" = true ] && finish_dry_run
 

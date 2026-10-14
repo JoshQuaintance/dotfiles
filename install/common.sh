@@ -337,3 +337,161 @@ link_dotfile() {
     ln -sfn "$src" "$dest"
     success "Linked ${dest/#$HOME/\~} -> $1"
 }
+
+# ==============================================================================
+# Parallel Step Execution Engine (Multi-Process Fan-Out)
+# Supports concurrent background workers with isolated logs, live progress updates,
+# and safe resource throttling for mobile/PRoot/low-RAM environments.
+#
+# Usage:
+#   labels=("Neovim" "Mise" "Astral")
+#   cmds=("$DOTFILES_DIR/install/install-nvim.sh --full" "$DOTFILES_DIR/install/install-mise.sh" "$DOTFILES_DIR/install/install-astral.sh")
+#   run_parallel_steps "Development Environments" labels cmds
+# ==============================================================================
+run_parallel_steps() {
+    [ -n "$ZSH_VERSION" ] && setopt LOCAL_OPTIONS KSH_ARRAYS 2>/dev/null || true
+    disable -r log 2>/dev/null || true
+    local title="$1"
+    local labels_var="$2"
+    local cmds_var="$3"
+
+    local total=0
+    eval "total=\${#${labels_var}[@]}"
+    [ "$total" -eq 0 ] && return 0
+
+    if [ "${DOTFILES_DRY_RUN:-false}" = true ]; then
+        echo -e "${BLUE}would run in parallel ($title):${NC}"
+        local i
+        for ((i=0; i<total; i++)); do
+            local lbl cmd
+            eval "lbl=\"\${${labels_var}[$i]}\""
+            eval "cmd=\"\${${cmds_var}[$i]}\""
+            echo -e "  ${BLUE}•${NC} $lbl: $cmd"
+        done
+        return 0
+    fi
+
+    if [ "${DOTFILES_SERIAL:-false}" = true ] || [ "$total" -le 1 ]; then
+        local i
+        for ((i=0; i<total; i++)); do
+            local cmd
+            eval "cmd=\"\${${cmds_var}[$i]}\""
+            run_step eval "$cmd"
+        done
+        return 0
+    fi
+
+    local max_concurrency=4
+    if [ -n "${TERMUX_VERSION:-}" ] || [ -d "/data/data/com.termux" ] || [ -n "${PROOT_TMP_DIR:-}" ]; then
+        max_concurrency=2
+    fi
+
+    echo ""
+    log "Provisioning $title in parallel (max $max_concurrency workers)..."
+
+    local log_dir="${TMPDIR:-/tmp}/dotfiles-parallel-$$"
+    mkdir -p "$log_dir"
+
+    local job_pids=()
+    local job_labels=()
+    local job_logs=()
+    local job_starts=()
+    local failed_indices=()
+    local next_idx=0
+    local running=0
+    local completed=0
+    local i=0
+    local j=0
+    local idx=0
+    local pid=0
+    local exit_code=0
+    local start=0
+    local dur=0
+    local f_idx=0
+    local lbl=""
+    local cmd=""
+    local log_file=""
+
+    local spinners=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏")
+    local spin_idx=0
+
+    trap '
+        for ((k=0; k<next_idx; k++)); do
+            p="${job_pids[k]:-0}"
+            [ "$p" -gt 0 ] && kill -TERM "$p" 2>/dev/null || true
+        done
+        rm -rf "$log_dir" 2>/dev/null || true
+        exit 130
+    ' INT TERM
+
+    while [ "$completed" -lt "$total" ]; do
+        # Spawn queued jobs up to max_concurrency
+        while [ "$running" -lt "$max_concurrency" ] && [ "$next_idx" -lt "$total" ]; do
+            idx="$next_idx"
+            eval "lbl=\"\${${labels_var}[$idx]}\""
+            eval "cmd=\"\${${cmds_var}[$idx]}\""
+            log_file="$log_dir/task_${idx}.log"
+
+            ( export DOTFILES_UNATTENDED=true; eval "$cmd" ) > "$log_file" 2>&1 &
+            pid=$!
+
+            job_pids[idx]=$pid
+            job_labels[idx]="$lbl"
+            job_logs[idx]="$log_file"
+            job_starts[idx]=$(date +%s)
+
+            running=$((running + 1))
+            next_idx=$((next_idx + 1))
+        done
+
+        # Check running jobs
+        for ((j=0; j<next_idx; j++)); do
+            pid="${job_pids[j]:-0}"
+            if [ "$pid" -gt 0 ]; then
+                if ! kill -0 "$pid" 2>/dev/null; then
+                    wait "$pid"
+                    exit_code=$?
+                    start="${job_starts[j]}"
+                    dur=$(( $(date +%s) - start ))
+
+                    if [ "$exit_code" -eq 0 ]; then
+                        printf "\r\033[K  ${GREEN}✔${NC} %-36s ${GREEN}(done in %ds)${NC}\n" "${job_labels[j]}" "$dur"
+                    else
+                        printf "\r\033[K  ${RED}✖${NC} %-36s ${RED}(failed with exit %d after %ds)${NC}\n" "${job_labels[j]}" "$exit_code" "$dur"
+                        failed_indices+=("$j")
+                    fi
+
+                    job_pids[j]=0
+                    running=$((running - 1))
+                    completed=$((completed + 1))
+                fi
+            fi
+        done
+
+        if [ "$completed" -lt "$total" ]; then
+            if [ -t 1 ]; then
+                printf "\r  ${YELLOW}%s${NC} [%d/%d completed] Running %d background worker(s)..." "${spinners[spin_idx]}" "$completed" "$total" "$running"
+                spin_idx=$(( (spin_idx + 1) % 10 ))
+            fi
+            sleep 0.2
+        fi
+    done
+
+    printf "\r\033[K"
+    trap - INT TERM
+
+    if [ "${#failed_indices[@]}" -gt 0 ]; then
+        echo ""
+        error "The following $title step(s) encountered errors:"
+        for f_idx in "${failed_indices[@]}"; do
+            echo -e "\n${RED}--- Log for ${job_labels[f_idx]} (${job_logs[f_idx]}) ---${NC}"
+            tail -n 25 "${job_logs[f_idx]}" 2>/dev/null || true
+        done
+        rm -rf "$log_dir" 2>/dev/null || true
+        return 1
+    fi
+
+    success "All $title steps completed successfully!"
+    rm -rf "$log_dir" 2>/dev/null || true
+    return 0
+}

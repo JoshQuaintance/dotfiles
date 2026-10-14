@@ -17,6 +17,7 @@ brew "eza"          # Modern replacement for ls
 brew "zoxide"       # Smarter cd command
 brew "spaceship"    # Zsh prompt with native async section rendering
 brew "atuin"        # Magical shell history
+brew "mise"         # Polyglot runtime executor & environment manager
 
 # ----------------------------------------------------------------------
 # Modern TUI & Terminal Productivity
