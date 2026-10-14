@@ -2,6 +2,7 @@ import platform
 import shutil
 
 from cli.manifest import get_dotfiles_dir, get_symlink_manifest
+from cli.prompt import get_active_prompt
 from cli.ui import (
     C_BOLD,
     C_CYAN,
@@ -73,9 +74,10 @@ def run_status() -> int:
     uv_ver = _short_version("uv", ["--version"]).replace("uv ", "").split(" ")[0]
 
     os_label = f"{platform.system()} ({platform.machine()})"
+    active_prompt, _ = get_active_prompt()
 
     print(f"\n{C_BOLD}Environment{C_RESET}")
-    print(f"  {C_MAUVE}OS & Shell:{C_RESET}   {os_label} {C_DIM}{ICON_BULLET}{C_RESET} zsh {zsh_ver} {C_DIM}{ICON_BULLET}{C_RESET} nvim {nvim_ver}")
+    print(f"  {C_MAUVE}OS & Shell:{C_RESET}   {os_label} {C_DIM}{ICON_BULLET}{C_RESET} zsh {zsh_ver} ({C_CYAN}{active_prompt}{C_RESET}) {C_DIM}{ICON_BULLET}{C_RESET} nvim {nvim_ver}")
     print(f"  {C_MAUVE}Repository:{C_RESET}   {C_BOLD}{branch}{C_RESET} ({C_CYAN}{commit}{C_RESET}) {C_DIM}{ICON_BULLET}{C_RESET} {tree_str}")
     print(f"  {C_MAUVE}Symlinks:{C_RESET}     {link_str}")
     print(f"  {C_MAUVE}Runtimes:{C_RESET}     node {C_GREEN}{node_ver}{C_RESET} {C_DIM}{ICON_BULLET}{C_RESET} uv {C_GREEN}{uv_ver}{C_RESET}")
@@ -83,6 +85,7 @@ def run_status() -> int:
     print(f"\n{C_BOLD}Commands{C_RESET}")
     cmds = [
         ("dot status", ".status / .s", "Quick workstation & dotfiles overview"),
+        ("dot prompt", "", "Benchmark & select prompt (native, spaceship)"),
         ("dot doctor [--fix]", ".doctor", "Full system & symlink health check"),
         ("dot test", ".test", "Run 20 deep runtime & schema tests"),
         ("dot bench [-n N]", ".bench", "Profile Zsh startup latency by phase"),

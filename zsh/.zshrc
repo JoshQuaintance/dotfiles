@@ -167,45 +167,11 @@ if command -v mise &>/dev/null; then
 fi
 _step "Mise polyglot runtime"
 
-# Spaceship Prompt Initialization (native Zsh async section streaming, with vcs_info fallback)
-if [ "$TERM" != "dumb" ]; then
-    export SPACESHIP_CONFIG="${DOTFILES_DIR:-$HOME/.dotfiles}/config/spaceship/spaceship.zsh"
-    _spaceship_entry=""
-    for _sp_candidate in \
-        "/opt/homebrew/opt/spaceship/spaceship.zsh" \
-        "/home/linuxbrew/.linuxbrew/opt/spaceship/spaceship.zsh" \
-        "/usr/local/opt/spaceship/spaceship.zsh" \
-        "$HOME/.spaceship-prompt/spaceship.zsh" \
-        "$HOME/.oh-my-zsh/custom/themes/spaceship-prompt/spaceship.zsh"; do
-        if [ -f "$_sp_candidate" ]; then
-            _spaceship_entry="$_sp_candidate"
-            break
-        fi
-    done
-
-    if [ -n "$_spaceship_entry" ]; then
-        # Ensure Homebrew's extracted .zwc bytecode is newer than .zsh so spaceship::precompile is 0ms
-        if [ ! "${_spaceship_entry}.zwc" -nt "$_spaceship_entry" ]; then
-            chmod -R u+w "${_spaceship_entry:h}" 2>/dev/null || true
-            zcompile -R -- "${_spaceship_entry}.zwc" "$_spaceship_entry" 2>/dev/null || true
-        fi
-        # Clean up any running/orphaned Spaceship async workers before (re-)sourcing
-        if (( $+functions[async_stop_worker] )); then
-            async_stop_worker "spaceship" "spaceship_1" "spaceship_2" "spaceship_3" 2>/dev/null || true
-        fi
-        source "$_spaceship_entry"
-        source "${DOTFILES_DIR:-$HOME/.dotfiles}/zsh/spaceship-patches.zsh"
-    else
-        # Fallback Git prompt if Spaceship is not installed
-        autoload -Uz vcs_info add-zsh-hook
-        add-zsh-hook precmd vcs_info
-        zstyle ':vcs_info:git:*' formats ' (%b)'
-        setopt PROMPT_SUBST
-        PROMPT='%F{cyan}%~%F{yellow}${vcs_info_msg_0_}%F{reset} %# '
-    fi
-    unset _spaceship_entry _sp_candidate
+# Shell Prompt Initialization (Fast Native or Spaceship)
+if [ "$TERM" != "dumb" ] && [ -f "${DOTFILES_DIR:-$HOME/.dotfiles}/zsh/prompt.zsh" ]; then
+    source "${DOTFILES_DIR:-$HOME/.dotfiles}/zsh/prompt.zsh"
 fi
-_step "Spaceship prompt (async)"
+_step "Shell prompt (${DOTFILES_ACTIVE_PROMPT:-active})"
 
 # NVM (Lazy-loaded fallback when Mise is not installed — saves ~800-1200ms on startup)
 export NVM_DIR="$HOME/.nvm"

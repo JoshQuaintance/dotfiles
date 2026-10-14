@@ -174,6 +174,15 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
         else:
             report.fail("Spaceship prompt configuration", err.splitlines()[0] if err else "Syntax error")
 
+    # Unified prompt manager script validation
+    prompt_zsh = dotfiles / "zsh" / "prompt.zsh"
+    if prompt_zsh.exists() and shutil.which("zsh"):
+        code, _out, err = run_cmd(["zsh", "-n", str(prompt_zsh)])
+        if code == 0:
+            report.ok("Unified prompt manager script", "zsh/prompt.zsh valid Zsh")
+        else:
+            report.fail("Unified prompt manager script", err.splitlines()[0] if err else "Syntax error")
+
     # Bat syntax viewer config
     bat_config = dotfiles / "config" / "bat" / "config"
     if bat_config.exists():

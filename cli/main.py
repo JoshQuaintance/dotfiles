@@ -4,6 +4,7 @@ import sys
 from cli.bench import run_bench
 from cli.clean import run_clean
 from cli.doctor import run_doctor
+from cli.prompt import run_prompt_command
 from cli.prune import run_prune
 from cli.status import run_status
 from cli.test import run_tests
@@ -56,6 +57,11 @@ def main():
     parser_link = subparsers.add_parser("link", help="Audit or auto-heal declarative symlinks")
     parser_link.add_argument("-f", "--fix", action="store_true", help="Automatically create or re-point symlinks")
 
+    # dot prompt
+    parser_prompt = subparsers.add_parser("prompt", help="Benchmark and select shell prompt (native, spaceship)")
+    parser_prompt.add_argument("action", nargs="?", choices=["set", "benchmark"], help="Prompt action ('set' or 'benchmark')")
+    parser_prompt.add_argument("engine", nargs="?", help="Prompt engine to set ('native', 'spaceship')")
+
     args = parser.parse_args()
 
     if not args.subcommand or args.subcommand == "status":
@@ -64,6 +70,8 @@ def main():
         sys.exit(run_doctor(fix=args.fix))
     elif args.subcommand == "test":
         sys.exit(run_tests())
+    elif args.subcommand == "prompt":
+        sys.exit(run_prompt_command(subcommand=args.action, value=args.engine))
     elif args.subcommand == "bench":
         sys.exit(run_bench(iterations=args.iterations))
     elif args.subcommand == "clean":

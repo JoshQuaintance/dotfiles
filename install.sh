@@ -255,6 +255,11 @@ if [[ "$CHOICE" == "1" || "$CHOICE" == "--workstation" || "$CHOICE" == "--all" ]
     # Reconcile all declarative symlinks from cli/manifest.py
     "$DOTFILES_DIR/bin/dot" link --fix >/dev/null 2>&1 || true
 
+    # Benchmark and select shell prompt
+    if [ -x "$DOTFILES_DIR/bin/dot" ]; then
+        "$DOTFILES_DIR/bin/dot" prompt
+    fi
+
     launch_shell "Full Workstation setup complete!"
 fi
 
@@ -281,6 +286,11 @@ if [[ "$CHOICE" == "2" || "$CHOICE" == "--server" || "$CHOICE" == "--minimal" ]]
     run_step "$DOTFILES_DIR/install/install-shell.sh"
     run_step "$DOTFILES_DIR/install/install-nvim.sh" "--server"
     [ "$DRY_RUN" = true ] && finish_dry_run
+
+    # Benchmark and select shell prompt
+    if [ -x "$DOTFILES_DIR/bin/dot" ]; then
+        "$DOTFILES_DIR/bin/dot" prompt
+    fi
 
     launch_shell "Server setup complete with Git sparse-checkout!"
 fi
@@ -309,7 +319,7 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
         "zoxide (z)      - Smarter cd directory jumper"
         "eza             - Modern ls with icons & git status"
         "bat             - Cat clone with syntax highlighting & Git status"
-        "spaceship       - Native Zsh async shell prompt"
+        "spaceship       - Feature-rich native Zsh async prompt"
         "atuin           - Shell history with sync and fuzzy search"
         "yazi            - Blazingly fast terminal file manager"
         "dust            - Intuitive disk usage analyzer"
@@ -438,5 +448,11 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
     done
 
     [ "$DRY_RUN" = true ] && finish_dry_run
+
+    # Benchmark and select shell prompt
+    if [ -x "$DOTFILES_DIR/bin/dot" ]; then
+        "$DOTFILES_DIR/bin/dot" prompt
+    fi
+
     launch_shell "Selected dotfiles components installed successfully!"
 fi

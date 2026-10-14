@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from cli.manifest import get_dotfiles_dir, get_symlink_manifest
+from cli.prompt import get_active_prompt
 from cli.ui import (
     C_BOLD,
     C_DIM,
@@ -217,31 +218,35 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
         else:
             report.warn(label, f"{bin_name} binary not found")
 
-    # Check Spaceship Zsh prompt installation
+    # Check Active Zsh prompt installation
     home = Path.home()
-    spaceship_candidates = [
-        Path("/opt/homebrew/opt/spaceship/spaceship.zsh"),
-        Path("/home/linuxbrew/.linuxbrew/opt/spaceship/spaceship.zsh"),
-        Path("/usr/local/opt/spaceship/spaceship.zsh"),
-        home / ".oh-my-zsh" / "custom" / "themes" / "spaceship-prompt" / "spaceship.zsh",
-        home / ".spaceship-prompt" / "spaceship.zsh",
-    ]
-    sp_found = next((p for p in spaceship_candidates if p.is_file()), None)
-    if sp_found:
-        zwc_status = " (.zwc compiled)" if sp_found.with_name("spaceship.zsh.zwc").is_file() else ""
-        report.ok("Spaceship Zsh prompt", f"{sp_found.parent.name}{zwc_status}")
-    elif shutil.which("brew"):
-        if _should_install("Spaceship Zsh prompt", "spaceship"):
-            print("  \033[1;34m==>\033[0m Installing spaceship via brew...")
-            code, _ = run_cmd(["brew", "install", "spaceship"])
-            if code == 0:
-                report.fixed("Spaceship Zsh prompt", "Installed spaceship via brew")
-            else:
-                report.warn("Spaceship Zsh prompt", "spaceship.zsh not found (using vcs_info fallback)")
-        else:
-            report.warn("Spaceship Zsh prompt", "spaceship.zsh not found (using vcs_info fallback)")
+    active_prompt, _ = get_active_prompt()
+    if active_prompt == "native":
+        report.ok("Active Zsh prompt (Native)", "Fast Native (0-fork pure Zsh vcs_info)")
     else:
-        report.warn("Spaceship Zsh prompt", "spaceship.zsh not found (using vcs_info fallback)")
+        spaceship_candidates = [
+            Path("/opt/homebrew/opt/spaceship/spaceship.zsh"),
+            Path("/home/linuxbrew/.linuxbrew/opt/spaceship/spaceship.zsh"),
+            Path("/usr/local/opt/spaceship/spaceship.zsh"),
+            home / ".oh-my-zsh" / "custom" / "themes" / "spaceship-prompt" / "spaceship.zsh",
+            home / ".spaceship-prompt" / "spaceship.zsh",
+        ]
+        sp_found = next((p for p in spaceship_candidates if p.is_file()), None)
+        if sp_found:
+            zwc_status = " (.zwc compiled)" if sp_found.with_name("spaceship.zsh.zwc").is_file() else ""
+            report.ok("Active Zsh prompt (Spaceship)", f"{sp_found.parent.name}{zwc_status}")
+        elif shutil.which("brew"):
+            if _should_install("Spaceship Zsh prompt", "spaceship"):
+                print("  \033[1;34m==>\033[0m Installing spaceship via brew...")
+                code, _ = run_cmd(["brew", "install", "spaceship"])
+                if code == 0:
+                    report.fixed("Active Zsh prompt (Spaceship)", "Installed spaceship via brew")
+                else:
+                    report.warn("Active Zsh prompt (Spaceship)", "spaceship.zsh not found (using vcs_info fallback)")
+            else:
+                report.warn("Active Zsh prompt (Spaceship)", "spaceship.zsh not found (using vcs_info fallback)")
+        else:
+            report.warn("Active Zsh prompt (Spaceship)", "spaceship.zsh not found (using vcs_info fallback)")
 
     # Check Zsh plugins (fzf-tab, zsh-autosuggestions, zsh-syntax-highlighting)
     zsh_plugins = [

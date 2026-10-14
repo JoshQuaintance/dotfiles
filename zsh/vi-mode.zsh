@@ -97,17 +97,29 @@ elif (( $+widgets[fzf-history-widget] )); then
   bindkey -M vicmd '/'    fzf-history-widget
 fi
 
-# 7. Dynamic cursor shape & Spaceship char symbol for modern terminals (beam in insert, block in normal)
-function _vi_mode_sync_spaceship_char() {
-  (( $+functions[spaceship::core::refresh_section] )) || return 0
+# 7. Dynamic cursor shape & prompt char symbol for modern terminals (beam in insert, block in normal)
+function _vi_mode_sync_prompt_char() {
   local sym="❯ "
   [[ "$KEYMAP" == "vicmd" ]] && sym="❮ "
-  if [[ "$SPACESHIP_CHAR_SYMBOL_SUCCESS" != "$sym" ]]; then
-    SPACESHIP_CHAR_SYMBOL="$sym"
-    SPACESHIP_CHAR_SYMBOL_SUCCESS="$sym"
-    SPACESHIP_CHAR_SYMBOL_FAILURE="$sym"
-    spaceship::core::refresh_section --sync char
-    spaceship::populate
+
+  # Spaceship integration
+  if (( $+functions[spaceship::core::refresh_section] )); then
+    if [[ "$SPACESHIP_CHAR_SYMBOL_SUCCESS" != "$sym" ]]; then
+      SPACESHIP_CHAR_SYMBOL="$sym"
+      SPACESHIP_CHAR_SYMBOL_SUCCESS="$sym"
+      SPACESHIP_CHAR_SYMBOL_FAILURE="$sym"
+      spaceship::core::refresh_section --sync char
+      spaceship::populate
+    fi
+  fi
+
+  # Fast Native prompt integration
+  if [[ -n "${_native_prompt_char:-}" ]]; then
+    if [[ "$KEYMAP" == "vicmd" ]]; then
+      _native_prompt_char="%F{yellow}❮%f "
+    else
+      _native_prompt_char="%(?.%F{green}.%F{red})❯%f "
+    fi
   fi
 }
 
@@ -121,7 +133,7 @@ function _vi_mode_cursor_shape() {
       print -n '\e[5 q' # Beam cursor in insert mode
       ;;
   esac
-  _vi_mode_sync_spaceship_char
+  _vi_mode_sync_prompt_char
   zle reset-prompt 2>/dev/null || true
 }
 zle -N zle-keymap-select _vi_mode_cursor_shape
@@ -129,7 +141,7 @@ zle -N zle-keymap-select _vi_mode_cursor_shape
 function _vi_mode_line_init() {
   [[ "$KEYMAP" == "vicmd" ]] && zle -K viins
   print -n '\e[5 q'
-  _vi_mode_sync_spaceship_char
+  _vi_mode_sync_prompt_char
   zle reset-prompt 2>/dev/null || true
 }
 zle -N zle-line-init _vi_mode_line_init
