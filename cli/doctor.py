@@ -319,12 +319,16 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
         with tempfile.NamedTemporaryFile(mode="w+", prefix="nvim_health_", suffix=".txt", delete=False) as tmp:
             tmp_path = tmp.name
         try:
+            nvim_env = os.environ.copy()
+            if not nvim_env.get("TERM"):
+                nvim_env["TERM"] = "xterm-256color"
             res = subprocess.run(
                 ["nvim", "--headless", "+checkhealth", f"+w! {tmp_path}", "+qa"],
                 stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
                 timeout=15,
+                env=nvim_env,
                 check=False,
             )
             content = Path(tmp_path).read_text(encoding="utf-8", errors="replace") if Path(tmp_path).exists() else ""
