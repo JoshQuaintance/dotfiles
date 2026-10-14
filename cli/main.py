@@ -7,6 +7,7 @@ from cli.doctor import run_doctor
 from cli.prompt import run_prompt_command
 from cli.prune import run_prune
 from cli.status import run_status
+from cli.sync import run_sync
 from cli.test import run_tests
 from cli.update import run_update
 
@@ -31,6 +32,15 @@ def main():
     # dot bench
     parser_bench = subparsers.add_parser("bench", help="Benchmark interactive Zsh startup latency and per-phase breakdown")
     parser_bench.add_argument("-n", "--iterations", type=int, default=5, help="Number of benchmark runs (default: 5)")
+    parser_bench.add_argument("-p", "--prompt", action="store_true", help="Also benchmark shell prompt rendering (Native vs Spaceship)")
+    parser_bench.add_argument("-t", "--tools", action="store_true", help="Also benchmark modern CLI tools (rg, fd, eza)")
+    parser_bench.add_argument("-a", "--all", action="store_true", help="Run full benchmark suite (startup + tools + prompt)")
+
+    # dot sync
+    parser_sync = subparsers.add_parser("sync", help="Two-way dotfiles Git synchronization across machines")
+    parser_sync.add_argument("-m", "--message", help="Custom Git commit message")
+    parser_sync.add_argument("-n", "--dry-run", action="store_true", help="Preview changes without committing or pushing")
+    parser_sync.add_argument("--no-push", action="store_true", help="Commit and pull without pushing to remote")
 
     # dot clean
     parser_clean = subparsers.add_parser("clean", help="Clean stale Zsh dumps, completion caches, oversized logs, and temp files")
@@ -73,7 +83,18 @@ def main():
     elif args.subcommand == "prompt":
         sys.exit(run_prompt_command(subcommand=args.action, value=args.engine))
     elif args.subcommand == "bench":
-        sys.exit(run_bench(iterations=args.iterations))
+        sys.exit(run_bench(
+            iterations=args.iterations,
+            test_prompt=args.prompt,
+            test_tools=args.tools,
+            test_all=args.all,
+        ))
+    elif args.subcommand == "sync":
+        sys.exit(run_sync(
+            message=args.message,
+            dry_run=args.dry_run,
+            auto_push=not args.no_push,
+        ))
     elif args.subcommand == "clean":
         sys.exit(run_clean(dry_run=args.dry_run, clean_all=args.all, clean_builds=args.builds))
     elif args.subcommand == "prune":

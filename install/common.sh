@@ -384,6 +384,10 @@ run_parallel_steps() {
     local max_concurrency=4
     if [ -n "${TERMUX_VERSION:-}" ] || [ -d "/data/data/com.termux" ] || [ -n "${PROOT_TMP_DIR:-}" ]; then
         max_concurrency=2
+    elif [ -f /proc/version ] && grep -qiE '(android|samsung|qcom)' /proc/version 2>/dev/null; then
+        max_concurrency=2
+    elif [ -n "$(uname -r 2>/dev/null | grep -iE 'android')" ]; then
+        max_concurrency=2
     fi
 
     echo ""
@@ -415,14 +419,17 @@ run_parallel_steps() {
     local spinners=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏")
     local spin_idx=0
 
-    trap '
+    cleanup_parallel_workers() {
+        local k=0
+        local p=0
         for ((k=0; k<next_idx; k++)); do
             p="${job_pids[k]:-0}"
             [ "$p" -gt 0 ] && kill -TERM "$p" 2>/dev/null || true
         done
         rm -rf "$log_dir" 2>/dev/null || true
         exit 130
-    ' INT TERM
+    }
+    trap cleanup_parallel_workers INT TERM
 
     while [ "$completed" -lt "$total" ]; do
         # Spawn queued jobs up to max_concurrency

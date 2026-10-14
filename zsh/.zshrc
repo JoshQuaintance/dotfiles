@@ -26,6 +26,13 @@ if [ -z "$LC_ALL" ] || [ "$LC_ALL" = "C" ] || [ "$LC_ALL" = "POSIX" ]; then
 fi
 unset _def_locale
 
+# Mobile / PRoot / Termux detection: default to fast compact startup
+if [[ -n "${TERMUX_VERSION:-}" || -d "/data/data/com.termux" || -n "${PROOT_TMP_DIR:-}" ]] || \
+   [[ -f /proc/version && "$(grep -iE '(android|samsung|qcom)' /proc/version 2>/dev/null)" ]] || \
+   [[ "$(uname -r 2>/dev/null)" =~ (android|Android) ]]; then
+    _IS_MOBILE=true
+    ZSH_STARTUP_VERBOSE="${ZSH_STARTUP_VERBOSE:-false}"
+fi
 
 # Startup verbose checklist & environment banner
 if [[ -o interactive ]] && { [ -t 1 ] || [ "${ZSH_BENCH_STEPS:-false}" = true ]; } && [ "${ZSH_STARTUP_VERBOSE:-true}" = true ]; then
@@ -161,10 +168,27 @@ _step "Zsh completions & options"
 # User Configuration & Tools
 # ==========================================
 
+# Compiled Init Cache: Eliminates runtime subshell and binary exec forks on startup.
+# Caches static init scripts in ~/.cache/dotfiles/init/<tool>.zsh and compiles to .zwc.
+_dot_cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles/init"
+_load_cached_init() {
+    local bin="$1"
+    local bin_cmd="$2"
+    local cache="$_dot_cache_dir/${bin}.zsh"
+    local bin_path
+    bin_path="$(command -v "$bin" 2>/dev/null || true)"
+    [ -z "$bin_path" ] && return 1
+
+    if [ ! -s "$cache" ] || [ "$bin_path" -nt "$cache" ]; then
+        mkdir -p "$_dot_cache_dir" 2>/dev/null || true
+        eval "$bin_cmd" > "$cache" 2>/dev/null || rm -f "$cache"
+        [ -s "$cache" ] && zcompile -R -- "${cache}.zwc" "$cache" 2>/dev/null || true
+    fi
+    [ -s "$cache" ] && source "$cache"
+}
+
 # Mise (Polyglot Runtime & Node 24 Manager — loaded before prompt so PATH is ready)
-if command -v mise &>/dev/null; then
-    eval "$(mise activate zsh)"
-fi
+_load_cached_init "mise" "mise activate zsh"
 _step "Mise polyglot runtime"
 
 # Shell Prompt Initialization (Fast Native or Spaceship)
@@ -210,10 +234,10 @@ fi
 
 # Atuin (Shell History)
 [ -f "$HOME/.atuin/bin/env" ] && . "$HOME/.atuin/bin/env"
-command -v atuin &>/dev/null && eval "$(atuin init zsh)"
+_load_cached_init "atuin" "atuin init zsh"
 
 # Zoxide (Smart directory jumper: 'z <folder>')
-command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
+_load_cached_init "zoxide" "zoxide init zsh"
 
 # FZF (Fuzzy finder integration & Catppuccin Mocha theme)
 if command -v fzf &>/dev/null; then
@@ -363,6 +387,10 @@ for _zsh_synhl in \
 done
 unset _zsh_synhl
 _step "Vi-mode & Zsh plugins (autosuggest, syntax)"
+
+# Clean up init cache helper
+unfunction _load_cached_init 2>/dev/null || true
+unset _dot_cache_dir
 
 # Startup Summary Card & Rotating Tips
 [ -t 1 ] && [ -f "$_dot_dir/zsh/banner.zsh" ] && source "$_dot_dir/zsh/banner.zsh"

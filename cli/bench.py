@@ -4,11 +4,13 @@ import shutil
 import statistics
 import subprocess
 import time
+from pathlib import Path
 
 from cli.manifest import get_dotfiles_dir
 from cli.ui import (
     C_BLUE,
     C_BOLD,
+    C_CYAN,
     C_DIM,
     C_GREEN,
     C_MAUVE,
@@ -23,7 +25,55 @@ ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 STEP_RE = re.compile(r"\u2714\s+(.+?)\s+([0-9]+)\s*ms\s*$")
 
 
-def run_bench(iterations: int = 5) -> int:
+def benchmark_tools(dotfiles: Path) -> None:
+    print(f"\n{C_BOLD}4. Modern CLI Productivity Speedup Benchmark{C_RESET}")
+    benchmarks = [
+        ("ripgrep vs grep", ["rg", "-q", "main", str(dotfiles)], ["grep", "-rq", "main", str(dotfiles)]),
+        ("fd vs find", ["fd", "-q", "main", str(dotfiles)], ["find", str(dotfiles), "-name", "*main*"]),
+        ("eza vs ls", ["eza", str(dotfiles)], ["ls", str(dotfiles)]),
+    ]
+    for label, modern_cmd, legacy_cmd in benchmarks:
+        modern_bin = modern_cmd[0]
+        legacy_bin = legacy_cmd[0]
+        if not shutil.which(modern_bin) or not shutil.which(legacy_bin):
+            continue
+
+        subprocess.run(modern_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        subprocess.run(legacy_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+
+        runs = 5
+        t_mod = []
+        for _ in range(runs):
+            t0 = time.perf_counter()
+            subprocess.run(modern_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+            t_mod.append((time.perf_counter() - t0) * 1000.0)
+
+        t_leg = []
+        for _ in range(runs):
+            t0 = time.perf_counter()
+            subprocess.run(legacy_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+            t_leg.append((time.perf_counter() - t0) * 1000.0)
+
+        avg_mod = statistics.mean(t_mod)
+        avg_leg = statistics.mean(t_leg)
+        ratio = avg_leg / avg_mod if avg_mod > 0 else 1.0
+
+        if ratio >= 1.2:
+            speedup_str = f"{C_GREEN}{ratio:.1f}x faster{C_RESET}"
+        elif ratio <= 0.8:
+            speedup_str = f"{C_YELLOW}{1.0 / ratio:.1f}x slower{C_RESET}"
+        else:
+            speedup_str = f"{C_DIM}comparable{C_RESET}"
+
+        print(f"  {label:<20} {modern_bin}: {C_CYAN}{avg_mod:5.1f}ms{C_RESET} │ {legacy_bin}: {C_DIM}{avg_leg:5.1f}ms{C_RESET} │ {speedup_str}")
+
+
+def run_bench(
+    iterations: int = 5,
+    test_prompt: bool = False,
+    test_tools: bool = False,
+    test_all: bool = False,
+) -> int:
     dotfiles = get_dotfiles_dir()
 
     if not shutil.which("zsh"):
@@ -32,7 +82,7 @@ def run_bench(iterations: int = 5) -> int:
 
     iterations = max(1, min(iterations, 25))
 
-    print_header("Dotfiles Startup Benchmark \u2014 Zsh Interactive Profiler")
+    print_header("Dotfiles Unified Benchmark Suite — Profiler & Diagnostics")
 
     env = os.environ.copy()
     env["DOTFILES_DIR"] = str(dotfiles)
@@ -100,6 +150,13 @@ def run_bench(iterations: int = 5) -> int:
             filled = max(0, min(bar_width, filled))
             bar = (f"{C_MAUVE}" + ("\u2588" * filled) + f"{C_DIM}" + ("\u2591" * (bar_width - filled)) + f"{C_RESET}")
             print(f"  {name:<42} {bar} {C_BLUE}{avg_ms:5.1f}ms{C_RESET} {C_DIM}({pct:4.1f}%){C_RESET}")
+
+    if test_tools or test_all:
+        benchmark_tools(dotfiles)
+
+    if test_prompt or test_all:
+        from cli.prompt import print_prompt_summary
+        print_prompt_summary(interactive=False)
 
     print()
     return 0
