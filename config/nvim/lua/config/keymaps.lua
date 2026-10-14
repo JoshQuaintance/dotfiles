@@ -124,3 +124,42 @@ keymap("n", "<C-/>", function() require("Comment.api").toggle.linewise.current()
 keymap("n", "<C-_>", function() require("Comment.api").toggle.linewise.current() end, { desc = "Toggle comment" })
 keymap("v", "<C-/>", "<ESC><cmd>lua require('Comment.api').toggle.linewise(vim.fn.visualmode())<CR>", { desc = "Toggle comment" })
 keymap("v", "<C-_>", "<ESC><cmd>lua require('Comment.api').toggle.linewise(vim.fn.visualmode())<CR>", { desc = "Toggle comment" })
+
+-- Interactive Vim Practice Playground (:VimDrill or <leader>vd)
+local function open_vim_drill(opts_cmd)
+  local exercise_file = vim.fn.expand("~/Documents/tolaria/vim-exercises.md")
+  if vim.fn.filereadable(exercise_file) == 0 then
+    vim.notify("Exercise file not found at " .. exercise_file, vim.log.levels.WARN)
+    return
+  end
+
+  local drill_arg = (opts_cmd and opts_cmd.args) or ""
+  vim.cmd("enew")
+  vim.bo.buftype = "nofile"
+  vim.bo.bufhidden = "wipe"
+  vim.bo.swapfile = false
+  vim.bo.filetype = "markdown"
+
+  local lines = vim.fn.readfile(exercise_file)
+  vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+  vim.bo.modified = false
+
+  if drill_arg ~= "" then
+    local pattern = "EXERCISE " .. drill_arg .. ":"
+    local found = vim.fn.search(pattern, "w")
+    if found > 0 then
+      vim.cmd("normal! zz")
+      vim.notify("Loaded Vim Drill #" .. drill_arg .. " into scratchpad!", vim.log.levels.INFO)
+      return
+    end
+  end
+
+  vim.notify("Loaded Vim Practice Playground into scratchpad! (Changes won't alter master note)", vim.log.levels.INFO)
+end
+
+vim.api.nvim_create_user_command("VimDrill", open_vim_drill, {
+  nargs = "?",
+  desc = "Open interactive Vim exercises in a safe scratch buffer (:VimDrill [number])",
+})
+keymap("n", "<leader>vd", open_vim_drill, { desc = "Open VimDrill scratchpad" })
+

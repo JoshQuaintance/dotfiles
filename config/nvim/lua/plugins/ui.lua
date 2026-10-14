@@ -64,6 +64,7 @@ return {
         { "<leader>h", group = "Git Hunk" },
         { "<leader>m", group = "Markdown Preview" },
         { "<leader>t", group = "Theme / Toggle" },
+        { "<leader>v", group = "VimDrill / Exercises" },
       },
     },
   },
