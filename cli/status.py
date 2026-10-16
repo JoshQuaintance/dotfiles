@@ -85,12 +85,14 @@ def run_status() -> int:
     print(f"\n{C_BOLD}Commands{C_RESET}")
     cmds = [
         ("dot status", ".status / .s", "Quick workstation & dotfiles overview"),
-        ("dot prompt", "", "Benchmark & select prompt (native, spaceship)"),
+        ("dot prompt", ".prompt", "Benchmark & select prompt (native, spaceship)"),
         ("dot doctor [--fix]", ".doctor", "Full system & symlink health check"),
         ("dot test", ".test", "Run 20 deep runtime & schema tests"),
         ("dot bench [-n N]", ".bench", "Profile Zsh startup latency by phase"),
         ("dot clean [-n] [-a]", ".clean", "Prune stale caches, dumps & temp files"),
+        ("dot prune [-n] [-o]", ".prune", "Remove links & packages deleted upstream"),
         ("dot update [-c] [-a]", ".update / .check", "Pull dotfiles & upgrade Brew / Mise"),
+        ("dot sync [-m MSG]", ".sync", "Commit, rebase & push dotfiles changes"),
         ("dot link --fix", "", "Reconcile all declarative symlinks"),
     ]
     for cmd_str, alias_str, desc in cmds:

@@ -53,7 +53,7 @@ def run_sync(
             commit_msg = message or f"chore(sync): update dotfiles [{host}]"
             print(f"\n  {C_DIM}==> Staging tracked & configuration files...{C_RESET}")
             run_cmd(["git", "-C", str(dotfiles), "add", "-u"])
-            for folder in ("zsh", "config", "bin", "cli", "install"):
+            for folder in ("zsh", "config", "bin", "cli", "install", "tests"):
                 if (dotfiles / folder).is_dir():
                     run_cmd(["git", "-C", str(dotfiles), "add", folder])
 

@@ -23,6 +23,7 @@
 [fetch]
     prune = true
     pruneTags = false
+    writeCommitGraph = true
 
 [merge]
     conflictstyle = zdiff3
@@ -64,6 +65,7 @@
 
 [rebase]
     autoStash = true
+    updateRefs = true
 
 [rerere]
     enabled = true

@@ -6,6 +6,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from cli.doctor import stale_zsh_bytecode
 from cli.manifest import get_dotfiles_dir
 from cli.ui import (
     C_BOLD,
@@ -145,12 +146,14 @@ def run_clean(dry_run: bool = False, clean_all: bool = False, clean_builds: bool
     else:
         print(f"  {C_GREEN}{ICON_OK}{C_RESET} {'Zsh completion dumps':<42} {C_DIM}Clean (only active dump present){C_RESET}")
 
-    # 2. Cached completion directories (~/.cache/zsh/zcompcache & ~/.cache/ng_completion.zsh)
+    # 2. Cached completion & init directories (zcompcache, ng completion, compiled tool init scripts)
     cache_home = Path(os.environ.get("XDG_CACHE_HOME", str(home / ".cache")))
     comp_caches = [
         cache_home / "zsh" / "zcompcache",
         cache_home / "ng_completion.zsh",
+        cache_home / "dotfiles" / "init",
     ]
+    comp_caches += [src.with_name(f"{src.name}.zwc") for src in stale_zsh_bytecode(dotfiles)]
     cache_bytes = 0
     cache_count = 0
     for cpath in comp_caches:
@@ -160,9 +163,9 @@ def run_clean(dry_run: bool = False, clean_all: bool = False, clean_builds: bool
 
     if cache_count > 0:
         reclaimed_total += cache_bytes
-        cleaned_items.append(("Shell completion cache", f"{cache_count} item(s) ({fmt_bytes(cache_bytes)})"))
+        cleaned_items.append(("Shell completion & init cache", f"{cache_count} item(s) ({fmt_bytes(cache_bytes)})"))
     else:
-        print(f"  {C_GREEN}{ICON_OK}{C_RESET} {'Shell completion cache':<42} {C_DIM}Clean{C_RESET}")
+        print(f"  {C_GREEN}{ICON_OK}{C_RESET} {'Shell completion & init cache':<42} {C_DIM}Clean{C_RESET}")
 
     # 3. Oversized Neovim state logs (> 5 MB)
     nvim_state = Path(os.environ.get("XDG_STATE_HOME", str(home / ".local" / "state"))) / "nvim"

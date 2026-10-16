@@ -338,28 +338,51 @@ _dot() {
     subcommands=(
       'status:Quick overview of dotfiles, symlinks, and runtimes'
       'doctor:System & environment health check (--fix to repair symlinks)'
+      'health:System & environment health check (alias for doctor)'
       'test:Deep integration, parser & shell runtime test suite'
       'bench:Profile interactive Zsh startup latency by phase'
+      'sync:Commit, rebase & push local dotfiles changes'
       'clean:Prune stale completion dumps, caches & old scratch files'
       'prune:Remove links, caches & packages deleted from the dotfiles'
       'update:Sync dotfiles repo & upgrade Brew / Mise tools'
       'link:Verify and heal all declarative configuration symlinks'
+      'prompt:Benchmark and select shell prompt (native, spaceship)'
     )
     _describe 'dot command' subcommands
   else
     case "${words[2]}" in
-      doctor|link)
+      doctor|health|link)
         flags=('--fix:Auto-repair broken or missing symlinks' '-f:Auto-repair broken or missing symlinks')
         ;;
       bench)
-        flags=('-n:Number of benchmark iterations' '--iterations:Number of benchmark iterations')
+        flags=(
+          '-n:Number of benchmark iterations'
+          '--iterations:Number of benchmark iterations'
+          '-p:Also benchmark prompt rendering'
+          '--prompt:Also benchmark prompt rendering'
+          '-t:Also benchmark modern CLI tools (rg, fd, eza)'
+          '--tools:Also benchmark modern CLI tools (rg, fd, eza)'
+          '-a:Run full benchmark suite (startup + tools + prompt)'
+          '--all:Run full benchmark suite (startup + tools + prompt)'
+        )
+        ;;
+      sync)
+        flags=(
+          '-m:Custom Git commit message'
+          '--message:Custom Git commit message'
+          '-n:Preview changes without committing or pushing'
+          '--dry-run:Preview changes without committing or pushing'
+          '--no-push:Commit and pull without pushing'
+        )
         ;;
       clean)
         flags=(
           '-n:Preview files to remove without deleting'
           '--dry-run:Preview files to remove without deleting'
-          '-a:Also prune old scratch notes (>30 days)'
-          '--all:Also prune old scratch notes (>30 days)'
+          '-a:Also remove ~/.oh-my-zsh and prune uv/Homebrew caches'
+          '--all:Also remove ~/.oh-my-zsh and prune uv/Homebrew caches'
+          '-b:Clean stale build directories inactive >30 days'
+          '--builds:Clean stale build directories inactive >30 days'
         )
         ;;
       prune)
@@ -374,10 +397,22 @@ _dot() {
         flags=(
           '-c:Check for upstream updates without applying'
           '--check:Check for upstream updates without applying'
-          '-a:Upgrade all packages without prompting'
-          '--all:Upgrade all packages without prompting'
+          '-y:Apply updates without prompting'
+          '--yes:Apply updates without prompting'
+          '-a:Full upgrade: git + Homebrew + Mise + test'
+          '--all:Full upgrade: git + Homebrew + Mise + test'
+          '-t:Update Homebrew and Mise tools only'
+          '--tools:Update Homebrew and Mise tools only'
+          '--test:Run deep integration tests after update'
           '--no-prune:Keep links, caches & packages removed upstream'
         )
+        ;;
+      prompt)
+        if (( CURRENT == 3 )); then
+          flags=('set:Select the active prompt engine' 'benchmark:Benchmark prompt engines')
+        elif [[ "${words[3]}" == set ]]; then
+          flags=('native:Fast 0-fork vcs_info prompt' 'spaceship:Feature-rich async Spaceship prompt')
+        fi
         ;;
     esac
     (( ${#flags[@]} )) && _describe 'flag' flags

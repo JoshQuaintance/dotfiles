@@ -1,3 +1,6 @@
+-- Byte-compile & cache Lua modules (must run before any require)
+vim.loader.enable()
+
 -- Set leader keys before loading lazy.nvim
 vim.g.mapleader = " "
 vim.g.maplocalleader = "\\"

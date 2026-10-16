@@ -1,10 +1,8 @@
 import shutil
 import subprocess
 import sys
-from pathlib import Path
-from typing import Optional
 
-from cli.doctor import DoctorReport, check_and_heal_symlinks, check_cli_tools
+from cli.doctor import DoctorReport, check_and_heal_symlinks, check_cli_tools, compile_zsh_sources
 from cli.manifest import get_dotfiles_dir
 from cli.prune import apply_prune, plan_prune, preview_prune
 from cli.test import run_tests
@@ -16,15 +14,9 @@ from cli.ui import (
     C_RED,
     C_RESET,
     C_YELLOW,
+    run_cmd,
 )
 
-
-def run_cmd(cmd: list[str], cwd: Optional[Path] = None) -> tuple[int, str]:
-    try:
-        res = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=False)
-        return res.returncode, res.stdout.strip()
-    except (OSError, subprocess.SubprocessError) as e:
-        return 1, str(e)
 
 def update_brew(auto_apply: bool = False):
     if shutil.which("brew"):
@@ -64,30 +56,30 @@ def run_update(check_only: bool = False, auto_apply: bool = False, update_all: b
     print(f"{C_BLUE}==>{C_RESET} Checking for dotfiles updates in {C_BOLD}{dotfiles}{C_RESET}...")
 
     # Fetch from origin
-    code, _ = run_cmd(["git", "-C", str(dotfiles), "fetch", "--quiet", "origin"])
+    code, _, _ = run_cmd(["git", "-C", str(dotfiles), "fetch", "--quiet", "origin"], timeout=120)
     if code != 0:
         print(f"{C_YELLOW}⚠ Warning: Failed to fetch from origin. Check network or credentials.{C_RESET}", file=sys.stderr)
         return 1
 
-    code, current_branch = run_cmd(["git", "-C", str(dotfiles), "branch", "--show-current"])
+    code, current_branch, _ = run_cmd(["git", "-C", str(dotfiles), "branch", "--show-current"])
     current_branch = current_branch or "main"
 
-    code, upstream = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "--abbrev-ref", "@{u}"])
+    code, upstream, _ = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "--abbrev-ref", "@{u}"])
     upstream = upstream or f"origin/{current_branch}"
 
-    code, behind_str = run_cmd(["git", "-C", str(dotfiles), "rev-list", "--count", f"HEAD..{upstream}"])
-    code, ahead_str = run_cmd(["git", "-C", str(dotfiles), "rev-list", "--count", f"{upstream}..HEAD"])
+    code, behind_str, _ = run_cmd(["git", "-C", str(dotfiles), "rev-list", "--count", f"HEAD..{upstream}"])
+    code, ahead_str, _ = run_cmd(["git", "-C", str(dotfiles), "rev-list", "--count", f"{upstream}..HEAD"])
 
     behind = int(behind_str) if behind_str.isdigit() else 0
     ahead = int(ahead_str) if ahead_str.isdigit() else 0
 
-    code, status = run_cmd(["git", "-C", str(dotfiles), "status", "--porcelain"])
+    code, status, _ = run_cmd(["git", "-C", str(dotfiles), "status", "--porcelain"])
     is_dirty = bool(status)
 
     updated_git = False
 
     if behind == 0 and ahead == 0:
-        code, head_short = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "--short", "HEAD"])
+        code, head_short, _ = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "--short", "HEAD"])
         print(f"{C_GREEN}✔{C_RESET} Dotfiles are up to date with {C_BOLD}{upstream}{C_RESET} (commit {C_CYAN}{head_short}{C_RESET}).")
         if is_dirty:
             print(f"{C_YELLOW}⚠ Note: You have local uncommitted changes in {dotfiles}{C_RESET}")
@@ -104,7 +96,7 @@ def run_update(check_only: bool = False, auto_apply: bool = False, update_all: b
 
         if check_only:
             if prune:
-                code, old_head = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "HEAD"])
+                code, old_head, _ = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "HEAD"])
                 preview_prune(dotfiles, old_head, upstream)
             print("Run 'dot update' to pull and apply these updates.")
             return 0
@@ -123,13 +115,14 @@ def run_update(check_only: bool = False, auto_apply: bool = False, update_all: b
 
         if do_apply:
             print(f"{C_BLUE}==>{C_RESET} Pulling updates via git pull --rebase...")
-            code, old_head = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "HEAD"])
-            code, _ = run_cmd(["git", "-C", str(dotfiles), "pull", "--rebase", "origin", current_branch])
+            code, old_head, _ = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "HEAD"])
+            code, _, _ = run_cmd(["git", "-C", str(dotfiles), "pull", "--rebase", "origin", current_branch], timeout=120)
             if code == 0:
-                code, new_head = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "--short", "HEAD"])
+                code, new_head, _ = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "--short", "HEAD"])
                 print(f"{C_GREEN}✔{C_RESET} Dotfiles successfully updated to {C_CYAN}{new_head}{C_RESET}!")
                 # Automatically repair any configuration symlinks that moved in the pulled commit
                 check_and_heal_symlinks(DoctorReport(), dotfiles, fix=True)
+                compile_zsh_sources(dotfiles)
                 # Remove links, caches and packages whose source was deleted between the old and new commit
                 if prune:
                     apply_prune(dotfiles, plan_prune(dotfiles, old_head, "HEAD"))

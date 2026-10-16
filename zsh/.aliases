@@ -77,6 +77,8 @@ alias .update="dotupdate" # Pull dotfiles & upgrade Brew / Mise packages
 alias .bench="dot bench" # Profile interactive Zsh startup latency
 alias .clean="dot clean" # Prune stale caches, completion dumps & scratch files
 alias .prune="dot prune" # Remove links, caches & packages deleted from the dotfiles since the last pull
+alias .sync="dot sync" # Commit, rebase & push local dotfiles changes
+alias .prompt="dot prompt" # Benchmark & select shell prompt (native, spaceship)
 alias .branch="dotbranch" # Switch active ~/.dotfiles branch & reload shell
 alias .b="dotbranch" # Switch active ~/.dotfiles branch & reload shell
 

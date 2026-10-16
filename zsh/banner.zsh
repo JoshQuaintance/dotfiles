@@ -1,8 +1,6 @@
 # Startup Summary Card (Catppuccin Mocha Left Accent Bar)
 
 if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
-    _t_total=$(( EPOCHREALTIME - _t_start ))
-    _tot_str=$(printf "%.2fs" "$_t_total")
     _arch="${CPUTYPE:-$(uname -m)}"
 
     if [[ "$OSTYPE" == darwin* ]]; then
@@ -161,7 +159,9 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
     _random_tip="${_tips[$(( (RANDOM % ${#_tips[@]}) + 1 ))]}"
     _tip_line="💡 ${_random_tip}"
 
-    # Render Left Accent Bar
+    # Render Left Accent Bar (total measured here so it includes the banner's own probes above)
+    printf -v _tot_str "%.2fs" $(( EPOCHREALTIME - _t_start ))
+    _step "Startup banner (system probes)"
     printf "${_c_border}▌${_c_reset}\n"
     printf "${_c_border}▌${_c_reset} ${_c_title}%s${_c_reset} ${_c_dim}•${_c_reset} %s ${_c_dim}•${_c_reset} %s ${_c_dim}•${_c_reset} ${_c_check}Ready in %s${_c_reset}\n" \
         "$_title" "$_os_str" "zsh ${ZSH_VERSION:-5.9}" "$_tot_str"

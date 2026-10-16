@@ -17,6 +17,7 @@ from cli.ui import (
     C_RESET,
     C_YELLOW,
     print_header,
+    run_cmd,
 )
 
 
@@ -44,13 +45,6 @@ class DoctorReport:
         self.passed += 1
         print(f"  {C_GREEN}✔ [FIXED]{C_RESET} {label:<36} {C_GREEN}{detail}{C_RESET}")
 
-def run_cmd(cmd: list[str]) -> tuple[int, str]:
-    try:
-        res = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=5, check=False)
-        return res.returncode, res.stdout.strip()
-    except (OSError, subprocess.SubprocessError) as e:
-        return 1, str(e)
-
 def check_repository(report: DoctorReport, dotfiles: Path):
     print(f"\n{C_BOLD}1. Dotfiles Repository{C_RESET}")
     if not (dotfiles / ".git").is_dir():
@@ -61,17 +55,48 @@ def check_repository(report: DoctorReport, dotfiles: Path):
         report.warn(f"Repository: {dotfiles.name}", "git binary not installed")
         return
 
-    _, branch = run_cmd(["git", "-C", str(dotfiles), "branch", "--show-current"])
+    _, branch, _ = run_cmd(["git", "-C", str(dotfiles), "branch", "--show-current"])
     branch = branch or "detached"
-    _, commit = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "--short", "HEAD"])
+    _, commit, _ = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "--short", "HEAD"])
     report.ok(f"Repository: {dotfiles.name}", f"{branch} ({commit})")
 
-    _, status = run_cmd(["git", "-C", str(dotfiles), "status", "--porcelain"])
+    _, status, _ = run_cmd(["git", "-C", str(dotfiles), "status", "--porcelain"])
     if not status:
         report.ok("Working tree clean", "No uncommitted changes")
     else:
         changed_count = len(status.splitlines())
         report.warn("Working tree has uncommitted changes", f"{changed_count} files modified")
+
+def stale_zsh_bytecode(dotfiles: Path) -> list[Path]:
+    """Repo zsh scripts sourced by ~/.zshrc whose .zwc is missing or older than the source."""
+    zsh_dir = dotfiles / "zsh"
+    sources = [zsh_dir / ".aliases", *zsh_dir.glob("*.zsh"), *(zsh_dir / "functions").glob("*.zsh")]
+    stale = []
+    for src in sources:
+        zwc = src.with_name(f"{src.name}.zwc")
+        if src.is_file() and (not zwc.is_file() or zwc.stat().st_mtime < src.stat().st_mtime):
+            stale.append(src)
+    return stale
+
+def compile_zsh_sources(dotfiles: Path) -> int:
+    """zcompile stale repo zsh scripts; returns how many were compiled."""
+    if not shutil.which("zsh"):
+        return 0
+    compiled = 0
+    for src in stale_zsh_bytecode(dotfiles):
+        code, _, _ = run_cmd(["zsh", "-c", 'zcompile -R -- "$1.zwc" "$1"', "zcompile", str(src)])
+        if code == 0:
+            compiled += 1
+    return compiled
+
+def check_zsh_bytecode(report: DoctorReport, dotfiles: Path, fix: bool = False):
+    stale = stale_zsh_bytecode(dotfiles)
+    if not stale:
+        report.ok("Zsh bytecode (.zwc)", "All sourced scripts compiled")
+    elif fix:
+        report.fixed("Zsh bytecode (.zwc)", f"Compiled {compile_zsh_sources(dotfiles)} script(s)")
+    else:
+        report.warn("Zsh bytecode (.zwc)", f"{len(stale)} script(s) stale. Run with --fix")
 
 def check_and_heal_symlinks(report: DoctorReport, dotfiles: Path, fix: bool = False):
     print(f"\n{C_BOLD}2. Configuration Symlinks & Health{C_RESET}")
@@ -201,14 +226,14 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
 
     for bin_name, label, cmd in tools:
         if shutil.which(bin_name):
-            code, ver = run_cmd(cmd)
+            code, ver, _ = run_cmd(cmd)
             first_line = ver.splitlines()[0] if ver else "installed"
             report.ok(label, first_line[:38])
         elif shutil.which("brew") and bin_name in brew_formula_map:
             formula = brew_formula_map[bin_name]
             if _should_install(label, formula):
                 print(f"  \033[1;34m==>\033[0m Installing {formula} via brew...")
-                code, _ = run_cmd(["brew", "install", formula])
+                code, _, _ = run_cmd(["brew", "install", formula], timeout=600)
                 if code == 0:
                     report.fixed(label, f"Installed {formula} via brew")
                 else:
@@ -238,7 +263,7 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
         elif shutil.which("brew"):
             if _should_install("Spaceship Zsh prompt", "spaceship"):
                 print("  \033[1;34m==>\033[0m Installing spaceship via brew...")
-                code, _ = run_cmd(["brew", "install", "spaceship"])
+                code, _, _ = run_cmd(["brew", "install", "spaceship"], timeout=600)
                 if code == 0:
                     report.fixed("Active Zsh prompt (Spaceship)", "Installed spaceship via brew")
                 else:
@@ -279,7 +304,7 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
             pkg = plugin_file.replace(".zsh", "")
             if _should_install(plugin_label, pkg):
                 print(f"  \033[1;34m==>\033[0m Installing {pkg} via brew...")
-                code, _ = run_cmd(["brew", "install", pkg])
+                code, _, _ = run_cmd(["brew", "install", pkg], timeout=600)
                 if code == 0:
                     report.fixed(plugin_label, f"Installed {pkg} via brew")
                 else:
@@ -292,7 +317,7 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
     # Check Mise managed runtimes (declared in config/mise/config.toml)
     if shutil.which("mise"):
         import json as _json
-        code, raw_json = run_cmd(["mise", "ls", "--current", "--json"])
+        code, raw_json, _ = run_cmd(["mise", "ls", "--current", "--json"])
         if code == 0 and raw_json:
             try:
                 mise_data = _json.loads(raw_json)
@@ -307,7 +332,7 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
                             missing_tools.append(f"{tool_name}@{ver}")
                 if missing_tools:
                     if fix:
-                        ic, _ = run_cmd(["mise", "install"])
+                        ic, _, _ = run_cmd(["mise", "install"], timeout=600)
                         if ic == 0:
                             report.fixed("Mise managed runtimes", f"Installed {', '.join(missing_tools)}")
                         else:
@@ -386,7 +411,7 @@ def check_locale(report: DoctorReport):
 
     # Multibyte evaluation in Zsh
     if shutil.which("zsh"):
-        code, _out = run_cmd(["zsh", "-c", '[ "${#${:-🐧}}" -eq 1 ]'])
+        code, _out, _ = run_cmd(["zsh", "-c", '[ "${#${:-🐧}}" -eq 1 ]'])
         if code == 0:
             report.ok("Zsh multibyte parsing", "Single-char UTF-8 glyphs confirmed")
         else:
@@ -415,7 +440,7 @@ def check_ssh(report: DoctorReport, dotfiles: Path, fix: bool = False):
         report.warn("~/.ssh/config", "Missing shared defaults Include. Run with --fix")
 
     # ssh-add exit codes: 0 = keys loaded, 1 = agent running without keys, 2 = no agent
-    code, _ = run_cmd(["ssh-add", "-l"])
+    code, _, _ = run_cmd(["ssh-add", "-l"])
     if code == 0:
         report.ok("SSH agent", "Running with keys loaded")
     elif code == 1:
@@ -459,8 +484,8 @@ def check_git_signing(report: DoctorReport, fix: bool = False):
         report.warn("Git config", "git binary not installed")
         return
 
-    _, name = run_cmd(["git", "config", "--get", "user.name"])
-    _, email = run_cmd(["git", "config", "--get", "user.email"])
+    _, name, _ = run_cmd(["git", "config", "--get", "user.name"])
+    _, email, _ = run_cmd(["git", "config", "--get", "user.email"])
     if name:
         report.ok("Git user.name", name)
     else:
@@ -471,9 +496,9 @@ def check_git_signing(report: DoctorReport, fix: bool = False):
     else:
         report.warn("Git user.email", "Not set in git config")
 
-    _, sign = run_cmd(["git", "config", "--get", "commit.gpgsign"])
-    _, format_type = run_cmd(["git", "config", "--get", "gpg.format"])
-    _, signing_key = run_cmd(["git", "config", "--get", "user.signingkey"])
+    _, sign, _ = run_cmd(["git", "config", "--get", "commit.gpgsign"])
+    _, format_type, _ = run_cmd(["git", "config", "--get", "gpg.format"])
+    _, signing_key, _ = run_cmd(["git", "config", "--get", "user.signingkey"])
 
     if sign == "true":
         key_desc = f"{format_type or 'gpg'} ({signing_key})" if signing_key else "Enabled"
@@ -519,6 +544,7 @@ def run_doctor(fix: bool = False) -> int:
     print_header(header_text)
 
     check_repository(report, dotfiles)
+    check_zsh_bytecode(report, dotfiles, fix=fix)
     check_and_heal_symlinks(report, dotfiles, fix=fix)
     check_cli_tools(report, fix=fix)
     check_locale(report)

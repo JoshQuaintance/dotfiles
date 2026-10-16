@@ -1,30 +1,7 @@
-# Ensure UTF-8 locale is always active and valid for Unicode & multibyte rendering
-if [[ "$OSTYPE" == darwin* ]] || [ "$(uname -s 2>/dev/null)" = "Darwin" ]; then
-    _def_locale="en_US.UTF-8"
-else
-    _def_locale="C.UTF-8"
-    if [ -d "/usr/lib/locale/en_US.utf8" ] || (command -v locale >/dev/null 2>&1 && locale -a 2>/dev/null | grep -qi "^en_US\.utf8$"); then
-        _def_locale="en_US.UTF-8"
-    fi
+# UTF-8 locale setup lives in .zshenv (always sourced first); re-source it only if ~/.zshenv wasn't linked
+if [[ -z "$LANG" || "$LANG" == (C|POSIX) ]]; then
+    source "${${(%):-%x}:A:h}/.zshenv"
 fi
-
-# Override broken/unsupported locale if active on Linux
-if [ "$_def_locale" = "C.UTF-8" ]; then
-    if [ "$LANG" = "en_US.UTF-8" ] || [ "$LANG" = "en_US.utf8" ]; then
-        export LANG="C.UTF-8"
-    fi
-    if [ "$LC_ALL" = "en_US.UTF-8" ] || [ "$LC_ALL" = "en_US.utf8" ]; then
-        export LC_ALL="C.UTF-8"
-    fi
-fi
-
-if [ -z "$LANG" ] || [ "$LANG" = "C" ] || [ "$LANG" = "POSIX" ]; then
-    export LANG="$_def_locale"
-fi
-if [ -z "$LC_ALL" ] || [ "$LC_ALL" = "C" ] || [ "$LC_ALL" = "POSIX" ]; then
-    export LC_ALL="$LANG"
-fi
-unset _def_locale
 
 # Mobile / PRoot / Termux detection: default to fast compact startup
 if [[ -n "${TERMUX_VERSION:-}" || -d "/data/data/com.termux" || -n "${PROOT_TMP_DIR:-}" ]] || \
@@ -274,10 +251,8 @@ if command -v fzf &>/dev/null; then
         export FZF_ALT_C_OPTS="--preview 'eza --tree --level=2 --color=always {} 2>/dev/null'"
     fi
 
-    # fzf >= 0.48 ships 'fzf --zsh'; older distro builds (e.g. Debian/Ubuntu apt) only ship example scripts
-    if fzf --zsh &>/dev/null; then
-        source <(fzf --zsh)
-    else
+    # fzf >= 0.48 ships 'fzf --zsh' (cached); older distro builds (e.g. Debian/Ubuntu apt) only ship example scripts
+    if ! _load_cached_init "fzf" "fzf --zsh"; then
         for _fzf_script in \
             /usr/share/doc/fzf/examples/{key-bindings,completion}.zsh \
             /usr/share/fzf/{key-bindings,completion}.zsh; do
@@ -330,7 +305,7 @@ fi
 
 # GPG & Git signing terminal pinentry support (routes passphrase prompt to active terminal)
 if [ -t 0 ] || [ -t 1 ]; then
-    export GPG_TTY=$(tty 2>/dev/null || true)
+    export GPG_TTY=$TTY
 fi
 _step "CLI tools (Atuin, Zoxide, FZF, Bun, Bat)"
 
