@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Description: Configure Windows Terminal from inside WSL (Catppuccin Mocha + Nerd Fonts)
 # ==============================================================================
 # wsl-setup-terminal — Configure Windows Terminal from inside WSL
 # Injects Catppuccin Mocha theme, Miracode + FiraCode NF fonts, and 12px padding

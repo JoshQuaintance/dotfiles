@@ -29,6 +29,10 @@ brew "tlrc"         # Official tldr client in Rust (community cheat sheets)
 brew "tokei"        # Fast codebase line-of-code & language statistics
 brew "glow"         # Render Markdown in the terminal
 brew "hyperfine"    # Statistical command-line benchmarking tool
+brew "jq"           # Lightweight and flexible command-line JSON processor
+brew "ouch"         # Obvious Unified Compression Helper (archive pack/extract)
+brew "shellcheck"   # Static analysis and linting tool for shell scripts
+brew "shfmt"        # Shell parser, formatter, and simplifier
 brew "fzf-tab"      # Interactive zsh completion menu
 brew "zsh-autosuggestions"     # Fish-like fast/unobtrusive autosuggestions for zsh
 brew "zsh-syntax-highlighting" # Fish-like syntax highlighting for zsh

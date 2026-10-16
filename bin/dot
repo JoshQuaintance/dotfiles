@@ -1,4 +1,5 @@
 #!/bin/sh
+# Description: Unified developer workstation CLI (status, doctor, test, bench, clean, prune, sync, update)
 set -e
 
 # Unified Dotfiles CLI executable wrapper

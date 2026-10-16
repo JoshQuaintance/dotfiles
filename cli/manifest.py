@@ -2,6 +2,7 @@ import os
 import platform
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 
 @dataclass
@@ -11,6 +12,53 @@ class SymlinkEntry:
     description: str
     is_directory: bool = False
     required: bool = True
+
+
+@dataclass
+class ToolEntry:
+    """Declarative CLI tool entry consumed by `dot doctor` and `dot test`.
+
+    `brew_formula` maps the binary name back to its Homebrew formula in `Brewfile`
+    (None when managed outside Homebrew, e.g. system zsh, uv, mise, or macOS /usr/bin/trash).
+    """
+
+    bin_name: str
+    label: str
+    version_cmd: list[str]
+    brew_formula: Optional[str] = None
+
+
+def get_cli_tool_manifest() -> list[ToolEntry]:
+    """Return the canonical catalog of CLI tools audited by `dot doctor`."""
+    return [
+        ToolEntry("git", "Git version control", ["git", "--version"], "git"),
+        ToolEntry("delta", "git-delta syntax diff pager", ["delta", "--version"], "git-delta"),
+        ToolEntry("zsh", "Zsh shell", ["zsh", "--version"]),
+        ToolEntry("rg", "ripgrep search", ["rg", "--version"], "ripgrep"),
+        ToolEntry("fd", "fd file finder", ["fd", "--version"], "fd"),
+        ToolEntry("fzf", "fzf fuzzy finder", ["fzf", "--version"], "fzf"),
+        ToolEntry("zoxide", "zoxide smart cd", ["zoxide", "--version"], "zoxide"),
+        ToolEntry("eza", "eza modern ls", ["eza", "--version"], "eza"),
+        ToolEntry("atuin", "Atuin shell history", ["atuin", "--version"], "atuin"),
+        ToolEntry("bat", "bat syntax viewer", ["bat", "--version"], "bat"),
+        ToolEntry("jq", "jq JSON processor", ["jq", "--version"], "jq"),
+        ToolEntry("ouch", "ouch archive compressor", ["ouch", "--version"], "ouch"),
+        ToolEntry("mise", "Mise polyglot runtime", ["mise", "--version"]),
+        ToolEntry("nvim", "Neovim editor", ["nvim", "--version"], "neovim"),
+        ToolEntry("yazi", "Yazi file manager", ["yazi", "--version"], "yazi"),
+        ToolEntry("dust", "dust disk analyzer", ["dust", "--version"], "dust"),
+        ToolEntry("btop", "btop system monitor", ["btop", "--version"], "btop"),
+        ToolEntry("tldr", "tlrc cheat sheets (tldr)", ["tldr", "--version"], "tlrc"),
+        ToolEntry("tokei", "tokei codebase statistics", ["tokei", "--version"], "tokei"),
+        ToolEntry("hyperfine", "hyperfine CLI benchmark", ["hyperfine", "--version"], "hyperfine"),
+        ToolEntry("lazygit", "lazygit git terminal UI", ["lazygit", "--version"], "lazygit"),
+        ToolEntry("glow", "glow Markdown renderer", ["glow", "--version"], "glow"),
+        ToolEntry("shellcheck", "shellcheck static analyzer", ["shellcheck", "--version"], "shellcheck"),
+        ToolEntry("shfmt", "shfmt shell formatter", ["shfmt", "--version"], "shfmt"),
+        ToolEntry("trash", "trash (del alias)", ["sh", "-c", "command -v trash"]),
+        ToolEntry("uv", "uv Astral Python manager", ["uv", "--version"]),
+    ]
+
 
 def ensure_standard_path() -> None:
     """Ensure Homebrew, Linuxbrew, Mise, Atuin, and ~/.local/bin are in PATH even in non-interactive shells."""

@@ -7,7 +7,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from cli.manifest import get_dotfiles_dir, get_symlink_manifest
+from cli.manifest import get_cli_tool_manifest, get_dotfiles_dir, get_symlink_manifest
 from cli.prompt import get_active_prompt
 from cli.ui import (
     C_BOLD,
@@ -167,51 +167,6 @@ def check_and_heal_symlinks(report: DoctorReport, dotfiles: Path, fix: bool = Fa
 
 def check_cli_tools(report: DoctorReport, fix: bool = False):
     print(f"\n{C_BOLD}3. Core CLI & Runtime Tools{C_RESET}")
-    tools = [
-        ("git", "Git version control", ["git", "--version"]),
-        ("delta", "git-delta syntax diff pager", ["delta", "--version"]),
-        ("zsh", "Zsh shell", ["zsh", "--version"]),
-        ("rg", "ripgrep search", ["rg", "--version"]),
-        ("fd", "fd file finder", ["fd", "--version"]),
-        ("fzf", "fzf fuzzy finder", ["fzf", "--version"]),
-        ("zoxide", "zoxide smart cd", ["zoxide", "--version"]),
-        ("eza", "eza modern ls", ["eza", "--version"]),
-        ("atuin", "Atuin shell history", ["atuin", "--version"]),
-        ("bat", "bat syntax viewer", ["bat", "--version"]),
-        ("mise", "Mise polyglot runtime", ["mise", "--version"]),
-        ("nvim", "Neovim editor", ["nvim", "--version"]),
-        ("yazi", "Yazi file manager", ["yazi", "--version"]),
-        ("dust", "dust disk analyzer", ["dust", "--version"]),
-        ("btop", "btop system monitor", ["btop", "--version"]),
-        ("tldr", "tlrc cheat sheets (tldr)", ["tldr", "--version"]),
-        ("tokei", "tokei codebase statistics", ["tokei", "--version"]),
-        ("hyperfine", "hyperfine CLI benchmark", ["hyperfine", "--version"]),
-        ("lazygit", "lazygit git terminal UI", ["lazygit", "--version"]),
-        ("glow", "glow Markdown renderer", ["glow", "--version"]),
-        ("trash", "trash (del alias)", ["sh", "-c", "command -v trash"]),
-        ("uv", "uv Astral Python manager", ["uv", "--version"]),
-    ]
-
-    brew_formula_map = {
-        "delta": "git-delta",
-        "rg": "ripgrep",
-        "fd": "fd",
-        "fzf": "fzf",
-        "bat": "bat",
-        "eza": "eza",
-        "zoxide": "zoxide",
-        "atuin": "atuin",
-        "yazi": "yazi",
-        "btop": "btop",
-        "dust": "dust",
-        "tldr": "tlrc",
-        "tokei": "tokei",
-        "glow": "glow",
-        "hyperfine": "hyperfine",
-        "lazygit": "lazygit",
-        "nvim": "neovim",
-        "git": "git",
-    }
 
     def _should_install(item_name: str, package: str) -> bool:
         if fix:
@@ -224,24 +179,24 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
                 return False
         return False
 
-    for bin_name, label, cmd in tools:
-        if shutil.which(bin_name):
-            code, ver, _ = run_cmd(cmd)
+    for tool in get_cli_tool_manifest():
+        if shutil.which(tool.bin_name):
+            _, ver, _ = run_cmd(tool.version_cmd)
             first_line = ver.splitlines()[0] if ver else "installed"
-            report.ok(label, first_line[:38])
-        elif shutil.which("brew") and bin_name in brew_formula_map:
-            formula = brew_formula_map[bin_name]
-            if _should_install(label, formula):
+            report.ok(tool.label, first_line[:38])
+        elif shutil.which("brew") and tool.brew_formula:
+            formula = tool.brew_formula
+            if _should_install(tool.label, formula):
                 print(f"  \033[1;34m==>\033[0m Installing {formula} via brew...")
                 code, _, _ = run_cmd(["brew", "install", formula], timeout=600)
                 if code == 0:
-                    report.fixed(label, f"Installed {formula} via brew")
+                    report.fixed(tool.label, f"Installed {formula} via brew")
                 else:
-                    report.warn(label, f"brew install {formula} failed")
+                    report.warn(tool.label, f"brew install {formula} failed")
             else:
-                report.warn(label, f"{bin_name} binary not found")
+                report.warn(tool.label, f"{tool.bin_name} binary not found")
         else:
-            report.warn(label, f"{bin_name} binary not found")
+            report.warn(tool.label, f"{tool.bin_name} binary not found")
 
     # Check Active Zsh prompt installation
     home = Path.home()

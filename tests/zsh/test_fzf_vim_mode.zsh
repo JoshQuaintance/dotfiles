@@ -42,3 +42,20 @@ test_fzf_vim_mode_extra_binds_preserved() {
   assert_contains "$flags_str" "a:toggle-all"
   assert_contains "$flags_str" "enter:accept"
 }
+
+test_fzf_split_expect_parses_key_and_lines() {
+  local key="" selected_lines=""
+  _fzf_split_expect $'ctrl-v\nfirst-item\nsecond-item' || fail "expected split to succeed"
+  assert_eq "ctrl-v" "$key"
+  assert_eq $'first-item\nsecond-item' "$selected_lines"
+
+  # Enter key produces an empty first line followed by the selected item
+  _fzf_split_expect $'\nonly-item' || fail "expected empty-key split to succeed"
+  assert_eq "" "$key"
+  assert_eq "only-item" "$selected_lines"
+
+  # Empty or single-line input (cancelled selection) must return non-zero
+  if _fzf_split_expect ""; then
+    fail "expected empty input to return non-zero"
+  fi
+}

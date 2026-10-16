@@ -1,5 +1,7 @@
 # Interactive Package.json Script Selector (FZF)
 
+# Walk upward from $PWD to the git root looking for the nearest package.json.
+# Uses Zsh `${dir:h}` (parent directory modifier) to avoid spawning `dirname` in a loop.
 _find_package_json() {
   local dir="$PWD"
   while [ "$dir" != "/" ] && [ -n "$dir" ]; do
@@ -10,11 +12,13 @@ _find_package_json() {
     if [ -d "$dir/.git" ] || [ -f "$dir/.git" ]; then
       break
     fi
-    dir="$(dirname "$dir")"
+    dir="${dir:h}"
   done
   return 1
 }
 
+# Extract `<script_name>\t<command>` rows from package.json.
+# Prefers `jq` (~3ms) and falls back to `node` or `bun` when `jq` is unavailable.
 _extract_pkg_scripts() {
   local pkg_file="$1"
   if command -v jq &>/dev/null; then
@@ -94,14 +98,9 @@ _pkg_script_select() {
     --preview="$preview_cmd" \
     --preview-window="right:50%:wrap")
 
-  [ -z "$selection" ] && return 0
-
-  local key
-  key=$(echo "$selection" | head -n1)
-  local selected_line
-  selected_line=$(echo "$selection" | sed '1d')
-  local selected
-  selected=$(echo "$selected_line" | awk -F'\t' '{print $2}')
+  local key="" selected_lines=""
+  _fzf_split_expect "$selection" || return 0
+  local selected="${selected_lines#*$'\t'}"
 
   [ -z "$selected" ] && return 0
 

@@ -63,16 +63,16 @@ up() {
   fi
 
   # 1. Pure numeric level navigation for small numbers (1..10)
+  # Uses Zsh parameter modifiers (:h = parent dirname, :t = basename, :l = lowercase) to avoid subshell forks in loops
   if [[ "$target" =~ ^[0-9]+$ ]] && (( target >= 1 && target <= 10 )); then
     # Check if there is an exact directory name matching this number first (e.g. directory named "2")
-    local p="$curr"
-    p="$(dirname "$p")"
+    local p="${curr:h}"
     while [ "$p" != "/" ] && [ -n "$p" ]; do
-      if [[ "${(L)$(basename "$p")}" == "${(L)target}" ]]; then
+      if [[ "${p:t:l}" == "${target:l}" ]]; then
         cd "$p" || return 1
         return 0
       fi
-      p="$(dirname "$p")"
+      p="${p:h}"
     done
 
     # Ascend N levels
@@ -86,28 +86,23 @@ up() {
   fi
 
   # 2. Search upward: Pass 1 - Exact match (case-insensitive)
-  local base_name=""
-  local p="$curr"
-  p="$(dirname "$p")"
+  local p="${curr:h}"
   while [ "$p" != "/" ] && [ -n "$p" ]; do
-    base_name="$(basename "$p")"
-    if [[ "${(L)base_name}" == "${(L)target}" ]]; then
+    if [[ "${p:t:l}" == "${target:l}" ]]; then
       cd "$p" || return 1
       return 0
     fi
-    p="$(dirname "$p")"
+    p="${p:h}"
   done
 
   # Pass 2 - Substring / Prefix match (case-insensitive)
-  p="$curr"
-  p="$(dirname "$p")"
+  p="${curr:h}"
   while [ "$p" != "/" ] && [ -n "$p" ]; do
-    base_name="$(basename "$p")"
-    if [[ "${(L)base_name}" == *"${(L)target}"* ]]; then
+    if [[ "${p:t:l}" == *"${target:l}"* ]]; then
       cd "$p" || return 1
       return 0
     fi
-    p="$(dirname "$p")"
+    p="${p:h}"
   done
 
   # 3. Safety fallback: If target was not found as an ancestor, stay put and warn
@@ -118,11 +113,10 @@ up() {
 # Tab completion for up: dynamically lists ancestor directory names
 _up() {
   local -a ancestors
-  local p="$PWD"
-  p="$(dirname "$p")"
+  local p="${PWD:h}"
   while [ "$p" != "/" ] && [ -n "$p" ]; do
-    ancestors+=("$(basename "$p")")
-    p="$(dirname "$p")"
+    ancestors+=("${p:t}")
+    p="${p:h}"
   done
   _describe 'ancestor directory' ancestors
 }
@@ -244,14 +238,10 @@ d() {
     --preview='p={2}; p="${p/#\~/$HOME}"; if command -v eza &>/dev/null; then eza --tree --level=2 --icons --color=always "$p" 2>/dev/null; else ls -la "$p" 2>/dev/null; fi' \
     --preview-window='right:55%:wrap')
 
-  [ -z "$selected" ] && return 0
-
-  local key
-  key=$(echo "$selected" | head -n1)
-  local chosen_line
-  chosen_line=$(echo "$selected" | sed '1d')
+  local key="" selected_lines=""
+  _fzf_split_expect "$selected" || return 0
   local chosen
-  chosen=$(echo "$chosen_line" | awk '{print $2}')
+  chosen=$(echo "$selected_lines" | awk '{print $2}')
   chosen="${chosen/#\~/$HOME}"
 
   [ -z "$chosen" ] && return 0

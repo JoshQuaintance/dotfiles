@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Description: Interactive .gitignore generator using gitignore.io templates
 set -e
 
 # Color output helpers

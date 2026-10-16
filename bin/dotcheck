@@ -1,4 +1,4 @@
 #!/bin/sh
-# Quick shortcut to check dotfiles update status without applying
+# Description: Check if dotfiles repository has upstream updates without applying
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 exec "$SCRIPT_DIR/dotupdate" --check "$@"

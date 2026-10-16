@@ -53,10 +53,9 @@ wt() {
 
     [ -z "$selected" ] && return 0
 
-    local key
-    key=$(echo "$selected" | head -n1)
-    local selected_line
-    selected_line=$(echo "$selected" | sed '1d')
+    local key selected_lines selected_line
+    _fzf_split_expect "$selected" || return 0
+    selected_line="${selected_lines%%$'\n'*}"
     local target_dir
     target_dir=$(echo "$selected_line" | awk '{print $1}')
     local target_branch
@@ -134,8 +133,8 @@ _copy_worktree_env() {
 
   (( ${#pending_files[@]} == 0 )) && return 1
 
-  local src_name
-  src_name="$(basename "$chosen_src")"
+  # :t = tail (basename) without forking a subshell
+  local src_name="${chosen_src:t}"
 
   if [ "$auto_copy" != true ]; then
     printf "Copy %d .env file(s) (\033[1m%s\033[0m) from \033[1;36m%s\033[0m? [Y/n]: " \
@@ -152,7 +151,8 @@ _copy_worktree_env() {
     env_file="${pending_files[$i]}"
     rel_path="${pending_rels[$i]}"
     dest_file="$dest_wt/$rel_path"
-    mkdir -p "$(dirname "$dest_file")"
+    # :h = head (dirname) without forking a subshell
+    mkdir -p "${dest_file:h}"
     cp -p "$env_file" "$dest_file"
     printf "  \033[32m✔\033[0m Copied \033[1m%s\033[0m from %s\n" "$rel_path" "$src_name"
   done
@@ -337,7 +337,8 @@ gwtnew() {
   if [[ "$target_branch" =~ ([A-Za-z]+-[0-9]+) ]]; then
     target_folder="${match[1]:u}"
   else
-    target_folder="$(basename "$target_branch")"
+    # :t = tail (basename) without forking a subshell
+    target_folder="${target_branch:t}"
   fi
 
   local target_wt_path="$main_root/$target_folder"
@@ -455,7 +456,8 @@ gwts() {
       sync_str="\033[38;2;108;112;134m(no upstream)\033[0m"
     fi
 
-    wt_name="$(basename "$wt_path")"
+    # :t = tail (basename) without forking a subshell
+    wt_name="${wt_path:t}"
     wt_display_branch="$wt_branch"
     if [ "${#wt_display_branch}" -gt 36 ]; then
       wt_display_branch="${wt_display_branch:0:33}..."
@@ -499,9 +501,10 @@ gwtdel() {
   if [ -n "$target_input" ]; then
     for item in "${eligible[@]}"; do
       p="${item%%|*}"
-      bname="$(basename "$p")"
+      # :t = tail (basename) without forking a subshell
+      bname="${p:t}"
       br="${item##*|}"
-      if [[ "${(L)bname}" == *"${(L)target_input}"* ]] || [[ "${(L)br}" == *"${(L)target_input}"* ]]; then
+      if [[ "${bname:l}" == *"${target_input:l}"* ]] || [[ "${br:l}" == *"${target_input:l}"* ]]; then
         target_wt="$p"
         target_branch="$br"
         break
@@ -509,8 +512,8 @@ gwtdel() {
     done
 
     if [ -z "$target_wt" ]; then
-      if [[ "${(L)$(basename "$active_wt")}" == *"${(L)target_input}"* ]]; then
-        printf "\033[31m✖ Cannot delete the active worktree (%s). cd to another directory first.\033[0m\n" "$(basename "$active_wt")" >&2
+      if [[ "${active_wt:t:l}" == *"${target_input:l}"* ]]; then
+        printf "\033[31m✖ Cannot delete the active worktree (%s). cd to another directory first.\033[0m\n" "${active_wt:t}" >&2
         return 1
       fi
       printf "\033[31m✖ No disposable worktree matching '%s' found.\033[0m\n" "$target_input" >&2
@@ -525,7 +528,7 @@ gwtdel() {
     for item in "${eligible[@]}"; do
       p="${item%%|*}"
       br="${item##*|}"
-      bname="$(basename "$p")"
+      bname="${p:t}"
       local dirty_flag=""
       [ -n "$(git -C "$p" status --porcelain 2>/dev/null)" ] && dirty_flag=" *dirty*"
       fzf_lines+="${bname}\t[${br}]${dirty_flag}\t${p}\n"
@@ -553,7 +556,7 @@ gwtdel() {
     done
   fi
 
-  wt_name="$(basename "$target_wt")"
+  wt_name="${target_wt:t}"
   [ -n "$(git -C "$target_wt" status --porcelain 2>/dev/null)" ] && is_dirty=true
 
   if [ "$is_dirty" = true ]; then
@@ -595,6 +598,27 @@ gwtdel() {
   fi
 }
 
+# Internal helper: check if a worktree's remote upstream tracking branch has been deleted
+_gwtclean_is_gone() {
+  local p="$1"
+  local b="$2"
+  local main_worktree="$3"
+  [ -z "$p" ] || [ -z "$b" ] || [ "$p" = "$main_worktree" ] && return 1
+  if git -C "$p" branch -vv --list "$b" 2>/dev/null | grep -q '\[.*: gone\]'; then
+    return 0
+  fi
+  local upstream_ref remote_name
+  upstream_ref="$(git -C "$p" config --get "branch.${b}.merge" 2>/dev/null || true)"
+  remote_name="$(git -C "$p" config --get "branch.${b}.remote" 2>/dev/null || true)"
+  if [ -n "$upstream_ref" ] && [ -n "$remote_name" ]; then
+    local short_ref="${upstream_ref#refs/heads/}"
+    if ! git -C "$p" rev-parse --verify "refs/remotes/${remote_name}/${short_ref}" &>/dev/null; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
 # Git Worktree Clean / Prune (gwtclean / gwtprune / gwtc)
 # Prunes worktrees whose remote upstream branch has been deleted on the remote
 gwtclean() {
@@ -617,31 +641,12 @@ gwtclean() {
   local _wt_path=""
   local _wt_branch=""
 
-  _check_candidate() {
-    local p="$1"
-    local b="$2"
-    if [ -n "$p" ] && [ -n "$b" ] && [ "$p" != "$main_worktree" ]; then
-      if git -C "$p" branch -vv --list "$b" 2>/dev/null | grep -q '\[.*: gone\]'; then
-        candidates+=("${p}|${b}")
-      else
-        local upstream_ref
-        upstream_ref="$(git -C "$p" config --get "branch.${b}.merge" 2>/dev/null || true)"
-        local remote_name
-        remote_name="$(git -C "$p" config --get "branch.${b}.remote" 2>/dev/null || true)"
-        if [ -n "$upstream_ref" ] && [ -n "$remote_name" ]; then
-          local short_ref="${upstream_ref#refs/heads/}"
-          if ! git -C "$p" rev-parse --verify "refs/remotes/${remote_name}/${short_ref}" &>/dev/null; then
-            candidates+=("${p}|${b}")
-          fi
-        fi
-      fi
-    fi
-  }
-
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       worktree\ *)
-        _check_candidate "$_wt_path" "$_wt_branch"
+        if _gwtclean_is_gone "$_wt_path" "$_wt_branch" "$main_worktree"; then
+          candidates+=("${_wt_path}|${_wt_branch}")
+        fi
         _wt_path="${line#worktree }"
         _wt_branch=""
         ;;
@@ -649,13 +654,17 @@ gwtclean() {
         _wt_branch="${line#branch refs/heads/}"
         ;;
       "")
-        _check_candidate "$_wt_path" "$_wt_branch"
+        if _gwtclean_is_gone "$_wt_path" "$_wt_branch" "$main_worktree"; then
+          candidates+=("${_wt_path}|${_wt_branch}")
+        fi
         _wt_path=""
         _wt_branch=""
         ;;
     esac
   done <<< "$(git worktree list --porcelain)"
-  _check_candidate "$_wt_path" "$_wt_branch"
+  if _gwtclean_is_gone "$_wt_path" "$_wt_branch" "$main_worktree"; then
+    candidates+=("${_wt_path}|${_wt_branch}")
+  fi
 
   local count="${#candidates[@]}"
   if [ "$count" -eq 0 ]; then

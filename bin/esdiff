@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Description: Run ESLint only on TypeScript files changed vs upstream base branch
 set -e
 
 # ESLint changed TypeScript files compared to upstream/base branch

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Description: Terminate process listening on a given TCP port (non-interactive script counterpart to `port -k`)
 set -e
 
 # Kill process listening on a given TCP port (macOS & Linux)

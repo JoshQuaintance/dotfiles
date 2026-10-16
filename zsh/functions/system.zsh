@@ -1,3 +1,33 @@
+# Internal helper: list listening TCP ports across macOS (lsof) and Linux (lsof or ss)
+_port_list_listening() {
+  if command -v lsof &>/dev/null; then
+    lsof -iTCP -sTCP:LISTEN -P -n 2>/dev/null | awk 'NR>1 {
+      split($9, a, ":");
+      p = a[length(a)];
+      key = p ":" $2;
+      if (!seen[key]++) {
+        printf "%-8s\t%-8s\t%-18s\t%s\n", p, $2, $1, $9
+      }
+    }' | sort -n -k1,1
+  elif command -v ss &>/dev/null; then
+    ss -tlnp 2>/dev/null | awk 'NR>1 {
+      split($4, a, ":");
+      p = a[length(a)];
+      pid = "-"; proc = "-";
+      if (match($0, /pid=[0-9]+/)) {
+        pid = substr($0, RSTART+4, RLENGTH-4);
+      }
+      if (match($0, /\("[^"]+"/)) {
+        proc = substr($0, RSTART+2, RLENGTH-3);
+      }
+      key = p ":" pid;
+      if (!seen[key]++) {
+        printf "%-8s\t%-8s\t%-18s\t%s\n", p, pid, proc, $4
+      }
+    }' | sort -n -k1,1
+  fi
+}
+
 # Interactive TCP Port Inspector & Killer (port)
 # Usage:
 #   port             -> Interactive modal-Vim FZF browser of all listening TCP ports (Enter/x to kill)
@@ -18,36 +48,6 @@ port() {
     kill_mode=true
     shift
   fi
-
-  # Helper to list listening ports across macOS (lsof) and Linux (lsof or ss)
-  _list_listening_ports() {
-    if command -v lsof &>/dev/null; then
-      lsof -iTCP -sTCP:LISTEN -P -n 2>/dev/null | awk 'NR>1 {
-        split($9, a, ":");
-        p = a[length(a)];
-        key = p ":" $2;
-        if (!seen[key]++) {
-          printf "%-8s\t%-8s\t%-18s\t%s\n", p, $2, $1, $9
-        }
-      }' | sort -n -k1,1
-    elif command -v ss &>/dev/null; then
-      ss -tlnp 2>/dev/null | awk 'NR>1 {
-        split($4, a, ":");
-        p = a[length(a)];
-        pid = "-"; proc = "-";
-        if (match($0, /pid=[0-9]+/)) {
-          pid = substr($0, RSTART+4, RLENGTH-4);
-        }
-        if (match($0, /\("[^"]+"/)) {
-          proc = substr($0, RSTART+2, RLENGTH-3);
-        }
-        key = p ":" pid;
-        if (!seen[key]++) {
-          printf "%-8s\t%-8s\t%-18s\t%s\n", p, pid, proc, $4
-        }
-      }' | sort -n -k1,1
-    fi
-  }
 
   # Direct port argument provided
   if [ -n "$1" ]; then
@@ -81,7 +81,7 @@ port() {
 
   # No port specified: non-TTY or missing fzf prints table
   local rows
-  rows="$(_list_listening_ports)"
+  rows="$(_port_list_listening)"
   if [ -z "$rows" ]; then
     printf "\033[33mNo listening TCP ports found.\033[0m\n"
     return 0
@@ -124,6 +124,27 @@ port() {
   done <<< "$selected"
 }
 
+# Internal helper: list user processes sorted by CPU and memory for `fkill`
+_fkill_list_procs() {
+  local target_user="${1:-${USER:-$(id -un 2>/dev/null)}}"
+  ps -u "$target_user" -o pid=,%cpu=,%mem=,args= 2>/dev/null | awk '
+    $1 ~ /^[0-9]+$/ {
+      pid = $1; cpu = $2; mem = $3;
+      cmd = "";
+      for (i = 4; i <= NF; i++) cmd = cmd (i == 4 ? "" : " ") $i;
+      comm = $4;
+      if (match(cmd, /^\/[^ ]*\.app\/Contents\/MacOS\/[^ ]+/)) {
+        comm = substr(cmd, RSTART, RLENGTH);
+      }
+      sub(/^.*[\/]/, "", comm);
+      sub(/:$/, "", comm);
+      if (length(comm) > 20) comm = substr(comm, 1, 20);
+      if (length(cmd) > 90) cmd = substr(cmd, 1, 87) "...";
+      printf "%-8s\t%6s%%\t%6s%%\t%-20s\t%s\n", pid, cpu, mem, comm, cmd
+    }
+  ' | sort -rn -k2,2 -k3,3
+}
+
 # Interactive Process Browser & Killer (fkill / kp)
 # Usage:
 #   fkill            -> Interactive modal-Vim FZF browser of user processes sorted by CPU/MEM
@@ -143,27 +164,8 @@ fkill() {
   local query="$*"
   local target_user="${USER:-$(id -un 2>/dev/null)}"
 
-  _list_user_procs() {
-    ps -u "$target_user" -o pid=,%cpu=,%mem=,args= 2>/dev/null | awk '
-      $1 ~ /^[0-9]+$/ {
-        pid = $1; cpu = $2; mem = $3;
-        cmd = "";
-        for (i = 4; i <= NF; i++) cmd = cmd (i == 4 ? "" : " ") $i;
-        comm = $4;
-        if (match(cmd, /^\/[^ ]*\.app\/Contents\/MacOS\/[^ ]+/)) {
-          comm = substr(cmd, RSTART, RLENGTH);
-        }
-        sub(/^.*[\/]/, "", comm);
-        sub(/:$/, "", comm);
-        if (length(comm) > 20) comm = substr(comm, 1, 20);
-        if (length(cmd) > 90) cmd = substr(cmd, 1, 87) "...";
-        printf "%-8s\t%6s%%\t%6s%%\t%-20s\t%s\n", pid, cpu, mem, comm, cmd
-      }
-    ' | sort -rn -k2,2 -k3,3
-  }
-
   local rows
-  rows="$(_list_user_procs)"
+  rows="$(_fkill_list_procs "$target_user")"
   if [ -z "$rows" ]; then
     printf "\033[33mNo running processes found for user %s.\033[0m\n" "$target_user"
     return 0
@@ -190,13 +192,8 @@ fkill() {
     --preview='pid=$(echo {1} | tr -d " "); if [ -n "$pid" ]; then ps -p "$pid" -o pid,ppid,user,%cpu,%mem,etime,command 2>/dev/null; echo ""; if command -v lsof &>/dev/null; then lsof -p "$pid" -i -P -n 2>/dev/null | head -n 15; fi; fi' \
     --preview-window='right:50%:wrap')
 
-  [ -z "$selection" ] && return 0
-
-  local key
-  key=$(echo "$selection" | head -n1)
-  local selected_lines
-  selected_lines=$(echo "$selection" | sed '1d')
-  [ -z "$selected_lines" ] && return 0
+  local key selected_lines
+  _fzf_split_expect "$selection" || return 0
 
   local sig="-15"
   local sig_name="SIGTERM (-15)"
@@ -256,7 +253,8 @@ fcon() {
   local raw_containers
   raw_containers=$("$rt" ps -a --format '{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Ports}}' 2>/dev/null)
   if [ -z "$raw_containers" ]; then
-    printf "\033[33mNo containers found (%s).\033[0m\n" "$(basename "$rt")"
+    # :t = tail (basename) without forking a subshell
+    printf "\033[33mNo containers found (%s).\033[0m\n" "${rt:t}"
     return 0
   fi
 
@@ -284,7 +282,7 @@ fcon() {
   local query="$*"
   local hdr=$'  j/k: move │ space: select │ enter/l: logs -f │ s: shell │ r: restart │ x: stop │ /: search │ q: quit\n  ID          \tNAME                    \tSTATUS                \tIMAGE                       \tPORTS'
   local -a fzf_mode_flags
-  _fzf_vim_mode "🐳 Containers ($(basename "$rt")) > " "$hdr" "follow logs" "space,l,s,r,x" "$query" "space:toggle+down"
+  _fzf_vim_mode "🐳 Containers (${rt:t}) > " "$hdr" "follow logs" "space,l,s,r,x" "$query" "space:toggle+down"
 
   local selection
   selection=$(printf "%s\n" "$formatted" | fzf \
@@ -298,13 +296,8 @@ fcon() {
     --preview="cid=\$(echo {1} | sed 's/\x1b\[[0-9;]*m//g' | tr -d ' '); [ -n \"\$cid\" ] && '$rt' logs --tail 60 \"\$cid\" 2>&1" \
     --preview-window='right:55%:wrap')
 
-  [ -z "$selection" ] && return 0
-
-  local key
-  key=$(echo "$selection" | head -n1)
-  local selected_lines
-  selected_lines=$(echo "$selection" | sed '1d')
-  [ -z "$selected_lines" ] && return 0
+  local key selected_lines
+  _fzf_split_expect "$selection" || return 0
 
   local -a cids cnames
   local cid="" cname=""
@@ -416,12 +409,9 @@ fssh() {
     --preview="$preview_cmd" \
     --preview-window='right:50%:wrap')
 
-  [ -z "$selection" ] && return 0
-
-  local key
-  key=$(echo "$selection" | head -n1)
-  local selected_line
-  selected_line=$(echo "$selection" | sed '1d' | head -n1)
+  local key selected_lines selected_line
+  _fzf_split_expect "$selection" || return 0
+  selected_line="${selected_lines%%$'\n'*}"
   [ -z "$selected_line" ] && return 0
 
   local host_alias host_name user_name
@@ -542,6 +532,7 @@ if [[ "$OSTYPE" != darwin* ]]; then
 fi
 
 # Universal Archive Extractor (extract / x)
+# Uses Rust-based `ouch` when available, with portable fallback to tar/unzip/7z/zstd.
 extract() {
   if [ -z "$1" ]; then
     printf "\033[33mUsage: extract <archive_file>\033[0m\n" >&2
@@ -555,6 +546,16 @@ extract() {
   fi
 
   local file="$1"
+  # :l = lowercase parameter expansion in Zsh
+  case "${file:l}" in
+    *.tar.bz2|*.tbz2|*.tar.gz|*.tgz|*.tar.xz|*.txz|*.tar.zst|*.tar|*.bz2|*.rar|*.gz|*.zip|*.z|*.7z|*.zst)
+      # Fast path: use `ouch decompress --here` when installed, falling back on error
+      if command -v ouch &>/dev/null && ouch decompress --here -y "$file" 2>/dev/null; then
+        return 0
+      fi
+      ;;
+  esac
+
   case "${file:l}" in
     *.tar.bz2|*.tbz2)   tar xvjf "$file" ;;
     *.tar.gz|*.tgz)     tar xvzf "$file" ;;
@@ -576,7 +577,8 @@ extract() {
 }
 
 # Universal Archive Creator (pack)
-# Companion to extract: creates archives from files/directories based on output extension
+# Companion to extract: creates archives from files/directories based on output extension.
+# Uses Rust-based `ouch` when available, with portable fallback to tar/zip/7z/zstd.
 # Usage:
 #   pack <archive_name> <files/dirs...>   -> Create archive in specified format (.tar.gz, .zip, .tar.zst, .7z, etc.)
 #   pack <directory>                      -> Defaults to <directory>.tar.gz
@@ -614,25 +616,37 @@ pack() {
     fi
   done
 
+  local rc=1
+  # :l = lowercase parameter expansion in Zsh
   case "${archive:l}" in
-    *.tar.bz2|*.tbz2)   tar cjvf "$archive" "$@" ;;
-    *.tar.gz|*.tgz)     tar czvf "$archive" "$@" ;;
-    *.tar.xz|*.txz)     tar cJvf "$archive" "$@" ;;
-    *.tar.zst)          tar --zstd -cvf "$archive" "$@" 2>/dev/null || { tar cvf - "$@" | zstd -o "$archive"; } ;;
-    *.tar)              tar cvf "$archive" "$@" ;;
-    *.zip)              zip -r "$archive" "$@" ;;
-    *.7z)               7z a "$archive" "$@" ;;
-    *.gz)               gzip -k -c "$1" > "$archive" ;;
-    *.bz2)              bzip2 -k -c "$1" > "$archive" ;;
-    *.zst)              zstd -k "$1" -o "$archive" ;;
-    *)
-      printf "\033[31m✖ Cannot pack '%s' — unsupported archive extension.\033[0m\n" "$archive" >&2
-      printf "Supported: .tar.gz, .tgz, .tar.bz2, .tbz2, .tar.xz, .txz, .tar.zst, .tar, .zip, .7z, .gz, .bz2, .zst\n" >&2
-      return 1
+    *.tar.bz2|*.tbz2|*.tar.gz|*.tgz|*.tar.xz|*.txz|*.tar.zst|*.tar|*.zip|*.7z|*.gz|*.bz2|*.zst)
+      if command -v ouch &>/dev/null && ouch compress -y "$@" "$archive" 2>/dev/null; then
+        rc=0
+      fi
       ;;
   esac
 
-  local rc=$?
+  if [ $rc -ne 0 ]; then
+    case "${archive:l}" in
+      *.tar.bz2|*.tbz2)   tar cjvf "$archive" "$@" ;;
+      *.tar.gz|*.tgz)     tar czvf "$archive" "$@" ;;
+      *.tar.xz|*.txz)     tar cJvf "$archive" "$@" ;;
+      *.tar.zst)          tar --zstd -cvf "$archive" "$@" 2>/dev/null || { tar cvf - "$@" | zstd -o "$archive"; } ;;
+      *.tar)              tar cvf "$archive" "$@" ;;
+      *.zip)              zip -r "$archive" "$@" ;;
+      *.7z)               7z a "$archive" "$@" ;;
+      *.gz)               gzip -k -c "$1" > "$archive" ;;
+      *.bz2)              bzip2 -k -c "$1" > "$archive" ;;
+      *.zst)              zstd -k "$1" -o "$archive" ;;
+      *)
+        printf "\033[31m✖ Cannot pack '%s' — unsupported archive extension.\033[0m\n" "$archive" >&2
+        printf "Supported: .tar.gz, .tgz, .tar.bz2, .tbz2, .tar.xz, .txz, .tar.zst, .tar, .zip, .7z, .gz, .bz2, .zst\n" >&2
+        return 1
+        ;;
+    esac
+    rc=$?
+  fi
+
   if [ $rc -eq 0 ] && [ -f "$archive" ]; then
     local sz
     sz=$(du -h "$archive" 2>/dev/null | awk '{print $1}')
@@ -669,12 +683,13 @@ notify() {
     printf '\e]9;%s\a' "$msg" 2>/dev/null
   fi
 
-  # 1. macOS: Persistent non-blocking floating alert (stays until dismissed) + Notification Center banner + chime
+  # 1. macOS: Persistent non-blocking floating alert + Notification Center banner + chime.
+  # Passes $title and $msg via `on run argv` so quotes/backslashes in command strings never break AppleScript.
   if [[ "$OSTYPE" == darwin* ]] || [ "$(uname -s 2>/dev/null)" = "Darwin" ]; then
-    osascript -e "display notification \"$msg\" with title \"$title\" sound name \"Glass\"" 2>/dev/null || \
-      osascript -e "display notification \"$msg\" with title \"$title\"" 2>/dev/null || true
+    osascript -e 'on run argv' -e 'display notification (item 2 of argv) with title (item 1 of argv) sound name "Glass"' -e 'end run' -- "$title" "$msg" 2>/dev/null || \
+      osascript -e 'on run argv' -e 'display notification (item 2 of argv) with title (item 1 of argv)' -e 'end run' -- "$title" "$msg" 2>/dev/null || true
     if [ "$banner_only" = false ] && [ -t 1 ] && [ -z "$CI" ] && [ "$title" != "dottest" ]; then
-      osascript -e "display alert \"$title\" message \"$msg\" as informational buttons {\"Dismiss\"} default button \"Dismiss\"" &>/dev/null &!
+      osascript -e 'on run argv' -e 'display alert (item 1 of argv) message (item 2 of argv) as informational buttons {"Dismiss"} default button "Dismiss"' -e 'end run' -- "$title" "$msg" &>/dev/null &!
     fi
     if [ -t 1 ] && [ "$title" != "dottest" ] && [ -f "/System/Library/Sounds/Glass.aiff" ]; then
       afplay "/System/Library/Sounds/Glass.aiff" &>/dev/null &!
@@ -689,18 +704,20 @@ notify() {
     fi
 
   # 3. WSL: Persistent Windows 10/11 Toast Notification (scenario="reminder" stays until dismissed)
+  # Passes title/message via environment variables so quotes or `$` never cause PowerShell injection.
   elif command -v powershell.exe &>/dev/null; then
-    powershell.exe -NoProfile -Command "
-      [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > \$null
-      \$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
-      \$xml = [xml]\$template.GetXml()
-      \$toastNode = \$xml.SelectSingleNode('/toast')
-      if (\$toastNode -ne \$null) { \$toastNode.SetAttribute('scenario', 'reminder') }
-      \$xml.GetElementsByTagName('text')[0].AppendChild(\$xml.CreateTextNode('$title')) > \$null
-      \$xml.GetElementsByTagName('text')[1].AppendChild(\$xml.CreateTextNode('$msg')) > \$null
-      \$toast = [Windows.UI.Notifications.ToastNotification]::new(\$xml)
-      [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Terminal').Show(\$toast)
-    " 2>/dev/null || true
+    NOTIFY_TITLE="$title" NOTIFY_MSG="$msg" WSLENV="${WSLENV:+$WSLENV:}NOTIFY_TITLE/u:NOTIFY_MSG/u" \
+      powershell.exe -NoProfile -Command '
+        [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
+        $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+        $xml = [xml]$template.GetXml()
+        $toastNode = $xml.SelectSingleNode("/toast")
+        if ($toastNode -ne $null) { $toastNode.SetAttribute("scenario", "reminder") }
+        $xml.GetElementsByTagName("text")[0].AppendChild($xml.CreateTextNode($env:NOTIFY_TITLE)) > $null
+        $xml.GetElementsByTagName("text")[1].AppendChild($xml.CreateTextNode($env:NOTIFY_MSG)) > $null
+        $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
+        [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("Terminal").Show($toast)
+      ' 2>/dev/null || true
 
   # 4. Universal Fallback: ASCII Terminal Bell
   else

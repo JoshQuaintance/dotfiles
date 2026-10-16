@@ -23,6 +23,16 @@ typeset -ga DOTFILES_FUNCTIONS=(
 
 # Populates caller's `fzf_mode_flags` array with the modal-Vim FZF state machine,
 # layout, border, pointer, prompt, header, and preview page-scroll bindings.
+#
+# Output Protocol:
+#   - When `extra_keys` contains action keys (e.g. "e,y" or "ctrl-v,ctrl-y") that are not bound
+#     to in-fzf actions in `extra_binds`, FZF is configured with `enter:print()+accept` and
+#     `<key>:print(<key>)+accept`. FZF's stdout then consists of:
+#       Line 1:     The pressed key name (empty string "" when Enter was pressed)
+#       Lines 2..N: The selected item line(s)
+#     Use `_fzf_split_expect "$selection"` in the caller to split Line 1 (`key`) from Lines 2..N (`selected_lines`).
+#   - When no expect keys are present, `enter:accept` is used and stdout contains only the selected line(s).
+#
 # Usage: _fzf_vim_mode <prompt> <header> <enter_action> [extra_keys] [initial_query] [extra_binds]
 _fzf_vim_mode() {
   local normal_prompt="$1"
@@ -90,6 +100,17 @@ _fzf_vim_mode() {
       "--bind=esc:${to_normal}"
     )
   fi
+}
+
+# Pure-Zsh parser for `_fzf_vim_mode` expect-key output (0 subshell forks).
+# Populates caller's `key` (line 1, empty on Enter) and `selected_lines` (lines 2..N).
+# Returns 1 if selection was cancelled or no item lines were selected.
+_fzf_split_expect() {
+  local raw="$1"
+  [[ "$raw" == *$'\n'* ]] || return 1
+  key="${raw%%$'\n'*}"
+  selected_lines="${raw#*$'\n'}"
+  [[ -n "$selected_lines" ]]
 }
 
 # Verify current directory is inside a Git working tree

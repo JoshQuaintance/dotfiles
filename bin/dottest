@@ -1,3 +1,4 @@
 #!/bin/sh
+# Description: Run deep runtime configuration, schema, and Zsh unit test suite
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 exec "$SCRIPT_DIR/dot" test "$@"

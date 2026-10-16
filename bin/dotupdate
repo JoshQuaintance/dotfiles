@@ -1,3 +1,4 @@
 #!/bin/sh
+# Description: Pull dotfiles updates and upgrade Homebrew & Mise packages
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 exec "$SCRIPT_DIR/dot" update "$@"

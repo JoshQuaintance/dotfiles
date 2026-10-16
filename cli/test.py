@@ -10,7 +10,7 @@ try:
 except ImportError:
     tomllib = None
 
-from cli.manifest import get_dotfiles_dir, get_symlink_manifest
+from cli.manifest import get_cli_tool_manifest, get_dotfiles_dir, get_symlink_manifest
 from cli.ui import (
     C_BOLD,
     C_DIM,
@@ -380,11 +380,12 @@ dotbranch -s >/dev/null
 def test_syntax_and_links(report: TestReport, dotfiles: Path):
     print(f"\n{C_BOLD}3. Script Syntax & Link Integrity{C_RESET}")
 
-    # Bash scripts syntax (bash -n)
+    # Bash scripts syntax (bash -n) & static analysis (shellcheck)
     bash_scripts = [dotfiles / "install.sh"]
     bash_scripts.extend((dotfiles / "install").glob("*.sh"))
     bash_scripts.extend([p for p in (dotfiles / "bin").iterdir() if p.is_file()])
 
+    valid_bash_scripts: list[Path] = []
     bash_failed = False
     for script in bash_scripts:
         if not script.is_file():
@@ -397,6 +398,7 @@ def test_syntax_and_links(report: TestReport, dotfiles: Path):
         except (OSError, ValueError):
             continue
 
+        valid_bash_scripts.append(script)
         code, _out, _err = run_cmd(["bash", "-n", str(script)])
         if code != 0:
             report.fail(f"Bash syntax: {script.name}", "Syntax error")
@@ -404,6 +406,17 @@ def test_syntax_and_links(report: TestReport, dotfiles: Path):
 
     if not bash_failed:
         report.ok("Bash scripts syntax", "All bin/* and install/*.sh pass (bash -n)")
+
+    if shutil.which("shellcheck") and valid_bash_scripts:
+        sc_code, sc_out, sc_err = run_cmd(
+            ["shellcheck", "--severity=warning", "-x", *[str(s) for s in valid_bash_scripts]],
+            timeout=15,
+        )
+        if sc_code == 0:
+            report.ok("ShellCheck static analysis", f"0 warnings/errors across {len(valid_bash_scripts)} scripts")
+        else:
+            first_issue = (sc_out or sc_err).splitlines()[0] if (sc_out or sc_err) else "Warnings found"
+            report.fail("ShellCheck static analysis", first_issue[:48])
 
     # Zsh scripts syntax (zsh -n)
     if shutil.which("zsh"):
@@ -420,6 +433,21 @@ def test_syntax_and_links(report: TestReport, dotfiles: Path):
                     zsh_failed = True
         if not zsh_failed:
             report.ok("Zsh scripts syntax", "All zsh/* and functions pass (zsh -n)")
+
+    # Tool manifest <-> Brewfile consistency check
+    brewfile = dotfiles / "Brewfile"
+    if brewfile.is_file():
+        brew_text = brewfile.read_text(encoding="utf-8")
+        declared_brews = set(re.findall(r'^\s*brew\s+"([^"]+)"', brew_text, re.MULTILINE))
+        missing_in_brewfile = [
+            t.brew_formula
+            for t in get_cli_tool_manifest()
+            if t.brew_formula and t.brew_formula not in declared_brews
+        ]
+        if not missing_in_brewfile:
+            report.ok("Tool manifest & Brewfile sync", "All Homebrew-managed CLI tools in Brewfile")
+        else:
+            report.fail("Tool manifest & Brewfile sync", f"Missing from Brewfile: {', '.join(missing_in_brewfile)}")
 
     # Declarative symlink integrity & dangling checks (Includes VS Code)
     manifest = get_symlink_manifest()

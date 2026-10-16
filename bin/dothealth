@@ -1,3 +1,4 @@
 #!/bin/sh
+# Description: Run full dotfiles system health check (alias for dotdoctor)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 exec "$SCRIPT_DIR/dot" doctor "$@"

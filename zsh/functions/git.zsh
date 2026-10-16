@@ -59,7 +59,9 @@ clone() {
   esac
 
   if [ -z "$target_dir" ]; then
-    target_dir="$(basename "${clone_url%.git}")"
+    # :t = tail (basename) without spawning an external subshell
+    local stripped_url="${clone_url%.git}"
+    target_dir="${stripped_url:t}"
   fi
 
   local -a clone_extra_opts
@@ -151,14 +153,8 @@ gl() {
     --preview="$preview_cmd" \
     --preview-window="right:60%:wrap") || return 0
 
-  [ -z "$selection" ] && return 0
-
-  local key
-  key=$(echo "$selection" | head -n1)
-  local selected_lines
-  selected_lines=$(echo "$selection" | sed '1d')
-
-  [ -z "$selected_lines" ] && return 0
+  local key="" selected_lines=""
+  _fzf_split_expect "$selection" || return 0
 
   local hashes=()
   local line="" h=""
@@ -252,13 +248,9 @@ gco() {
     --preview='git log -n 10 --oneline --color=always {} 2>/dev/null' \
     --preview-window='right:55%:wrap')
 
-  [ -z "$selection" ] && return 0
-
-  local key
-  key=$(echo "$selection" | head -n1)
-  local target
-  target=$(echo "$selection" | sed '1d')
-  [ -z "$target" ] && return 0
+  local key="" selected_lines=""
+  _fzf_split_expect "$selection" || return 0
+  local target="$selected_lines"
 
   case "$key" in
     y)
@@ -321,13 +313,8 @@ gstash() {
     --preview='s=$(echo {} | grep -oE "stash@\{[0-9]+\}" | head -n1); if [ -n "$s" ]; then if command -v delta &>/dev/null; then git stash show --stat -p "$s" 2>/dev/null | delta --paging=never --width="${FZF_PREVIEW_COLUMNS:-80}"; else git stash show --color=always --stat -p "$s" 2>/dev/null; fi; fi' \
     --preview-window="right:60%:wrap")
 
-  [ -z "$selection" ] && return 0
-
-  local key
-  key=$(echo "$selection" | head -n1)
-  local selected_lines
-  selected_lines=$(echo "$selection" | sed '1d')
-  [ -z "$selected_lines" ] && return 0
+  local key="" selected_lines=""
+  _fzf_split_expect "$selection" || return 0
 
   local refs=()
   local line="" r=""
@@ -423,13 +410,8 @@ ga() {
     --preview="$preview_cmd" \
     --preview-window="right:60%:wrap")
 
-  [ -z "$selection" ] && return 0
-
-  local key
-  key=$(echo "$selection" | head -n1)
-  local selected_lines
-  selected_lines=$(echo "$selection" | sed '1d')
-  [ -z "$selected_lines" ] && return 0
+  local key="" selected_lines=""
+  _fzf_split_expect "$selection" || return 0
 
   local -a files untracked_files tracked_files
   local clean_line="" st="" fpath=""
@@ -567,13 +549,9 @@ gfile() {
     --preview="$preview_cmd" \
     --preview-window="right:60%:wrap")
 
-  [ -z "$selection" ] && return 0
-
-  local key
-  key=$(echo "$selection" | head -n1)
-  local selected_line
-  selected_line=$(echo "$selection" | sed '1d' | head -n1)
-  [ -z "$selected_line" ] && return 0
+  local key="" selected_lines=""
+  _fzf_split_expect "$selection" || return 0
+  local selected_line="${selected_lines%%$'\n'*}"
 
   local sha
   sha=$(printf "%s" "$selected_line" | sed $'s/\x1b\\[[0-9;]*m//g' | awk '{print $1}')
