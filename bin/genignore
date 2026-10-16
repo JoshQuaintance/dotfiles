@@ -27,97 +27,100 @@ log "Target directory: $TARGET_DIR"
 TARGETS=()
 
 if [ "$#" -gt 0 ]; then
-    # User passed manual targets (e.g. genignore svelte angular)
-    for arg in "$@"; do
-        TARGETS+=("$arg")
-    done
+  # User passed manual targets (e.g. genignore svelte angular)
+  for arg in "$@"; do
+    TARGETS+=("$arg")
+  done
 else
-    # Auto-detection
-    log "Scanning project technologies..."
+  # Auto-detection
+  log "Scanning project technologies..."
 
-    # Always include OS & Editor ignores
-    TARGETS+=("macos" "linux" "visualstudiocode" "vim")
+  # Always include OS & Editor ignores
+  TARGETS+=("macos" "linux" "visualstudiocode" "vim")
 
-    # Svelte / SvelteKit
-    if [ -f "svelte.config.js" ] || [ -f "svelte.config.ts" ] || grep -q '"@sveltejs/kit"' package.json 2>/dev/null || grep -q '"svelte"' package.json 2>/dev/null; then
-        TARGETS+=("svelte" "sveltekit")
-    fi
+  # Svelte / SvelteKit
+  if [ -f "svelte.config.js" ] || [ -f "svelte.config.ts" ] || grep -q '"@sveltejs/kit"' package.json 2>/dev/null || grep -q '"svelte"' package.json 2>/dev/null; then
+    TARGETS+=("svelte" "sveltekit")
+  fi
 
-    # Angular
-    if [ -f "angular.json" ] || grep -q '"@angular/core"' package.json 2>/dev/null; then
-        TARGETS+=("angular")
-    fi
+  # Angular
+  if [ -f "angular.json" ] || grep -q '"@angular/core"' package.json 2>/dev/null; then
+    TARGETS+=("angular")
+  fi
 
-    # Next.js
-    if [ -f "next.config.js" ] || [ -f "next.config.ts" ] || [ -f "next.config.mjs" ] || grep -q '"next"' package.json 2>/dev/null; then
-        TARGETS+=("nextjs")
-    fi
+  # Next.js
+  if [ -f "next.config.js" ] || [ -f "next.config.ts" ] || [ -f "next.config.mjs" ] || grep -q '"next"' package.json 2>/dev/null; then
+    TARGETS+=("nextjs")
+  fi
 
-    # Nuxt / Vue
-    if [ -f "nuxt.config.ts" ] || [ -f "nuxt.config.js" ] || grep -q '"nuxt"' package.json 2>/dev/null; then
-        TARGETS+=("nuxt")
-    fi
+  # Nuxt / Vue
+  if [ -f "nuxt.config.ts" ] || [ -f "nuxt.config.js" ] || grep -q '"nuxt"' package.json 2>/dev/null; then
+    TARGETS+=("nuxt")
+  fi
 
-    # Astro
-    if [ -f "astro.config.mjs" ] || [ -f "astro.config.ts" ]; then
-        TARGETS+=("astro")
-    fi
+  # Astro
+  if [ -f "astro.config.mjs" ] || [ -f "astro.config.ts" ]; then
+    TARGETS+=("astro")
+  fi
 
-    # Vite
-    if [ -f "vite.config.js" ] || [ -f "vite.config.ts" ] || [ -f "vite.config.mjs" ]; then
-        TARGETS+=("vite")
-    fi
+  # Vite
+  if [ -f "vite.config.js" ] || [ -f "vite.config.ts" ] || [ -f "vite.config.mjs" ]; then
+    TARGETS+=("vite")
+  fi
 
-    # Node.js & TypeScript
-    if [ -f "package.json" ] || [ -f "pnpm-lock.yaml" ] || [ -f "yarn.lock" ] || [ -f "bun.lockb" ]; then
-        TARGETS+=("node")
-    fi
-    if [ -f "tsconfig.json" ]; then
-        TARGETS+=("typescript")
-    fi
+  # Node.js & TypeScript
+  if [ -f "package.json" ] || [ -f "pnpm-lock.yaml" ] || [ -f "yarn.lock" ] || [ -f "bun.lockb" ]; then
+    TARGETS+=("node")
+  fi
+  if [ -f "tsconfig.json" ]; then
+    TARGETS+=("typescript")
+  fi
 
-    # Python / Astral (uv & ruff)
-    if [ -f "pyproject.toml" ] || [ -f "requirements.txt" ] || [ -f "uv.lock" ] || [ -f "Pipfile" ] || [ -f "setup.py" ] || compgen -G "*.py" > /dev/null; then
-        TARGETS+=("python")
-    fi
+  # Python / Astral (uv & ruff)
+  if [ -f "pyproject.toml" ] || [ -f "requirements.txt" ] || [ -f "uv.lock" ] || [ -f "Pipfile" ] || [ -f "setup.py" ] || compgen -G "*.py" >/dev/null; then
+    TARGETS+=("python")
+  fi
 
-    # Rust
-    if [ -f "Cargo.toml" ]; then
-        TARGETS+=("rust")
-    fi
+  # Rust
+  if [ -f "Cargo.toml" ]; then
+    TARGETS+=("rust")
+  fi
 
-    # Go
-    if [ -f "go.mod" ]; then
-        TARGETS+=("go")
-    fi
+  # Go
+  if [ -f "go.mod" ]; then
+    TARGETS+=("go")
+  fi
 
-    # Java / Gradle / Maven
-    if [ -f "pom.xml" ]; then
-        TARGETS+=("maven" "java")
-    fi
-    if [ -f "build.gradle" ] || [ -f "build.gradle.kts" ] || [ -f "gradlew" ]; then
-        TARGETS+=("gradle" "java")
-    fi
+  # Java / Gradle / Maven
+  if [ -f "pom.xml" ]; then
+    TARGETS+=("maven" "java")
+  fi
+  if [ -f "build.gradle" ] || [ -f "build.gradle.kts" ] || [ -f "gradlew" ]; then
+    TARGETS+=("gradle" "java")
+  fi
 fi
 
 # Remove duplicates from TARGETS array (read loop: macOS ships bash 3.2 without mapfile)
 UNIQUE_TARGETS=()
 while IFS= read -r target; do
-    [ -n "$target" ] && UNIQUE_TARGETS+=("$target")
+  [ -n "$target" ] && UNIQUE_TARGETS+=("$target")
 done < <(printf '%s\n' "${TARGETS[@]}" | sort -u)
 
 if [ "${#UNIQUE_TARGETS[@]}" -eq 0 ]; then
-    warn "No specific technologies detected. Using default OS & Editor ignores."
-    UNIQUE_TARGETS=("macos" "linux" "visualstudiocode" "vim")
+  warn "No specific technologies detected. Using default OS & Editor ignores."
+  UNIQUE_TARGETS=("macos" "linux" "visualstudiocode" "vim")
 fi
 
-QUERY_STRING=$(IFS=, ; echo "${UNIQUE_TARGETS[*]}")
+QUERY_STRING=$(
+  IFS=,
+  echo "${UNIQUE_TARGETS[*]}"
+)
 log "Detected components: ${UNIQUE_TARGETS[*]}"
 
 # 3. Backup existing .gitignore if present
 if [ -f "$GITIGNORE_FILE" ]; then
-    cp "$GITIGNORE_FILE" "$BACKUP_FILE"
-    log "Backed up existing .gitignore to .gitignore.bak"
+  cp "$GITIGNORE_FILE" "$BACKUP_FILE"
+  log "Backed up existing .gitignore to .gitignore.bak"
 fi
 
 # 4. Fetch rules from gitignore.io / toptal API or use offline fallback
@@ -125,13 +128,13 @@ log "Fetching latest gitignore rules..."
 FETCHED_CONTENT=""
 
 if command -v curl &>/dev/null; then
-    FETCHED_CONTENT=$(curl -sL --max-time 5 "https://www.toptal.com/developers/gitignore/api/${QUERY_STRING}" 2>/dev/null || true)
+  FETCHED_CONTENT=$(curl -sL --max-time 5 "https://www.toptal.com/developers/gitignore/api/${QUERY_STRING}" 2>/dev/null || true)
 fi
 
 # If API returned an error or is offline, generate essential fallback rules
 if [[ -z "$FETCHED_CONTENT" || "$FETCHED_CONTENT" == *"<!DOCTYPE html>"* || "$FETCHED_CONTENT" == *"#!! ERROR"* ]]; then
-    warn "Network unreachable or API unavailable. Using standard offline templates..."
-    FETCHED_CONTENT="# Auto-generated offline gitignore
+  warn "Network unreachable or API unavailable. Using standard offline templates..."
+  FETCHED_CONTENT="# Auto-generated offline gitignore
 # OS & Editors
 .DS_Store
 .DS_Store?
@@ -192,20 +195,20 @@ fi
 TEMP_MERGED=$(mktemp)
 
 if [ -f "$GITIGNORE_FILE" ]; then
-    # Keep existing content at the top
-    cat "$GITIGNORE_FILE" > "$TEMP_MERGED"
-    echo "" >> "$TEMP_MERGED"
-    echo "# ==========================================" >> "$TEMP_MERGED"
-    echo "# Auto-generated by genignore ($(date '+%Y-%m-%d %H:%M:%S'))" >> "$TEMP_MERGED"
-    echo "# Components: ${UNIQUE_TARGETS[*]}" >> "$TEMP_MERGED"
-    echo "# ==========================================" >> "$TEMP_MERGED"
-    echo "$FETCHED_CONTENT" >> "$TEMP_MERGED"
+  # Keep existing content at the top
+  cat "$GITIGNORE_FILE" >"$TEMP_MERGED"
+  echo "" >>"$TEMP_MERGED"
+  echo "# ==========================================" >>"$TEMP_MERGED"
+  echo "# Auto-generated by genignore ($(date '+%Y-%m-%d %H:%M:%S'))" >>"$TEMP_MERGED"
+  echo "# Components: ${UNIQUE_TARGETS[*]}" >>"$TEMP_MERGED"
+  echo "# ==========================================" >>"$TEMP_MERGED"
+  echo "$FETCHED_CONTENT" >>"$TEMP_MERGED"
 else
-    echo "# ==========================================" > "$TEMP_MERGED"
-    echo "# Auto-generated by genignore ($(date '+%Y-%m-%d %H:%M:%S'))" >> "$TEMP_MERGED"
-    echo "# Components: ${UNIQUE_TARGETS[*]}" >> "$TEMP_MERGED"
-    echo "# ==========================================" >> "$TEMP_MERGED"
-    echo "$FETCHED_CONTENT" >> "$TEMP_MERGED"
+  echo "# ==========================================" >"$TEMP_MERGED"
+  echo "# Auto-generated by genignore ($(date '+%Y-%m-%d %H:%M:%S'))" >>"$TEMP_MERGED"
+  echo "# Components: ${UNIQUE_TARGETS[*]}" >>"$TEMP_MERGED"
+  echo "# ==========================================" >>"$TEMP_MERGED"
+  echo "$FETCHED_CONTENT" >>"$TEMP_MERGED"
 fi
 
 # Move merged temp file into place

@@ -19,6 +19,7 @@ _conf_candidates() {
   [ -f "$HOME/.gitconfig" ] && printf "gitconfig\t%s\n" "$HOME/.gitconfig"
   [ -f "$dot_dir/Brewfile" ] && printf "brew\t%s\n" "$dot_dir/Brewfile"
   [ -f "$dot_dir/Brewfile" ] && printf "brewfile\t%s\n" "$dot_dir/Brewfile"
+  [ -f "$dot_dir/config/windows-terminal/settings.json" ] && printf "winterm\t%s\n" "$dot_dir/config/windows-terminal/settings.json"
   [ -d "$dot_dir" ] && printf "dotfiles\t%s\n" "$dot_dir"
   [ -d "$dot_dir" ] && printf "dots\t%s\n" "$dot_dir"
   [ -d "${SCRATCH_DIR:-$HOME/.scratch}" ] && printf "scratch\t%s\n" "${SCRATCH_DIR:-$HOME/.scratch}"
@@ -28,7 +29,8 @@ _conf_candidates() {
   for search_dir in "$dot_dir/config" "$cfg_dir"; do
     [ -d "$search_dir" ] || continue
     for item in "$search_dir"/*(N); do
-      bname="$(basename "$item")"
+      # :t = tail (basename) without forking a subshell
+      bname="${item:t}"
       [[ "$bname" == .* ]] && continue
 
       if [ -d "$item" ]; then
@@ -54,7 +56,8 @@ _conf_candidates() {
   # 3. Modular dotfiles functions
   if [ -d "$dot_dir/zsh/functions" ]; then
     for mod in "$dot_dir/zsh/functions"/*.zsh(N); do
-      mname="$(basename "$mod" .zsh)"
+      # :t:r = basename with extension removed
+      mname="${mod:t:r}"
       printf "%s\t%s\n" "$mname" "$mod"
     done
   fi
@@ -62,10 +65,10 @@ _conf_candidates() {
 
 conf() {
   if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
-    printf "\033[1;38;2;137;180;250mconf\033[0m — Fuzzy configuration opener with auto-reload (macOS & Linux)\n\n"
+    printf "\033[1;38;2;137;180;250mconf\033[0m — Fuzzy configuration opener with auto-reload (macOS, Linux & WSL)\n\n"
     printf "\033[1mUsage:\033[0m\n"
     printf "  conf                  Interactive modal-Vim FZF browser of all configurations\n"
-    printf "  conf <target>         Open matching config (e.g. conf zsh, conf nvim, conf ghostty)\n"
+    printf "  conf <target>         Open matching config (e.g. conf zsh, conf nvim, conf ghostty, conf winterm)\n"
     printf "  conf <path>           Open file or directory path directly\n"
     return 0
   fi
@@ -173,6 +176,9 @@ conf() {
       echo "Changes detected. Sourcing $target_file..."
       source "$target_file"
       echo "✔ Terminal environment updated!"
+    elif [[ "$target_file" == *"/windows-terminal/settings.json" ]] && [ -n "$WSL_DISTRO_NAME" ] && command -v wsl-setup-terminal &>/dev/null; then
+      echo "Changes detected. Syncing Windows Terminal settings to Windows host..."
+      wsl-setup-terminal
     else
       echo "✔ Saved changes to $target_file"
     fi

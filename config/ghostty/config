@@ -13,7 +13,11 @@ window-padding-y = 10
 window-padding-balance = true
 macos-titlebar-style = transparent
 
-# Cursor & Shell Integration
+# Cursor, Clipboard & Shell Integration
 cursor-style = block
 cursor-style-blink = false
 shell-integration-features = ssh-terminfo,ssh-env
+macos-option-as-alt = true
+copy-on-select = clipboard
+mouse-hide-while-typing = true
+quit-after-last-window-closed = true

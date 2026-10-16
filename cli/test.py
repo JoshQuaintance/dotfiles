@@ -224,12 +224,21 @@ def test_shell_runtime(report: TestReport, dotfiles: Path):
         report.fail("Completions engine", "zsh binary not found")
         return
 
-    zsh_env = {"DOTFILES_DIR": str(dotfiles), "ZSH_STARTUP_VERBOSE": "false"}
+    zsh_env = {"DOTFILES_DIR": str(dotfiles), "ZSH_STARTUP_VERBOSE": "false", "TERM": "xterm-256color"}
 
     # Interactive boot test & stderr inspection
+    # If the first run exceeds 350ms (e.g. rebuilding .zcompdump.zwc or tool init caches),
+    # perform one warm run so cold cache generation does not trigger a false-positive warning.
     t0 = time.perf_counter()
     code, out, err = run_cmd(["zsh", "-i", "+m", "-c", "exit"], timeout=10, env=zsh_env)
     elapsed_ms = int((time.perf_counter() - t0) * 1000)
+    if elapsed_ms >= 350:
+        t1 = time.perf_counter()
+        _c2, _o2, err2 = run_cmd(["zsh", "-i", "+m", "-c", "exit"], timeout=10, env=zsh_env)
+        warm_ms = int((time.perf_counter() - t1) * 1000)
+        elapsed_ms = min(elapsed_ms, warm_ms)
+        if not err and err2:
+            err = err2
 
     # Filter benign terminal warnings in headless CI
     critical_errors = []
@@ -417,6 +426,18 @@ def test_syntax_and_links(report: TestReport, dotfiles: Path):
         else:
             first_issue = (sc_out or sc_err).splitlines()[0] if (sc_out or sc_err) else "Warnings found"
             report.fail("ShellCheck static analysis", first_issue[:48])
+
+    if shutil.which("shfmt") and valid_bash_scripts:
+        fmt_code, fmt_out, fmt_err = run_cmd(
+            ["shfmt", "-l", "-i", "2", "-ci", *[str(s) for s in valid_bash_scripts]],
+            timeout=10,
+        )
+        unformatted = [Path(line.strip()).name for line in fmt_out.splitlines() if line.strip()]
+        if fmt_code == 0 and not unformatted:
+            report.ok("shfmt script formatting", f"All {len(valid_bash_scripts)} bash scripts formatted (-i 2 -ci)")
+        else:
+            detail = f"Run 'shfmt -w -i 2 -ci': {', '.join(unformatted[:4])}" if unformatted else (fmt_err[:40] or "Formatting mismatch")
+            report.fail("shfmt script formatting", detail)
 
     # Zsh scripts syntax (zsh -n)
     if shutil.which("zsh"):

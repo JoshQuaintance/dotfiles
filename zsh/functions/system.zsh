@@ -774,7 +774,7 @@ if [[ -o interactive ]]; then
 
         # Ignore interactive TUIs, editors, pagers, and FZF shell pickers
         case "$first_word" in
-          nvim|vim|vi|nano|emacs|code|yazi|y|lazygit|lg|btop|htop|top|man|less|more|ssh|mosh|tmux|zellij|fzf|gl|gco|gstash|ga|gadd|gfile|gfh|wt|gwtdel|gwtclean|gbclean|conf|dotbranch|.branch|.b|scratch|fa|aliases|fenv|cheath|cheat|port|fkill|kp|fcon|dps|fssh|npmr|bunr|pnpmr|sdiff|strdiff|watch|fg|bg)
+          nvim|vim|vi|nano|emacs|code|yazi|y|lazygit|lg|btop|htop|top|man|less|more|ssh|mosh|tmux|zellij|fzf|gl|gco|gstash|ga|gadd|gfile|gfh|gsearch|wt|gwtdel|gwtclean|gbclean|conf|dotbranch|.branch|.b|scratch|fa|aliases|fenv|cheath|cheat|fjq|port|fkill|kp|fcon|dps|fssh|npmr|bunr|pnpmr|sdiff|strdiff|watch|fg|bg)
             ;;
           *)
             local mins=$(( elapsed / 60 ))

@@ -13,7 +13,7 @@ typeset -ga DOTFILES_FUNCTIONS=(
   gbclean gstash ga gfile gl gco gsearch
   y copy clippaste scratch extract pack
   npmr bunr pnpmr
-  fa fenv cheath
+  fa fenv cheath fjq
   toggle-autols toggle-autonotify notify strdiff
 )
 

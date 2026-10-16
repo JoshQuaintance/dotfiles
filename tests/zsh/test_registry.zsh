@@ -17,3 +17,17 @@ test_functions_do_not_shadow_commands() {
   done
   return 0
 }
+
+test_fjq_enumerates_json_paths() {
+  command -v jq &>/dev/null || return 0
+  local out
+  out=$(printf '{"app":{"name":"dotfiles","tags":["zsh","nvim"]}}\n' | fjq)
+  assert_contains "$out" ".app.name"
+  assert_contains "$out" ".app.tags[0]"
+}
+
+test_fa_includes_bin_tool_descriptions() {
+  local out
+  out=$(fa -p dotcheck)
+  assert_contains "$out" "Check if dotfiles repository has upstream updates"
+}

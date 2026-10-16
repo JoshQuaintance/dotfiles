@@ -11,30 +11,30 @@ export PATH="$HOME/.local/bin:$PATH"
 
 # uv & ruff are pinned in config/mise/config.toml; let mise own them when it's available
 if command -v mise &>/dev/null && mise ls --current uv &>/dev/null; then
-    mise install -y uv ruff
-    success "Astral Python tools (uv & ruff) managed by mise!"
-    exit 0
+  mise install -y uv ruff
+  success "Astral Python tools (uv & ruff) managed by mise!"
+  exit 0
 fi
 
 DO_ASTRAL=true
 if command -v uv &>/dev/null; then
-    UV_VER="$(uv --version 2>/dev/null | head -n 1 || true)"
-    ask_update_tool "Astral tools (uv & ruff)" "$UV_VER" DO_ASTRAL
+  UV_VER="$(uv --version 2>/dev/null | head -n 1 || true)"
+  ask_update_tool "Astral tools (uv & ruff)" "$UV_VER" DO_ASTRAL
 fi
 
 if [ "$DO_ASTRAL" = true ]; then
-    if [ "$OS" = "Darwin" ]; then
-        ensure_homebrew
-        brew upgrade uv 2>/dev/null || brew install uv
-        brew upgrade ruff 2>/dev/null || brew install ruff
+  if [ "$OS" = "Darwin" ]; then
+    ensure_homebrew
+    brew upgrade uv 2>/dev/null || brew install uv
+    brew upgrade ruff 2>/dev/null || brew install ruff
 
-    elif [ "$OS" = "Linux" ]; then
-        ensure_base_deps
-        log "Installing / Updating uv..."
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        log "Installing / Updating ruff..."
-        curl -LsSf https://astral.sh/ruff/install.sh | sh
-    fi
+  elif [ "$OS" = "Linux" ]; then
+    ensure_base_deps
+    log "Installing / Updating uv..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    log "Installing / Updating ruff..."
+    curl -LsSf https://astral.sh/ruff/install.sh | sh
+  fi
 fi
 
 success "Astral Python tools (uv & ruff) ready!"

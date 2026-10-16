@@ -7,53 +7,53 @@ set -e
 
 SOURCE="$0"
 while [ -L "$SOURCE" ]; do
-    DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
-    SOURCE="$(readlink "$SOURCE")"
-    case "$SOURCE" in
-        /*) ;;
-        *) SOURCE="$DIR/$SOURCE" ;;
-    esac
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  case "$SOURCE" in
+    /*) ;;
+    *) SOURCE="$DIR/$SOURCE" ;;
+  esac
 done
 DOTFILES_DIR="$(cd -P "$(dirname "$SOURCE")/.." >/dev/null 2>&1 && pwd)"
 
 # Ensure standard user & Homebrew/Linuxbrew binary paths are in PATH
 for _p in \
-    "$HOME/.local/share/mise/shims" \
-    "$HOME/.atuin/bin" \
-    "$HOME/.cargo/bin" \
-    "/opt/homebrew/bin" \
-    "/opt/homebrew/sbin" \
-    "/home/linuxbrew/.linuxbrew/bin" \
-    "/home/linuxbrew/.linuxbrew/sbin" \
-    "/usr/local/bin" \
-    "$HOME/bin" \
-    "$HOME/.local/bin"; do
-    if [ -d "$_p" ]; then
-        case ":$PATH:" in
-            *":$_p:"*) ;;
-            *) PATH="$_p:$PATH" ;;
-        esac
-    fi
+  "$HOME/.local/share/mise/shims" \
+  "$HOME/.atuin/bin" \
+  "$HOME/.cargo/bin" \
+  "/opt/homebrew/bin" \
+  "/opt/homebrew/sbin" \
+  "/home/linuxbrew/.linuxbrew/bin" \
+  "/home/linuxbrew/.linuxbrew/sbin" \
+  "/usr/local/bin" \
+  "$HOME/bin" \
+  "$HOME/.local/bin"; do
+  if [ -d "$_p" ]; then
+    case ":$PATH:" in
+      *":$_p:"*) ;;
+      *) PATH="$_p:$PATH" ;;
+    esac
+  fi
 done
 export PATH
 
 # Sanitize broken or missing locale on Linux containers before launching subshells or Python
 if [ "$(uname -s 2>/dev/null)" = "Linux" ]; then
-    if [ -n "$LC_ALL" ] && [ "$LC_ALL" != "C" ] && [ "$LC_ALL" != "C.UTF-8" ]; then
-        if command -v locale >/dev/null 2>&1; then
-            if ! locale -a 2>/dev/null | grep -qi "^${LC_ALL}$"; then
-                export LC_ALL="C.UTF-8"
-                export LANG="C.UTF-8"
-            fi
-        fi
+  if [ -n "$LC_ALL" ] && [ "$LC_ALL" != "C" ] && [ "$LC_ALL" != "C.UTF-8" ]; then
+    if command -v locale >/dev/null 2>&1; then
+      if ! locale -a 2>/dev/null | grep -qi "^${LC_ALL}$"; then
+        export LC_ALL="C.UTF-8"
+        export LANG="C.UTF-8"
+      fi
     fi
+  fi
 fi
 
 VENV_PYTHON="$DOTFILES_DIR/.venv/bin/python"
 
 # If the isolated Python environment is missing, bootstrap it automatically
 if [ ! -f "$VENV_PYTHON" ]; then
-    bash "$DOTFILES_DIR/install/bootstrap-python.sh"
+  bash "$DOTFILES_DIR/install/bootstrap-python.sh"
 fi
 
 # Hand off directly to Python CLI

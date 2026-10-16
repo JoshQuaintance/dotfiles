@@ -167,8 +167,16 @@ def run_clean(dry_run: bool = False, clean_all: bool = False, clean_builds: bool
     else:
         print(f"  {C_GREEN}{ICON_OK}{C_RESET} {'Shell completion & init cache':<42} {C_DIM}Clean{C_RESET}")
 
-    # 3. Oversized Neovim state logs (> 5 MB)
+    # 3. Oversized Neovim state logs (> 5 MB) & unused empty site/pack/core directory
     nvim_state = Path(os.environ.get("XDG_STATE_HOME", str(home / ".local" / "state"))) / "nvim"
+    nvim_data = Path(os.environ.get("XDG_DATA_HOME", str(home / ".local" / "share"))) / "nvim"
+    pack_core = nvim_data / "site" / "pack" / "core"
+    if not dry_run and pack_core.is_dir():
+        with contextlib.suppress(OSError):
+            for sub in (pack_core / "opt", pack_core / "start", pack_core, pack_core.parent):
+                if sub.is_dir() and not any(sub.iterdir()):
+                    sub.rmdir()
+
     nvim_bytes = 0
     nvim_logs = 0
     if nvim_state.is_dir():

@@ -286,3 +286,107 @@ cheath() {
     tldr --color always "$cmd_name"
   fi
 }
+
+# Interactive JSON Path Explorer (fjq)
+# Powered by jq + modal-Vim FZF with live subtree preview
+# Usage:
+#   fjq <file.json>        -> Browse all JSON paths & values interactively
+#   cat data.json | fjq    -> Browse piped JSON payload interactively
+#   Keys: enter = print value, y = copy value, p = copy jq path expression
+fjq() {
+  if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    printf "\033[1;38;2;203;166;247mfjq\033[0m — Interactive modal-Vim JSON path explorer (powered by jq)\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  fjq <file.json>    Browse all JSON paths in <file.json>\n"
+    printf "  cat a.json | fjq   Browse piped JSON from stdin\n"
+    printf "  Enter              Output formatted JSON value for selected path\n"
+    printf "  y                  Copy extracted value to clipboard\n"
+    printf "  p                  Copy jq path expression (e.g. .scripts.build) to clipboard\n"
+    return 0
+  fi
+
+  if ! command -v jq &>/dev/null; then
+    printf "\033[31m✖ 'jq' is not installed.\033[0m\n" >&2
+    return 1
+  fi
+
+  local tmp_json=""
+  local json_file=""
+  if [ -n "$1" ]; then
+    if [ ! -f "$1" ]; then
+      printf "\033[31m✖ File not found: %s\033[0m\n" "$1" >&2
+      return 1
+    fi
+    json_file="$1"
+    shift
+  elif [ ! -t 0 ]; then
+    tmp_json="$(mktemp -t "fjq-stdin.XXXXXX")"
+    cat > "$tmp_json"
+    json_file="$tmp_json"
+  else
+    printf "\033[33mUsage: fjq <file.json>  (or pipe JSON via stdin)\033[0m\n" >&2
+    return 1
+  fi
+
+  # Enumerate all navigable jq paths with a compact value preview
+  local paths
+  paths=$(jq -r '
+    [
+      paths | map(
+        if type == "number" then "[\(.)]"
+        elif test("^[A-Za-z_][A-Za-z0-9_]*$") then ".\(.)"
+        else "[\(@json)]"
+        end
+      ) | join("") | if startswith("[") then "." + . else . end
+    ] | unique | [".", .[]] | .[]
+  ' "$json_file" 2>/dev/null)
+
+  if [ -z "$paths" ]; then
+    [ -n "$tmp_json" ] && rm -f -- "$tmp_json"
+    printf "\033[31m✖ Invalid or empty JSON input.\033[0m\n" >&2
+    return 1
+  fi
+
+  if [ ! -t 1 ] || ! command -v fzf &>/dev/null; then
+    printf "%s\n" "$paths"
+    [ -n "$tmp_json" ] && rm -f -- "$tmp_json"
+    return 0
+  fi
+
+  local query="$*"
+  local hdr="  j/k: navigate │ /: search path │ enter: print value │ y: copy value │ p: copy jq path │ q: quit"
+  local -a fzf_mode_flags
+  _fzf_vim_mode "🧬 JSON Explorer > " "$hdr" "print value" "y,p" "$query"
+
+  local selection
+  selection=$(printf "%s\n" "$paths" | fzf \
+    --height=~60% \
+    "${fzf_mode_flags[@]}" \
+    --color="header:italic:dim,prompt:bold:magenta,pointer:bold:cyan" \
+    --preview="jq -C {} '$json_file' 2>/dev/null | head -n 120" \
+    --preview-window='right:60%:wrap')
+
+  local key selected_lines jq_path
+  if ! _fzf_split_expect "$selection"; then
+    [ -n "$tmp_json" ] && rm -f -- "$tmp_json"
+    return 0
+  fi
+  jq_path="${selected_lines%%$'\n'*}"
+
+  case "$key" in
+    p)
+      _copy_or_print "$jq_path" "jq path '$jq_path' to clipboard"
+      ;;
+    y)
+      local extracted
+      extracted=$(jq -r "$jq_path" "$json_file" 2>/dev/null)
+      _copy_or_print "$extracted" "value of '$jq_path' to clipboard"
+      ;;
+    *)
+      jq "$jq_path" "$json_file"
+      ;;
+  esac
+
+  [ -n "$tmp_json" ] && rm -f -- "$tmp_json"
+  return 0
+}

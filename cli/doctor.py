@@ -189,7 +189,9 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
             if _should_install(tool.label, formula):
                 print(f"  \033[1;34m==>\033[0m Installing {formula} via brew...")
                 code, _, _ = run_cmd(["brew", "install", formula], timeout=600)
-                if code == 0:
+                if code == 0 and not shutil.which(tool.bin_name):
+                    run_cmd(["brew", "link", "--overwrite", formula], timeout=60)
+                if code == 0 and shutil.which(tool.bin_name):
                     report.fixed(tool.label, f"Installed {formula} via brew")
                 else:
                     report.warn(tool.label, f"brew install {formula} failed")
@@ -301,11 +303,21 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
 
     # Check Neovim health (:checkhealth)
     if shutil.which("nvim"):
+        # Neovim 0.12+ creates an empty ~/.local/share/nvim/site/pack/core/opt directory,
+        # which triggers warnings in both lazy.nvim and vim.pack healthchecks when unused.
+        nvim_data = Path(os.environ.get("XDG_DATA_HOME", str(home / ".local" / "share"))) / "nvim"
+        pack_core = nvim_data / "site" / "pack" / "core"
+        if fix and pack_core.is_dir():
+            with contextlib.suppress(OSError):
+                for sub in (pack_core / "opt", pack_core / "start", pack_core, pack_core.parent):
+                    if sub.is_dir() and not any(sub.iterdir()):
+                        sub.rmdir()
+
         with tempfile.NamedTemporaryFile(mode="w+", prefix="nvim_health_", suffix=".txt", delete=False) as tmp:
             tmp_path = tmp.name
         try:
             nvim_env = os.environ.copy()
-            if not nvim_env.get("TERM"):
+            if not nvim_env.get("TERM") or nvim_env.get("TERM") == "dumb":
                 nvim_env["TERM"] = "xterm-256color"
             res = subprocess.run(
                 ["nvim", "--headless", "+checkhealth", f"+w! {tmp_path}", "+qa"],
@@ -471,7 +483,28 @@ def is_wsl() -> bool:
     except OSError:
         return False
 
-def check_wsl(report: DoctorReport, dotfiles: Path):
+def _find_windows_terminal_settings() -> Path | None:
+    """Locate Windows Terminal settings.json on the Windows host from inside WSL."""
+    if not shutil.which("powershell.exe") or not shutil.which("wslpath"):
+        return None
+    code, win_appdata, _ = run_cmd(["powershell.exe", "-NoProfile", "-Command", "$env:LOCALAPPDATA"])
+    win_appdata = win_appdata.strip().replace("\r", "")
+    if code != 0 or not win_appdata:
+        return None
+    code, mounted, _ = run_cmd(["wslpath", win_appdata])
+    mounted = mounted.strip()
+    if code != 0 or not mounted:
+        return None
+    base = Path(mounted)
+    candidates = [
+        base / "Packages" / "Microsoft.WindowsTerminal_8wekyb3d8bbwe" / "LocalState" / "settings.json",
+        base / "Packages" / "Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe" / "LocalState" / "settings.json",
+        base / "Microsoft" / "Windows Terminal" / "settings.json",
+    ]
+    return next((p for p in candidates if p.is_file()), None)
+
+
+def check_wsl(report: DoctorReport, dotfiles: Path, fix: bool = False):
     print(f"\n{C_BOLD}7. WSL Integration{C_RESET}")
     if str(dotfiles.resolve()).startswith("/mnt/"):
         report.warn("Dotfiles location", "On the Windows drive; move to ~ (9P file access is slow)")
@@ -487,6 +520,23 @@ def check_wsl(report: DoctorReport, dotfiles: Path):
         report.ok("Browser opener (wslview)", "open & $BROWSER use the Windows browser")
     else:
         report.warn("Browser opener (wslview)", "Missing; 'open' falls back to explorer.exe. Install wslu")
+
+    wt_settings = _find_windows_terminal_settings()
+    if wt_settings:
+        try:
+            wt_text = wt_settings.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            wt_text = ""
+        if '"Catppuccin Mocha"' in wt_text:
+            report.ok("Windows Terminal theme", "Catppuccin Mocha & Nerd Fonts active")
+        elif fix and (dotfiles / "bin" / "wsl-setup-terminal").is_file():
+            code, _, _ = run_cmd([str(dotfiles / "bin" / "wsl-setup-terminal")])
+            if code == 0:
+                report.fixed("Windows Terminal theme", "Synced Catppuccin Mocha via wsl-setup-terminal")
+            else:
+                report.warn("Windows Terminal theme", "wsl-setup-terminal failed")
+        else:
+            report.warn("Windows Terminal theme", "Not synced. Run 'wsl-setup-terminal' or 'dot doctor --fix'")
 
 def run_doctor(fix: bool = False) -> int:
     dotfiles = get_dotfiles_dir()
@@ -506,7 +556,7 @@ def run_doctor(fix: bool = False) -> int:
     check_git_signing(report, fix=fix)
     check_ssh(report, dotfiles, fix=fix)
     if is_wsl():
-        check_wsl(report, dotfiles)
+        check_wsl(report, dotfiles, fix=fix)
 
     print(f"\n{C_BOLD}Summary:{C_RESET} {C_GREEN}{report.passed} passed{C_RESET}", end="")
     if report.repaired > 0:

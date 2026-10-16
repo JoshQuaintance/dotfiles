@@ -185,15 +185,8 @@ if ! command -v mise &>/dev/null && [ -s "$NVM_DIR/nvm.sh" ]; then
     }
 fi
 
-# Angular CLI autocompletion (cached to prevent spawning node on every launch)
-if command -v ng &>/dev/null; then
-    _ng_cache="${XDG_CACHE_HOME:-$HOME/.cache}/ng_completion.zsh"
-    if [ ! -s "$_ng_cache" ]; then
-        mkdir -p "$(dirname "$_ng_cache")"
-        ng completion script > "$_ng_cache" 2>/dev/null || rm -f "$_ng_cache"
-    fi
-    [ -s "$_ng_cache" ] && source "$_ng_cache"
-fi
+# Angular CLI autocompletion (cached & .zwc compiled to prevent spawning node on every launch)
+_load_cached_init "ng" "ng completion script" || true
 
 # Bun (appended so a mise-pinned bun wins; ~/.bun/bin still provides `bun add -g` binaries)
 export BUN_INSTALL="$HOME/.bun"

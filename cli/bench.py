@@ -88,6 +88,8 @@ def run_bench(
     env["DOTFILES_DIR"] = str(dotfiles)
     env["ZSH_STARTUP_VERBOSE"] = "true"
     env["ZSH_BENCH_STEPS"] = "true"
+    if not env.get("TERM") or env.get("TERM") == "dumb":
+        env["TERM"] = "xterm-256color"
 
     print(f"\n{C_BOLD}1. Interactive Boot Runs ({iterations} iterations){C_RESET}")
 

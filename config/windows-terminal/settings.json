@@ -1,6 +1,9 @@
 {
   "$schema": "https://aka.ms/terminal-profiles-schema",
   "defaultProfile": "{2c4de342-38b7-51cf-b942-4c09ac7d00f9}",
+  "copyOnSelect": true,
+  "copyFormatting": "none",
+  "trimBlockSelection": true,
   "profiles": {
     "defaults": {
       "colorScheme": "Catppuccin Mocha",
@@ -15,7 +18,10 @@
       "padding": "12, 12, 12, 12",
       "opacity": 95,
       "useAcrylic": false,
-      "cursorShape": "bar"
+      "cursorShape": "bar",
+      "bellStyle": "none",
+      "scrollbarState": "hidden",
+      "intenseTextStyle": "bold"
     }
   },
   "schemes": [
