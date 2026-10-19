@@ -187,7 +187,7 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
                     resolved_bin = shutil.which(alt)
                     break
         if resolved_bin:
-            vcmd = [resolved_bin] + tool.version_cmd[1:] if tool.version_cmd else [resolved_bin, "--version"]
+            vcmd = [resolved_bin, *tool.version_cmd[1:]] if tool.version_cmd else [resolved_bin, "--version"]
             _, ver, _ = run_cmd(vcmd)
             first_line = ver.splitlines()[0] if ver else "installed"
             report.ok(tool.label, first_line[:38])

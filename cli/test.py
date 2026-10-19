@@ -15,16 +15,6 @@ try:
 except ImportError:
     tomllib = None
 
-# Ensure dotfiles directory is in sys.path when executed directly
-_curr = Path(__file__).resolve()
-while _curr.parent != _curr:
-    if (_curr / "cli" / "manifest.py").is_file():
-        break
-    _curr = _curr.parent
-_repo_root = _curr
-if str(_repo_root) not in sys.path:
-    sys.path.insert(0, str(_repo_root))
-
 from cli.manifest import get_cli_tool_manifest, get_dotfiles_dir, get_symlink_manifest
 from cli.prompt import get_active_prompt, is_mobile_or_proot
 from cli.prune import COMPLETION_DIRS, COMPLETIONS_DIR, find_stale_caches
@@ -39,7 +29,6 @@ from cli.ui import (
     ICON_WARN,
     box,
     format_row,
-    get_terminal_columns,
     print_header,
     run_cmd,
 )
@@ -658,7 +647,7 @@ def test_cli_architecture(report: TestReport, dotfiles: Path):
             except SystemExit as e:
                 code = e.code if isinstance(e.code, int) else 0
                 err_msg = ""
-            except Exception as ex:
+            except (RuntimeError, OSError, ValueError, TypeError) as ex:
                 code = 1
                 err_msg = str(ex)
 
