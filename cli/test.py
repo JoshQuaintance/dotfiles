@@ -1,16 +1,33 @@
+import contextlib
+import io
 import json
+import os
 import re
 import shutil
 import sys
+import tempfile
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 try:
     import tomllib  # Python 3.11+
 except ImportError:
     tomllib = None
 
+# Ensure dotfiles directory is in sys.path when executed directly
+_curr = Path(__file__).resolve()
+while _curr.parent != _curr:
+    if (_curr / "cli" / "manifest.py").is_file():
+        break
+    _curr = _curr.parent
+_repo_root = _curr
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
+
 from cli.manifest import get_cli_tool_manifest, get_dotfiles_dir, get_symlink_manifest
+from cli.prompt import get_active_prompt, is_mobile_or_proot
+from cli.prune import COMPLETION_DIRS, COMPLETIONS_DIR, find_stale_caches
 from cli.ui import (
     C_BOLD,
     C_DIM,
@@ -18,6 +35,11 @@ from cli.ui import (
     C_RED,
     C_RESET,
     C_YELLOW,
+    ICON_OK,
+    ICON_WARN,
+    box,
+    format_row,
+    get_terminal_columns,
     print_header,
     run_cmd,
 )
@@ -489,6 +511,162 @@ def test_syntax_and_links(report: TestReport, dotfiles: Path):
     else:
         report.fail("Symlink health", f"Dangling symlinks: {', '.join(dangling)}")
 
+def test_cli_architecture(report: TestReport, dotfiles: Path):
+    print(f"\n{C_BOLD}4. Python CLI Subcommands & Architecture{C_RESET}")
+
+    # 1. Tool Manifest & Multi-Binary Parity (dura & 7-Zip)
+    manifest_tools = get_cli_tool_manifest()
+    dura_entry = next((t for t in manifest_tools if t.bin_name == "dura"), None)
+    sevenzip_entry = next((t for t in manifest_tools if t.brew_formula == "sevenzip"), None)
+
+    if dura_entry and dura_entry.brew_formula == "dura" and dura_entry.version_cmd == ["dura", "--version"]:
+        report.ok("CLI manifest tool: dura", "Declared with brew formula and version command")
+    else:
+        report.fail("CLI manifest tool: dura", "Missing or invalid in get_cli_tool_manifest()")
+
+    if (
+        sevenzip_entry
+        and hasattr(sevenzip_entry, "alt_bin_names")
+        and "7z" in sevenzip_entry.alt_bin_names
+        and "7zz" in sevenzip_entry.alt_bin_names
+        and "/usr/bin/7z" in sevenzip_entry.alt_bin_names
+    ):
+        report.ok("CLI manifest tool: 7-Zip alt names", f"Multi-binary parity: {sevenzip_entry.alt_bin_names}")
+    else:
+        report.fail("CLI manifest tool: 7-Zip alt names", "Missing 7z/7zz/p7zip alt_bin_names")
+
+    # 2. Terminal UI Responsive Rendering & Viewport Clamping
+    box_desktop = box("Desktop Title", max_width=80)
+    box_narrow = box("Extremely Long Title Designed To Exceed Narrow Terminal Width Clamping", max_width=40)
+    box_min = box("Title", max_width=20)
+    row_desktop = format_row("Tool Name", "Installed successfully", status_icon=ICON_OK, cols=80)
+    row_narrow = format_row("Tool Name With Long Label", "Very detailed status text here", status_icon=ICON_WARN, cols=50)
+
+    ui_valid = (
+        len(box_desktop) == 3
+        and "Desktop Title" in box_desktop[1]
+        and len(box_narrow) == 3
+        and "..." in box_narrow[1]
+        and len(box_min) == 3
+        and "Tool Name" in row_desktop
+        and "..." in row_narrow
+    )
+    if ui_valid:
+        report.ok("CLI UI rendering & viewport clamping", "box() & format_row() adapt to narrow (<60) & desktop widths")
+    else:
+        report.fail("CLI UI rendering & viewport clamping", "Unexpected box or row formatting")
+
+    # 3. Mobile Prompt Detection & Precedence Hierarchy
+    clean_env = {
+        "SSH_MOBILE": "",
+        "_IS_MOBILE": "",
+        "LC_TERMINAL": "",
+        "TERM_PROGRAM": "xterm-256color",
+        "TERMUX_VERSION": "",
+        "PROOT_TMP_DIR": "",
+        "DOTFILES_PROMPT": "",
+    }
+    mobile_checks_passed = True
+    try:
+        with patch.dict(os.environ, {**clean_env, "SSH_MOBILE": "1"}):
+            assert is_mobile_or_proot() is True
+        with patch.dict(os.environ, {**clean_env, "LC_TERMINAL": "Blink"}):
+            assert is_mobile_or_proot() is True
+        with patch.dict(os.environ, {**clean_env, "LC_TERMINAL": "Termius"}):
+            assert is_mobile_or_proot() is True
+        with patch.dict(os.environ, {**clean_env, "TERM_PROGRAM": "blink"}):
+            assert is_mobile_or_proot() is True
+        with patch.dict(os.environ, {**clean_env, "DOTFILES_PROMPT": "spaceship", "SSH_MOBILE": "1"}):
+            engine, src = get_active_prompt()
+            assert engine == "spaceship" and "DOTFILES_PROMPT" in src
+        with patch.dict(os.environ, {**clean_env, "SSH_MOBILE": "1"}):
+            engine, src = get_active_prompt()
+            assert engine == "native" and "mobile/PRoot" in src
+    except AssertionError:
+        mobile_checks_passed = False
+
+    if mobile_checks_passed:
+        report.ok("Mobile prompt detection & precedence", "SSH_MOBILE, Blink, Termius detected; env override preserved")
+    else:
+        report.fail("Mobile prompt detection & precedence", "Assertion failed during mobile detection")
+
+    # 4. Prune Cache Invalidation Logic
+    prune_checks_passed = True
+    try:
+        assert COMPLETIONS_DIR == COMPLETION_DIRS
+        assert "zsh/functions/" in COMPLETION_DIRS
+        assert "zsh/completions/" in COMPLETION_DIRS
+        assert "zsh/custom/completions/" in COMPLETION_DIRS
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            zcomp = tmp_path / ".zcompdump-test"
+            zcomp.touch()
+            with patch.dict(os.environ, {"ZDOTDIR": str(tmp_path)}):
+                c_fn = find_stale_caches(tmp_path, {"zsh/functions/git.zsh"})
+                assert zcomp in c_fn
+                c_comp = find_stale_caches(tmp_path, {"zsh/completions/_foo"})
+                assert zcomp in c_comp
+                c_custom = find_stale_caches(tmp_path, {"zsh/custom/completions/_bar"})
+                assert zcomp in c_custom
+                c_none = find_stale_caches(tmp_path, {"config/git/.gitconfig"})
+                assert zcomp not in c_none
+
+                # Stale .zwc file detection
+                zwc_file = tmp_path / "zsh" / "old.zsh.zwc"
+                zwc_file.parent.mkdir(parents=True, exist_ok=True)
+                zwc_file.touch()
+                c_zwc = find_stale_caches(tmp_path, {"zsh/old.zsh"})
+                assert zwc_file in c_zwc
+    except AssertionError:
+        prune_checks_passed = False
+
+    if prune_checks_passed:
+        report.ok("Prune cache invalidation logic", "COMPLETION_DIRS triggers compdump invalidation on source deletion")
+    else:
+        report.fail("Prune cache invalidation logic", "Assertion failed during prune cache test")
+
+    # 5. CLI Subcommands Smoke Test
+    import cli.main
+
+    subcommand_specs = [
+        ("CLI smoke: status", ["dot", "status"], "Quick workstation status overview (read-only)", None),
+        ("CLI smoke: doctor", ["dot", "doctor"], "Health audit & symlinks check (read-only)", [patch("cli.doctor.check_cli_tools")]),
+        (
+            "CLI smoke: prompt",
+            ["dot", "prompt", "benchmark"],
+            "Prompt latency & engine manager",
+            [patch("cli.prompt.run_prompt_benchmark", return_value={"native": (0.1, 0.2, 0.3), "spaceship": (10.0, 15.0, 20.0)})],
+        ),
+        ("CLI smoke: clean (-n)", ["dot", "clean", "-n"], "Cache & temp files cleaner preview", None),
+        ("CLI smoke: prune (-n)", ["dot", "prune", "-n"], "Upstream removed files preview", [patch("cli.prune._scan_roots", return_value=[])]),
+        ("CLI smoke: sync (-n)", ["dot", "sync", "-n"], "Two-way git sync preview", None),
+    ]
+
+    for label, argv, detail, patches in subcommand_specs:
+        buf = io.StringIO()
+        ctxs = [patch.object(sys, "argv", argv), contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf)]
+        if patches:
+            ctxs.extend(patches)
+        with contextlib.ExitStack() as stack:
+            for ctx in ctxs:
+                stack.enter_context(ctx)
+            try:
+                cli.main.main()
+                code = 0
+                err_msg = ""
+            except SystemExit as e:
+                code = e.code if isinstance(e.code, int) else 0
+                err_msg = ""
+            except Exception as ex:
+                code = 1
+                err_msg = str(ex)
+
+        if code == 0:
+            report.ok(label, detail)
+        else:
+            report.fail(label, err_msg or f"Exit non-zero ({code})")
+
 def run_tests() -> int:
     dotfiles = get_dotfiles_dir()
     report = TestReport()
@@ -498,6 +676,7 @@ def run_tests() -> int:
     test_parsers_and_schemas(report, dotfiles)
     test_shell_runtime(report, dotfiles)
     test_syntax_and_links(report, dotfiles)
+    test_cli_architecture(report, dotfiles)
 
     print(f"\n{C_BOLD}Summary:{C_RESET} {C_GREEN}{report.passed} passed{C_RESET}, {C_YELLOW}{report.warnings} warnings{C_RESET}, {C_RED}{report.failed} failed{C_RESET}\n")
 

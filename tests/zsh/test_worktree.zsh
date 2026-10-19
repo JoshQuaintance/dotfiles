@@ -56,3 +56,120 @@ test_bare_clone_heals_fetch_and_lists_unattached_branches() {
   assert_contains "$avail" "feat/SALES-3709/rule-crud"
   assert_contains "$avail" "feat/SALES-3706/relay-inbox"
 }
+
+test_gwts_parses_porcelain_and_marks_active_worktree() {
+  git_test init -q main_repo
+  cd main_repo
+  git_test commit -q --allow-empty -m "initial commit"
+  git_test branch feature-1
+  git_test worktree add -q ../feature-wt feature-1
+
+  local out
+  out="$(gwts | strip_ansi)"
+
+  assert_contains "$out" "WORKTREE"
+  assert_contains "$out" "BRANCH"
+  assert_contains "$out" "➜ main_repo"
+  assert_contains "$out" "feature-wt"
+  assert_contains "$out" "feature-1"
+  assert_contains "$out" "clean"
+}
+
+test_gwts_handles_detached_head_without_truncation() {
+  git_test init -q main_repo
+  cd main_repo
+  git_test commit -q --allow-empty -m "initial commit"
+  git_test worktree add -q --detach ../detached-wt HEAD
+
+  local out
+  out="$(gwts | strip_ansi)"
+
+  assert_contains "$out" "(detached HEAD)"
+}
+
+test_gwts_reports_untracked_and_staged_changes() {
+  git_test init -q main_repo
+  cd main_repo
+  git_test commit -q --allow-empty -m "initial commit"
+  git_test branch feature-1
+  git_test worktree add -q ../feature-wt feature-1
+
+  touch ../feature-wt/new-untracked.txt
+  touch staged.txt && git add staged.txt
+
+  local out
+  out="$(gwts | strip_ansi)"
+
+  assert_contains "$out" "1 staged"
+  assert_contains "$out" "1 untracked"
+}
+
+test_gwtdel_refuses_to_delete_active_worktree() {
+  git_test init -q main_repo
+  cd main_repo
+  git_test commit -q --allow-empty -m "initial commit"
+  git_test branch other-feat
+  git_test worktree add -q ../other-wt other-feat
+
+  local out rc=0
+  out="$(gwtdel main_repo 2>&1)" || rc=$?
+  assert_eq 1 $rc
+  assert_contains "$out" "Cannot delete the active worktree"
+}
+
+test_gwtdel_refuses_to_delete_protected_branch() {
+  git_test init -q main_repo
+  cd main_repo
+  git_test commit -q --allow-empty -m "initial commit"
+  git_test branch develop
+  git_test worktree add -q ../develop-wt develop
+  git_test branch feat-1
+  git_test worktree add -q ../feat-1 feat-1
+
+  local out rc=0
+  out="$(gwtdel develop 2>&1)" || rc=$?
+  assert_eq 1 $rc
+  assert_contains "$out" "No disposable worktree matching"
+}
+
+test_gwtdel_removes_worktree_and_local_branch_on_confirmation() {
+  git_test init -q main_repo
+  cd main_repo
+  git_test commit -q --allow-empty -m "initial commit"
+  git_test branch feat-del
+  git_test worktree add -q ../feat-del feat-del
+
+  print "y\ny" | gwtdel feat-del >/dev/null || fail "gwtdel failed"
+
+  assert_no_file "${HOME:A}/feat-del"
+  local branches
+  branches="$(git branch --list feat-del)"
+  assert_eq "" "$branches"
+}
+
+test_gwtdel_removes_worktree_but_preserves_local_branch_when_declined() {
+  git_test init -q main_repo
+  cd main_repo
+  git_test commit -q --allow-empty -m "initial commit"
+  git_test branch feat-keep
+  git_test worktree add -q ../feat-keep feat-keep
+
+  print "y\nn" | gwtdel feat-keep >/dev/null || fail "gwtdel failed"
+
+  assert_no_file "${HOME:A}/feat-keep"
+  local branches
+  branches="$(git branch --list feat-keep)"
+  assert_contains "$branches" "feat-keep"
+}
+
+test_gwtdel_aborts_when_deletion_declined() {
+  git_test init -q main_repo
+  cd main_repo
+  git_test commit -q --allow-empty -m "initial commit"
+  git_test branch feat-abort
+  git_test worktree add -q ../feat-abort feat-abort
+
+  print "n" | gwtdel feat-abort >/dev/null
+
+  assert_file "${HOME:A}/feat-abort/.git"
+}
