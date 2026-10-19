@@ -287,19 +287,19 @@ cheath() {
   fi
 }
 
-# Interactive JSON Path Explorer (fjq)
-# Powered by jq + modal-Vim FZF with live subtree preview
+# Interactive JSON / YAML / TOML Path Explorer (fjq)
+# Powered by jq (+ yq for YAML/TOML) + modal-Vim FZF with live subtree preview
 # Usage:
-#   fjq <file.json>        -> Browse all JSON paths & values interactively
-#   cat data.json | fjq    -> Browse piped JSON payload interactively
+#   fjq <file.json|.yaml|.toml> -> Browse all paths & values interactively
+#   cat data.json | fjq         -> Browse piped JSON/YAML payload interactively
 #   Keys: enter = print value, y = copy value, p = copy jq path expression
 fjq() {
   if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
-    printf "\033[1;38;2;203;166;247mfjq\033[0m — Interactive modal-Vim JSON path explorer (powered by jq)\n\n"
+    printf "\033[1;38;2;203;166;247mfjq\033[0m — Interactive modal-Vim JSON/YAML/TOML path explorer (powered by jq & yq)\n\n"
     printf "\033[1mUsage:\033[0m\n"
-    printf "  fjq <file.json>    Browse all JSON paths in <file.json>\n"
-    printf "  cat a.json | fjq   Browse piped JSON from stdin\n"
-    printf "  Enter              Output formatted JSON value for selected path\n"
+    printf "  fjq <file>         Browse paths in .json, .yaml/.yml, or .toml file\n"
+    printf "  cat a.json | fjq   Browse piped JSON/YAML from stdin\n"
+    printf "  Enter              Output formatted value for selected path\n"
     printf "  y                  Copy extracted value to clipboard\n"
     printf "  p                  Copy jq path expression (e.g. .scripts.build) to clipboard\n"
     return 0
@@ -317,20 +317,42 @@ fjq() {
       printf "\033[31m✖ File not found: %s\033[0m\n" "$1" >&2
       return 1
     fi
-    json_file="$1"
+    local input_file="$1"
     shift
+    case "${input_file:l}" in
+      *.yaml|*.yml)
+        if ! command -v yq &>/dev/null; then
+          printf "\033[31m✖ 'yq' is required to parse YAML files in fjq.\033[0m\n" >&2
+          return 1
+        fi
+        tmp_json="$(mktemp -t "fjq-yaml.XXXXXX")"
+        yq -o=json "$input_file" > "$tmp_json" 2>/dev/null
+        json_file="$tmp_json"
+        ;;
+      *.toml)
+        if ! command -v yq &>/dev/null; then
+          printf "\033[31m✖ 'yq' is required to parse TOML files in fjq.\033[0m\n" >&2
+          return 1
+        fi
+        tmp_json="$(mktemp -t "fjq-toml.XXXXXX")"
+        yq -p=toml -o=json "$input_file" > "$tmp_json" 2>/dev/null
+        json_file="$tmp_json"
+        ;;
+      *)
+        json_file="$input_file"
+        ;;
+    esac
   elif [ ! -t 0 ]; then
     tmp_json="$(mktemp -t "fjq-stdin.XXXXXX")"
     cat > "$tmp_json"
     json_file="$tmp_json"
   else
-    printf "\033[33mUsage: fjq <file.json>  (or pipe JSON via stdin)\033[0m\n" >&2
+    printf "\033[33mUsage: fjq <file.json|.yaml|.toml>  (or pipe JSON/YAML via stdin)\033[0m\n" >&2
     return 1
   fi
 
   # Enumerate all navigable jq paths with a compact value preview
-  local paths
-  paths=$(jq -r '
+  local jq_paths_filter='
     [
       paths | map(
         if type == "number" then "[\(.)]"
@@ -339,11 +361,27 @@ fjq() {
         end
       ) | join("") | if startswith("[") then "." + . else . end
     ] | unique | [".", .[]] | .[]
-  ' "$json_file" 2>/dev/null)
+  '
+  local paths
+  paths=$(jq -r "$jq_paths_filter" "$json_file" 2>/dev/null)
+
+  # Fallback: if stdin or extensionless file wasn't valid JSON, try converting via yq
+  if [ -z "$paths" ] && command -v yq &>/dev/null; then
+    local tmp_yq
+    tmp_yq="$(mktemp -t "fjq-yq.XXXXXX")"
+    if yq -o=json "$json_file" > "$tmp_yq" 2>/dev/null && [ -s "$tmp_yq" ]; then
+      [ -n "$tmp_json" ] && rm -f -- "$tmp_json"
+      tmp_json="$tmp_yq"
+      json_file="$tmp_yq"
+      paths=$(jq -r "$jq_paths_filter" "$json_file" 2>/dev/null)
+    else
+      rm -f -- "$tmp_yq"
+    fi
+  fi
 
   if [ -z "$paths" ]; then
     [ -n "$tmp_json" ] && rm -f -- "$tmp_json"
-    printf "\033[31m✖ Invalid or empty JSON input.\033[0m\n" >&2
+    printf "\033[31m✖ Invalid or empty JSON/YAML/TOML input.\033[0m\n" >&2
     return 1
   fi
 
@@ -356,7 +394,7 @@ fjq() {
   local query="$*"
   local hdr="  j/k: navigate │ /: search path │ enter: print value │ y: copy value │ p: copy jq path │ q: quit"
   local -a fzf_mode_flags
-  _fzf_vim_mode "🧬 JSON Explorer > " "$hdr" "print value" "y,p" "$query"
+  _fzf_vim_mode "🧬 Data Explorer > " "$hdr" "print value" "y,p" "$query"
 
   local selection
   selection=$(printf "%s\n" "$paths" | fzf \

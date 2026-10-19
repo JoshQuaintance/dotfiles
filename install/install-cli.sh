@@ -23,7 +23,7 @@ if [ "${DOTFILES_DRY_RUN:-false}" = true ]; then
   else
     # tool key:binary it provides
     for pair in ripgrep:rg fd:fd fzf:fzf zoxide:zoxide eza:eza bat:bat atuin:atuin yazi:yazi dust:dust btop:btop \
-      git-delta:delta lazygit:lazygit glow:glow tlrc:tldr tokei:tokei hyperfine:hyperfine jq:jq ouch:ouch \
+      git-delta:delta lazygit:lazygit glow:glow tlrc:tldr tokei:tokei hyperfine:hyperfine jq:jq yq:yq ouch:ouch \
       shellcheck:shellcheck shfmt:shfmt trash-cli:trash; do
       key="${pair%%:*}"
       is_tool_requested "$key" || continue
@@ -64,7 +64,7 @@ if command -v brew &>/dev/null; then
     # Install only specifically requested tools
     for pkg in "${REQUESTED_TOOLS[@]}"; do
       case "$pkg" in
-        ripgrep | fd | fzf | zoxide | spaceship | eza | atuin | bat | yazi | dust | btop | tlrc | tokei | hyperfine | jq | ouch | shellcheck | shfmt | fzf-tab | zsh-autosuggestions | zsh-syntax-highlighting | git | git-delta | lazygit | glow | trash-cli)
+        ripgrep | fd | fzf | zoxide | spaceship | eza | atuin | bat | yazi | dust | btop | tlrc | tokei | hyperfine | jq | yq | ouch | shellcheck | shfmt | fzf-tab | zsh-autosuggestions | zsh-syntax-highlighting | git | git-delta | lazygit | glow | trash-cli)
           if brew list "$pkg" &>/dev/null; then
             ask_update_tool "$pkg" "$(brew info "$pkg" 2>/dev/null | head -n 1 | awk '{print $3}')" DO_UPD
             [ "$DO_UPD" = true ] && brew upgrade "$pkg" 2>/dev/null || true

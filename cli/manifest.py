@@ -42,6 +42,7 @@ def get_cli_tool_manifest() -> list[ToolEntry]:
         ToolEntry("atuin", "Atuin shell history", ["atuin", "--version"], "atuin"),
         ToolEntry("bat", "bat syntax viewer", ["bat", "--version"], "bat"),
         ToolEntry("jq", "jq JSON processor", ["jq", "--version"], "jq"),
+        ToolEntry("yq", "yq YAML/TOML processor", ["yq", "--version"], "yq"),
         ToolEntry("ouch", "ouch archive compressor", ["ouch", "--version"], "ouch"),
         ToolEntry("mise", "Mise polyglot runtime", ["mise", "--version"]),
         ToolEntry("nvim", "Neovim editor", ["nvim", "--version"], "neovim"),

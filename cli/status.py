@@ -87,7 +87,7 @@ def run_status() -> int:
         ("dot status", ".status / .s", "Quick workstation & dotfiles overview"),
         ("dot prompt", ".prompt", "Benchmark & select prompt (native, spaceship)"),
         ("dot doctor [--fix]", ".doctor", "Full system & symlink health check"),
-        ("dot test", ".test", "Run 20 deep runtime & schema tests"),
+        ("dot test", ".test", "Run deep runtime & schema integration tests"),
         ("dot bench [-n N]", ".bench", "Profile Zsh startup latency by phase"),
         ("dot clean [-n] [-a]", ".clean", "Prune stale caches, dumps & temp files"),
         ("dot prune [-n] [-o]", ".prune", "Remove links & packages deleted upstream"),

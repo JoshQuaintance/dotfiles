@@ -33,6 +33,13 @@
     algorithm = histogram
     renames = true
     mnemonicPrefix = true
+    submodule = log
+
+[status]
+    submoduleSummary = true
+
+[log]
+    date = iso
 
 [core]
     excludesfile = ~/.gitignore_global

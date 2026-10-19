@@ -25,6 +25,13 @@ return {
         markdown = { "prettierd", "prettier", stop_after_first = true },
         python = { "ruff_fix", "ruff_format" },
         lua = { "stylua" },
+        sh = { "shfmt" },
+        bash = { "shfmt" },
+      },
+      formatters = {
+        shfmt = {
+          prepend_args = { "-i", "2", "-ci" },
+        },
       },
       format_on_save = {
         timeout_ms = 500,

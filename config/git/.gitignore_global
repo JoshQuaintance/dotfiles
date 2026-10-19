@@ -28,3 +28,7 @@ Desktop.ini
 # Merge & patch artifacts
 *.orig
 *.rej
+
+# Compiled Zsh bytecode & completion dumps
+*.zwc
+.zcompdump*

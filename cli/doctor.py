@@ -391,6 +391,7 @@ def check_ssh(report: DoctorReport, dotfiles: Path, fix: bool = False):
         return
 
     ssh_config = Path.home() / ".ssh" / "config"
+    ssh_sockets = Path.home() / ".ssh" / "sockets"
     include = f"Include {dotfiles / 'config' / 'ssh' / 'dotfiles.conf'}"
     try:
         current = ssh_config.read_text()
@@ -405,6 +406,14 @@ def check_ssh(report: DoctorReport, dotfiles: Path, fix: bool = False):
         report.fixed("~/.ssh/config", "Prepended Include for shared defaults")
     else:
         report.warn("~/.ssh/config", "Missing shared defaults Include. Run with --fix")
+
+    if ssh_sockets.is_dir():
+        report.ok("~/.ssh/sockets", "SSH ControlMaster multiplexing ready")
+    elif fix:
+        ssh_sockets.mkdir(mode=0o700, parents=True, exist_ok=True)
+        report.fixed("~/.ssh/sockets", "Created directory for SSH multiplexing")
+    else:
+        report.warn("~/.ssh/sockets", "Missing ControlPath socket directory. Run with --fix")
 
     # ssh-add exit codes: 0 = keys loaded, 1 = agent running without keys, 2 = no agent
     code, _, _ = run_cmd(["ssh-add", "-l"])

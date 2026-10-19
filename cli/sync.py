@@ -108,9 +108,10 @@ def run_sync(
     elif ahead > 0:
         print(f"\n{C_DIM}Local branch is ahead by {ahead} commit(s). Push with: git push origin {branch}{C_RESET}")
 
-    # 6. Reconcile Symlinks
+    # 6. Reconcile Symlinks & Zsh Bytecode
     print(f"\n{C_BOLD}5. Reconciling Configuration Symlinks...{C_RESET}")
-    from cli.doctor import run_doctor
+    from cli.doctor import compile_zsh_sources, run_doctor
+    compile_zsh_sources(dotfiles)
     run_doctor(fix=True)
 
     print(f"\n{C_GREEN}{ICON_OK} Dotfiles synchronization complete!{C_RESET}\n")

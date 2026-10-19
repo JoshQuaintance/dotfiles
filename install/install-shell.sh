@@ -56,7 +56,7 @@ link_dotfile "config/git/.gitignore_global" "$HOME/.gitignore_global"
 
 # Shared SSH defaults: prepend an Include so host entries in ~/.ssh/config stay personal
 SSH_INCLUDE="Include $DOTFILES_DIR/config/ssh/dotfiles.conf"
-mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+mkdir -p "$HOME/.ssh/sockets" && chmod 700 "$HOME/.ssh" "$HOME/.ssh/sockets"
 if ! grep -qsF "$SSH_INCLUDE" "$HOME/.ssh/config"; then
   # Fresh machines have no ~/.ssh/config yet; a failing `cat` here would abort the installer under set -e
   {

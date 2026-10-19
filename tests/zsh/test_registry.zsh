@@ -24,6 +24,14 @@ test_fjq_enumerates_json_paths() {
   out=$(printf '{"app":{"name":"dotfiles","tags":["zsh","nvim"]}}\n' | fjq)
   assert_contains "$out" ".app.name"
   assert_contains "$out" ".app.tags[0]"
+
+  if command -v yq &>/dev/null; then
+    local yml_out toml_out
+    yml_out=$(fjq "$DOTFILES_DIR/config/lazygit/config.yml")
+    assert_contains "$yml_out" ".gui.nerdFontsVersion"
+    toml_out=$(fjq "$DOTFILES_DIR/config/atuin/config.toml")
+    assert_contains "$toml_out" ".search_mode"
+  fi
 }
 
 test_fa_includes_bin_tool_descriptions() {
