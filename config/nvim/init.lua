@@ -8,6 +8,7 @@ vim.g.maplocalleader = "\\"
 -- Load core settings
 require("config.options")
 require("config.keymaps")
+require("config.autocmds")
 
 -- When running inside VS Code (asvetliakov.vscode-neovim), load VS Code leader mappings
 if vim.g.vscode then

@@ -82,6 +82,8 @@ export DOTFILES_DIR="${DOTFILES_DIR:-${${(%):-%x}:A:h:h}}"
 # Native Zsh Completions, Options, History & Terminal Title
 export SHORT_HOST="${HOST/.*/}"
 export ZSH_COMPDUMP="${ZDOTDIR:-$HOME}/.zcompdump-${SHORT_HOST}-${ZSH_VERSION}"
+_dot_comp_dir="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles/completions"
+[ -d "$_dot_comp_dir" ] && fpath=("$_dot_comp_dir" $fpath)
 [ -d "$DOTFILES_DIR/zsh/custom/completions" ] && fpath=("$DOTFILES_DIR/zsh/custom/completions" $fpath)
 
 autoload -Uz compinit
@@ -167,6 +169,17 @@ _load_cached_init() {
 # Mise (Polyglot Runtime & Node 24 Manager — loaded before prompt so PATH is ready)
 _load_cached_init "mise" "mise activate zsh"
 _step "Mise polyglot runtime"
+
+# Astral uv autocompletion (lazy-autoloaded via fpath; regenerated when uv binary updates)
+if (( $+commands[uv] )); then
+    if [ ! -s "$_dot_comp_dir/_uv" ] || [ "${commands[uv]}" -nt "$_dot_comp_dir/_uv" ]; then
+        mkdir -p "$_dot_comp_dir" 2>/dev/null || true
+        uv generate-shell-completion zsh > "$_dot_comp_dir/_uv" 2>/dev/null || rm -f "$_dot_comp_dir/_uv"
+        [[ " ${fpath[*]} " != *" $_dot_comp_dir "* ]] && fpath=("$_dot_comp_dir" $fpath)
+    fi
+    (( $+functions[_uv] )) || { autoload -Uz _uv && compdef _uv uv 2>/dev/null; }
+fi
+unset _dot_comp_dir
 
 # Shell Prompt Initialization (Fast Native or Spaceship)
 if [ "$TERM" != "dumb" ] && [ -f "${DOTFILES_DIR:-$HOME/.dotfiles}/zsh/prompt.zsh" ]; then

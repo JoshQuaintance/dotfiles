@@ -152,6 +152,7 @@ def run_clean(dry_run: bool = False, clean_all: bool = False, clean_builds: bool
         cache_home / "zsh" / "zcompcache",
         cache_home / "ng_completion.zsh",
         cache_home / "dotfiles" / "init",
+        cache_home / "dotfiles" / "completions",
     ]
     comp_caches += [src.with_name(f"{src.name}.zwc") for src in stale_zsh_bytecode(dotfiles)]
     cache_bytes = 0
@@ -203,7 +204,7 @@ def run_clean(dry_run: bool = False, clean_all: bool = False, clean_builds: bool
     for tdir in tmp_dirs:
         if not tdir.is_dir():
             continue
-        for pattern in ("strdiff-left.*", "strdiff-right.*", "sdiff-left.*", "sdiff-right.*", "yazi-cwd.*", "test-smoke-*"):
+        for pattern in ("strdiff-left.*", "strdiff-right.*", "sdiff-left.*", "sdiff-right.*", "yazi-cwd.*", "fjq-*", "test-smoke-*"):
             for match in tdir.glob(pattern):
                 tmp_bytes += remove_target(match, dry_run)
                 tmp_count += 1
@@ -236,6 +237,14 @@ def run_clean(dry_run: bool = False, clean_all: bool = False, clean_builds: bool
                 res = subprocess.run(["uv", "cache", "prune"], capture_output=True, text=True, check=False)
                 if res.returncode == 0:
                     cleaned_items.append(("Astral uv cache", "Pruned via 'uv cache prune'"))
+
+        if shutil.which("mise"):
+            if dry_run:
+                cleaned_items.append(("Mise runtime cache", "Would run 'mise cache clear'"))
+            else:
+                res = subprocess.run(["mise", "cache", "clear"], capture_output=True, text=True, check=False)
+                if res.returncode == 0:
+                    cleaned_items.append(("Mise runtime cache", "Pruned via 'mise cache clear'"))
 
         if shutil.which("brew"):
             if dry_run:
