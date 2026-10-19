@@ -20,14 +20,17 @@ type error &>/dev/null || error() { printf "\033[38;2;243;139;168m✖\033[0m %s\
 # Detect environment
 IS_MAC=false
 IS_WSL=false
+ENV_LABEL="Native Linux"
 
 if [[ "$OSTYPE" == darwin* ]] || [ "$(uname -s)" = "Darwin" ]; then
   IS_MAC=true
+  ENV_LABEL="macOS"
 elif [ -n "${WSL_DISTRO_NAME:-}" ] || grep -qi microsoft /proc/version 2>/dev/null; then
   IS_WSL=true
+  ENV_LABEL="WSL (Windows Subsystem for Linux)"
 fi
 
-info "Detected environment: $($IS_MAC && echo "macOS" || ($IS_WSL && echo "WSL (Windows Subsystem for Linux)" || echo "Native Linux") )"
+info "Detected environment: $ENV_LABEL"
 
 # ------------------------------------------------------------------------------
 # 1. macOS (Homebrew Cask)
