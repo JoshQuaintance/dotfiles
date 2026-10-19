@@ -3,8 +3,10 @@ if [[ -z "$LANG" || "$LANG" == (C|POSIX) ]]; then
     source "${${(%):-%x}:A:h}/.zshenv"
 fi
 
-# Mobile / PRoot / Termux detection: default to fast compact startup
+# Mobile / PRoot / Termux / SSH mobile detection: default to fast compact startup
 if [[ -n "${TERMUX_VERSION:-}" || -d "/data/data/com.termux" || -n "${PROOT_TMP_DIR:-}" ]] || \
+   [[ -n "${SSH_MOBILE:-}" ]] || \
+   [[ "${LC_TERMINAL:-}" == (Blink|Termius) || "${TERM_PROGRAM:-}" == (Blink|Termius) ]] || \
    [[ -f /proc/version && "$(grep -iE '(android|samsung|qcom)' /proc/version 2>/dev/null)" ]] || \
    [[ "$(uname -r 2>/dev/null)" =~ (android|Android) ]]; then
     _IS_MOBILE=true
@@ -31,7 +33,12 @@ if [[ -o interactive ]] && { [ -t 1 ] || [ "${ZSH_BENCH_STEPS:-false}" = true ];
             local t_now=$EPOCHREALTIME
             local elapsed=$(( (t_now - _t_step) * 1000 ))
             _t_step=$t_now
-            printf "${_c_border}▌${_c_reset}  ${_c_check}✔${_c_reset} %-44s ${_c_dim}%5.0fms${_c_reset}\n" "$1" "$elapsed"
+            local _c="${COLUMNS:-80}"
+            if (( _c < 60 )); then
+                printf "${_c_border}▌${_c_reset}  ${_c_check}✔${_c_reset} %-24s ${_c_dim}%5.0fms${_c_reset}\n" "${1[1,24]}" "$elapsed"
+            else
+                printf "${_c_border}▌${_c_reset}  ${_c_check}✔${_c_reset} %-44s ${_c_dim}%5.0fms${_c_reset}\n" "$1" "$elapsed"
+            fi
         fi
     }
 
@@ -50,7 +57,7 @@ fi
 # If you come from bash you might have to change your $PATH.
 export PATH=$HOME/bin:$HOME/.local/bin:/usr/local/bin:$PATH
 
-# Homebrew environment (macOS Apple Silicon & Linuxbrew, fast static export)
+# Homebrew environment (macOS Apple Silicon, Intel & Linuxbrew, fast static export)
 if [ -d "/opt/homebrew" ]; then
     export HOMEBREW_PREFIX="/opt/homebrew"
     export HOMEBREW_CELLAR="/opt/homebrew/Cellar"
@@ -61,6 +68,16 @@ if [ -d "/opt/homebrew" ]; then
     fpath=("/opt/homebrew/share/zsh/site-functions" $fpath)
     export C_INCLUDE_PATH="/opt/homebrew/include:$C_INCLUDE_PATH"
     export LIBRARY_PATH="/opt/homebrew/lib:$LIBRARY_PATH"
+elif [ -f "/usr/local/bin/brew" ] || [ -d "/usr/local/Cellar" ]; then
+    export HOMEBREW_PREFIX="/usr/local"
+    export HOMEBREW_CELLAR="/usr/local/Cellar"
+    export HOMEBREW_REPOSITORY="/usr/local/Homebrew"
+    export PATH="/usr/local/bin:/usr/local/sbin${PATH+:$PATH}"
+    export MANPATH="/usr/local/share/man${MANPATH+:$MANPATH}:"
+    export INFOPATH="/usr/local/share/info:${INFOPATH:-}"
+    fpath=("/usr/local/share/zsh/site-functions" $fpath)
+    [ -d "/usr/local/include" ] && export C_INCLUDE_PATH="/usr/local/include:$C_INCLUDE_PATH"
+    [ -d "/usr/local/lib" ] && export LIBRARY_PATH="/usr/local/lib:$LIBRARY_PATH"
 elif [ -d "/home/linuxbrew/.linuxbrew" ]; then
     export HOMEBREW_PREFIX="/home/linuxbrew/.linuxbrew"
     export HOMEBREW_CELLAR="/home/linuxbrew/.linuxbrew/Cellar"
@@ -269,7 +286,9 @@ if command -v fzf &>/dev/null; then
 
     # FZF-Tab (interactive completion menu)
     for _fzf_tab in \
+        ${HOMEBREW_PREFIX:+"$HOMEBREW_PREFIX/opt/fzf-tab/share/fzf-tab/fzf-tab.zsh"} \
         "/opt/homebrew/opt/fzf-tab/share/fzf-tab/fzf-tab.zsh" \
+        "/usr/local/opt/fzf-tab/share/fzf-tab/fzf-tab.zsh" \
         "/usr/share/fzf-tab/fzf-tab.zsh" \
         "/home/linuxbrew/.linuxbrew/opt/fzf-tab/share/fzf-tab/fzf-tab.zsh" \
         "${XDG_DATA_HOME:-$HOME/.local/share}/fzf-tab/fzf-tab.zsh"; do
@@ -333,7 +352,9 @@ _step "Dotfiles aliases & functions"
 
 # Zsh Autosuggestions & Syntax Highlighting (macOS Homebrew, Linuxbrew, apt/dnf/pacman, ~/.local/share)
 for _zsh_autosug in \
+    ${HOMEBREW_PREFIX:+"$HOMEBREW_PREFIX/share/zsh-autosuggestions/zsh-autosuggestions.zsh"} \
     "/opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh" \
+    "/usr/local/share/zsh-autosuggestions/zsh-autosuggestions.zsh" \
     "/home/linuxbrew/.linuxbrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh" \
     "/usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh" \
     "/usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" \
@@ -352,7 +373,9 @@ done
 unset _zsh_autosug
 
 for _zsh_synhl in \
+    ${HOMEBREW_PREFIX:+"$HOMEBREW_PREFIX/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"} \
     "/opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" \
+    "/usr/local/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" \
     "/home/linuxbrew/.linuxbrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" \
     "/usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" \
     "/usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" \

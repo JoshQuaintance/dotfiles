@@ -1,5 +1,4 @@
-# Directory Navigation Functions
-
+# Create directory or file parent and cd into it (take)
 take() {
   if [ -z "$1" ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     printf "Usage: take <dir/|file|path/to/name>\n"
@@ -34,6 +33,7 @@ take() {
   fi
 }
 
+# Jump to the root directory of the current git repository (groot)
 groot() {
   _require_git_repo || return 1
   local root
@@ -122,9 +122,9 @@ _up() {
 }
 (( $+functions[compdef] )) && compdef _up up
 
-# Smart Directory Tree: 'tree' (full), 'tree 3' (3 levels), 'tree 2 src/' or 'tree src/ 2', 'tree -L 3'
 unalias tree lt 2>/dev/null || true
 
+# Smart Directory Tree: 'tree' (full), 'tree 3' (3 levels), 'tree 2 src/' or 'tree src/ 2', 'tree -L 3'
 tree() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     printf "Usage: tree [N] [path] [flags...]\n"

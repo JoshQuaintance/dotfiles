@@ -6,18 +6,7 @@
 # ==============================================================================
 
 _dotfiles_detect_prompt() {
-    # 1. Explicit user preference file (~/.config/dotfiles/prompt)
-    local pref_file="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/prompt"
-    if [[ -f "$pref_file" ]]; then
-        local chosen
-        chosen="$(tr -d '[:space:]' < "$pref_file")"
-        if [[ "$chosen" =~ ^(native|spaceship)$ ]]; then
-            echo "$chosen"
-            return 0
-        fi
-    fi
-
-    # 2. Environment variable override
+    # 1. Environment variable override (explicit per-session override takes absolute precedence)
     if [[ -n "${DOTFILES_PROMPT:-}" ]]; then
         case "$DOTFILES_PROMPT" in
             native|spaceship)
@@ -27,9 +16,15 @@ _dotfiles_detect_prompt() {
         esac
     fi
 
-    # 3. Auto-detection for PRoot / Termux / Android / Low-spec
+    # 2. Dynamic mobile terminal auto-detection (SSH_MOBILE, Blink, Termius, TERMUX_VERSION, Android)
+    # Evaluated before persistent desktop ~/.config/dotfiles/prompt so remote mobile SSH connections
+    # always auto-select native prompt to prevent fork latency, async worker stalls, and battery drain.
     local is_mobile=0
-    if [[ -n "${TERMUX_VERSION:-}" || -d "/data/data/com.termux" || -n "${PROOT_TMP_DIR:-}" ]]; then
+    if [[ "${_IS_MOBILE:-false}" == true || -n "${SSH_MOBILE:-}" ]]; then
+        is_mobile=1
+    elif [[ "${LC_TERMINAL:-}" == (Blink|Termius|blink|termius) || "${TERM_PROGRAM:-}" == (Blink|Termius|blink|termius) ]]; then
+        is_mobile=1
+    elif [[ -n "${TERMUX_VERSION:-}" || -d "/data/data/com.termux" || -n "${PROOT_TMP_DIR:-}" ]]; then
         is_mobile=1
     elif [[ -f /proc/version ]] && grep -qiE '(android|samsung|qcom)' /proc/version 2>/dev/null; then
         is_mobile=1
@@ -38,9 +33,19 @@ _dotfiles_detect_prompt() {
     fi
 
     if (( is_mobile )); then
-        # Default to Fast Native in PRoot/Termux to avoid fork overhead and battery drain
         echo "native"
         return 0
+    fi
+
+    # 3. Explicit user preference file (~/.config/dotfiles/prompt) for desktop / standard sessions
+    local pref_file="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/prompt"
+    if [[ -f "$pref_file" ]]; then
+        local chosen
+        chosen="$(tr -d '[:space:]' < "$pref_file")"
+        if [[ "$chosen" =~ ^(native|spaceship)$ ]]; then
+            echo "$chosen"
+            return 0
+        fi
     fi
 
     # 4. Standard Desktop default: Spaceship if installed, else Native
@@ -82,6 +87,10 @@ _load_fast_native_prompt() {
 
 _load_spaceship_prompt() {
     export SPACESHIP_CONFIG="${DOTFILES_DIR:-$HOME/.dotfiles}/config/spaceship/spaceship.zsh"
+    # Suppress heavy async workers on mobile/SSH where zpty can hang or drain battery
+    if [[ "${_IS_MOBILE:-false}" == true || -n "${SSH_MOBILE:-}" || "${LC_TERMINAL:-}" == (Blink|Termius|blink|termius) || "${TERM_PROGRAM:-}" == (Blink|Termius|blink|termius) ]]; then
+        export SPACESHIP_PROMPT_ASYNC=false
+    fi
     local _spaceship_entry=""
     local _sp_candidate
     for _sp_candidate in \
@@ -108,6 +117,16 @@ _load_spaceship_prompt() {
         fi
         source "$_spaceship_entry"
         source "${DOTFILES_DIR:-$HOME/.dotfiles}/zsh/spaceship-patches.zsh"
+
+        # Enforce synchronous prompt rendering in mobile / low-spec / SSH environments.
+        # Must be enforced AFTER spaceship.zsh is sourced, because spaceship sources
+        # $SPACESHIP_CONFIG which sets SPACESHIP_PROMPT_ASYNC=true for interactive ZLE.
+        if [[ "${_IS_MOBILE:-false}" == true || -n "${SSH_MOBILE:-}" || "${LC_TERMINAL:-}" == (Blink|Termius|blink|termius) || "${TERM_PROGRAM:-}" == (Blink|Termius|blink|termius) ]]; then
+            export SPACESHIP_PROMPT_ASYNC=false
+            if (( $+functions[async_stop_worker] )); then
+                async_stop_worker "spaceship" "spaceship_1" "spaceship_2" "spaceship_3" 2>/dev/null || true
+            fi
+        fi
     else
         _load_fast_native_prompt
     fi

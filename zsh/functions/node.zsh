@@ -121,30 +121,56 @@ _pkg_script_select() {
   esac
 }
 
-# npm / bun / pnpm wrappers (intercept 'run' without arguments) & direct shortcuts (npmr, bunr, pnpmr)
-for _pm in npm bun pnpm; do
-  eval "
-    ${_pm}() {
-      if [ \"\$1\" = \"run\" ] && [ \"\$#\" -eq 1 ]; then
-        _pkg_script_select ${_pm}
-      else
-        command ${_pm} \"\$@\"
-      fi
-    }
-    ${_pm}r() {
-      if ! _find_package_json >/dev/null; then
-        printf \"\033[31m✖ Cannot find a package.json file.\033[0m\n\" >&2
-        return 1
-      fi
-      if [ \"\$#\" -eq 0 ]; then
-        _pkg_script_select ${_pm}
-      else
-        command ${_pm} run \"\$@\"
-      fi
-    }
-  "
-done
-unset _pm
+_pm_wrapper() {
+  local pm="$1"
+  shift
+  if [ "$1" = "run" ] && [ "$#" -eq 1 ]; then
+    _pkg_script_select "$pm"
+  else
+    command "$pm" "$@"
+  fi
+}
+
+_pm_run_shortcut() {
+  local pm="$1"
+  shift
+  if ! _find_package_json >/dev/null; then
+    printf "\033[31m✖ Cannot find a package.json file.\033[0m\n" >&2
+    return 1
+  fi
+  if [ "$#" -eq 0 ]; then
+    _pkg_script_select "$pm"
+  else
+    command "$pm" run "$@"
+  fi
+}
+
+npm() {
+  _pm_wrapper npm "$@"
+}
+
+# Run npm package.json scripts with interactive modal-Vim FZF selector (npmr)
+npmr() {
+  _pm_run_shortcut npm "$@"
+}
+
+bun() {
+  _pm_wrapper bun "$@"
+}
+
+# Run bun package.json scripts with interactive modal-Vim FZF selector (bunr)
+bunr() {
+  _pm_run_shortcut bun "$@"
+}
+
+pnpm() {
+  _pm_wrapper pnpm "$@"
+}
+
+# Run pnpm package.json scripts with interactive modal-Vim FZF selector (pnpmr)
+pnpmr() {
+  _pm_run_shortcut pnpm "$@"
+}
 
 # Tab completion for npmr, bunr, pnpmr: complete script names & commands from nearest package.json
 _pkg_scripts() {

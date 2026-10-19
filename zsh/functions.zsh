@@ -161,8 +161,12 @@ _copy_or_print() {
   local val="$1"
   local label="${2:-to clipboard}"
   if (( $+functions[copy] )); then
-    printf "%s" "$val" | copy
-    printf "\033[32m✔ Copied %s\033[0m\n" "$label"
+    if printf "%s" "$val" | copy; then
+      printf "\033[32m✔ Copied %s\033[0m\n" "$label"
+    else
+      printf "%s\n" "$val"
+      return 1
+    fi
   else
     printf "%s\n" "$val"
   fi

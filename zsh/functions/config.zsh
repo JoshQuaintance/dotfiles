@@ -63,6 +63,7 @@ _conf_candidates() {
   fi
 }
 
+# Fuzzy configuration opener with auto-reload (conf)
 conf() {
   if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     printf "\033[1;38;2;137;180;250mconf\033[0m — Fuzzy configuration opener with auto-reload (macOS, Linux & WSL)\n\n"

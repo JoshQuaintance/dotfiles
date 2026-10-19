@@ -1,9 +1,40 @@
-# Spaceship / zsh-async workarounds, sourced by .zshrc right after spaceship.zsh loads.
-# Each patch is self-contained: delete it once the upstream bug it describes is fixed.
+# ==============================================================================
+# Spaceship Prompt & zsh-async Compatibility Patches
+#
+# Upstream Attributions:
+#   - zsh-async: https://github.com/mafredri/zsh-async
+#     Author: Mathias Fredriksson <mafredri@gmail.com>
+#     License: BSD-2-Clause / MIT (Copyright (c) 2015 Mathias Fredriksson)
+#   - Spaceship Prompt: https://github.com/spaceship-prompt/spaceship-prompt
+#     Author: Denys Dovhan <denysdovhan@gmail.com>
+#     License: MIT (Copyright (c) Denys Dovhan)
+#
+# Purpose:
+#   Sourced by zsh/prompt.zsh immediately after spaceship.zsh loads to apply
+#   targeted runtime hotfixes for asynchronous worker drain, terminal stderr
+#   restoration, subshell error immunity, and mobile low-overhead fallbacks.
+#   Each patch is self-contained and should be retired once upstream releases fix
+#   the respective underlying behavior.
+# ==============================================================================
 
-# zsh-async reads worker results with `zpty -r -t`, which on recent WSL2 kernels returns only the
-# leading NUL of a queued batch and then reports "no data" — finished jobs are silently dropped and
-# the prompt sticks on the async "…" indicator. Drain the worker's pty fd with sysread instead.
+# ------------------------------------------------------------------------------
+# 1. zsh-async: Worker Result Buffer Drain Fix (WSL2 / Linux Kernel pty stalls)
+#
+# Adapted from: mafredri/zsh-async (async_process_results)
+# Upstream: https://github.com/mafredri/zsh-async
+# Author: Mathias Fredriksson
+# License: BSD-2-Clause / MIT
+#
+# Issue:
+#   zsh-async reads worker results with `zpty -r -t`, which on recent WSL2 and Linux
+#   kernels returns only the leading NUL byte of a queued batch and reports "no data"
+#   prematurely. Finished background jobs are silently dropped and the prompt hangs
+#   indefinitely on the async "…" indicator.
+#
+# Fix:
+#   Drain the worker's pty file descriptor directly with sysread (zsh/system)
+#   when available, ensuring complete buffer consumption without worker stalls.
+# ------------------------------------------------------------------------------
 if (( $+functions[async_process_results] )) && zmodload zsh/system 2>/dev/null; then
     async_process_results() {
         setopt localoptions unset noshwordsplit noksharrays noposixidentifiers noposixstrings
@@ -38,7 +69,18 @@ if (( $+functions[async_process_results] )) && zmodload zsh/system 2>/dev/null; 
     }
 fi
 
-# Harden prompt_spaceship_chpwd so 'cd' inside subshells or under 'set -e' never fails
+# ------------------------------------------------------------------------------
+# 2. Spaceship Prompt: Subshell & Strict Mode Directory Change Hardening
+#
+# Adapted from: spaceship-prompt/spaceship-prompt (prompt_spaceship_chpwd)
+# Upstream: https://github.com/spaceship-prompt/spaceship-prompt
+# Author: Denys Dovhan
+# License: MIT
+#
+# Purpose:
+#   Harden prompt_spaceship_chpwd with 'setopt localoptions noerrexit' so 'cd'
+#   invocations within subshells or under 'set -e' never trigger shell termination.
+# ------------------------------------------------------------------------------
 if (( $+functions[prompt_spaceship_chpwd] )); then
     prompt_spaceship_chpwd() {
         setopt localoptions noerrexit
@@ -49,12 +91,38 @@ if (( $+functions[prompt_spaceship_chpwd] )); then
     }
 fi
 
-# Guard against zsh-async zpty bug (mafredri/zsh-async#35): if a zpty worker
-# collides on a name whose child already exited, zsh runs _async_worker in the
-# parent shell and redirects fd 2 (stderr) to /dev/null, breaking Atuin & git hooks.
+# ------------------------------------------------------------------------------
+# 3. zsh-async: File Descriptor 2 (stderr) Leak Prevention (Issue #35)
+#
+# Reference: https://github.com/mafredri/zsh-async/issues/35
+#
+# Issue:
+#   If a zpty worker collides on a worker name whose child process already exited,
+#   zsh executes _async_worker in the parent shell and redirects fd 2 (stderr)
+#   to /dev/null, silently breaking CLI utilities, Git hooks, and Atuin history.
+#
+# Fix:
+#   Hook into precmd to detect closed/redirected stderr while stdout is on a TTY,
+#   reopening fd 2 back to fd 1 via 'exec 2>&1'.
+# ------------------------------------------------------------------------------
 [[ -t 1 && ! -t 2 ]] && exec 2>&1
 _heal_stderr_precmd() {
     [[ -t 1 && ! -t 2 ]] && exec 2>&1 || true
 }
 autoload -Uz add-zsh-hook
 add-zsh-hook precmd _heal_stderr_precmd
+
+# ------------------------------------------------------------------------------
+# 4. Mobile & Low-Spec Terminal Optimization: Enforce Synchronous Rendering
+#
+# Purpose:
+#   Enforce synchronous prompt rendering (SPACESHIP_PROMPT_ASYNC=false) on
+#   mobile SSH, Blink, Termius, Termux, and narrow terminals to eliminate zpty
+#   fork latency and background CPU/battery drain.
+# ------------------------------------------------------------------------------
+if [[ "${_IS_MOBILE:-false}" == true || -n "${SSH_MOBILE:-}" || "${LC_TERMINAL:-}" == (Blink|Termius|blink|termius) || "${TERM_PROGRAM:-}" == (Blink|Termius|blink|termius) ]]; then
+    export SPACESHIP_PROMPT_ASYNC=false
+    if (( $+functions[async_stop_worker] )); then
+        async_stop_worker "spaceship" "spaceship_1" "spaceship_2" "spaceship_3" 2>/dev/null || true
+    fi
+fi

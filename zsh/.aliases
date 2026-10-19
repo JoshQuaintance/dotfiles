@@ -11,9 +11,7 @@ if command -v btop &>/dev/null; then
   alias top="btop" # Modern system resource monitor
   alias htop="btop" # Modern system resource monitor
 fi
-if command -v trash &>/dev/null; then
-  alias del="trash" # Move files to system Trash instead of permanent rm
-fi
+alias del="trash" # Move files to system Trash instead of permanent rm
 
 # Navigation & Directories
 alias cd..="cd .."
@@ -53,25 +51,26 @@ alias aliases="fa" # Fuzzy search all aliases, functions & tools
 alias falias="fa" # Fuzzy search all aliases, functions & tools
 
 # Python virtual environment (detects .venv or venv)
-alias pyactivate='[ -f "./.venv/bin/activate" ] && source ./.venv/bin/activate || ([ -f "./venv/bin/activate" ] && source ./venv/bin/activate || echo "No .venv or venv found in current directory")' # Activate .venv or venv in current directory
+alias pyactivate='[ -f "./.venv/bin/activate" ] && source ./.venv/bin/activate || { [ -f "./venv/bin/activate" ] && source ./venv/bin/activate || echo "No .venv or venv found in current directory"; }' # Activate .venv or venv in current directory
 
 # Node & Package Managers
 alias npmv="npm i --verbose" # Install npm packages with verbose output
 alias npmi-clean="rm -rf node_modules package-lock.json && npm install" # Wipe node_modules + lockfile and reinstall
 
 # Shell Reload & Network Info
-alias sz="source ~/.zshrc && echo '✔ ~/.zshrc sourced!'" # Reload ~/.zshrc in current shell
+alias sz="reload" # Replace current shell with a fresh login Zsh process
 alias src="source ~/.zshrc && echo '✔ ~/.zshrc sourced!'" # Reload ~/.zshrc in current shell
 alias reload="exec zsh -l" # Replace current shell with a fresh login Zsh process
 alias alert="notify" # Send persistent desktop alert notification
 alias myip="curl -s https://icanhazip.com" # Print public external IP address
-alias localip="ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print \$1}'" # Print local LAN IP address
+alias localip="ipconfig getifaddr \$(route -n get default 2>/dev/null | awk '/interface:/{print \$2}') 2>/dev/null || ipconfig getifaddr en0 2>/dev/null || ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if(\$i==\"src\" && i<NF){print \$(i+1); found=1; exit}} END{if(!found) exit 1}' || hostname -I 2>/dev/null | awk 'NF{print \$1; found=1; exit} END{if(!found) exit 1}'" # Print local LAN IP address
 
 # Dotfiles Maintenance Shortcuts
 alias .status="dot status" # Quick workstation & dotfiles overview
 alias .s="dot status" # Quick workstation & dotfiles overview
 alias .doctor="dotdoctor" # Full system & symlink health check
 alias .health="dotdoctor" # Full system & symlink health check (alias for .doctor)
+alias .test="dottest" # Run complete dotfiles integration test suite
 alias .check="dotcheck" # Check if dotfiles repo has upstream updates
 alias .update="dotupdate" # Pull dotfiles & upgrade Brew / Mise packages
 alias .bench="dot bench" # Profile interactive Zsh startup latency

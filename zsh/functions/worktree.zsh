@@ -230,11 +230,10 @@ _gwt_ensure_origin_fetch() {
 # List unattached branches (both remote origin/* and local refs/heads/*) not checked out in any worktree
 _gwtnew_available_branches() {
   local -A checked_out seen
-  local line wt_br b b_clean
-  while IFS= read -r line; do
-    wt_br=$(echo "$line" | awk '{print $3}' | tr -d '[]')
+  local wt_br b b_clean
+  while IFS= read -r wt_br; do
     [ -n "$wt_br" ] && checked_out[$wt_br]=1
-  done < <(git worktree list 2>/dev/null)
+  done < <(git worktree list --porcelain 2>/dev/null | sed -n 's/^branch refs\/heads\///p')
 
   while IFS= read -r b; do
     b_clean="${b#origin/}"
@@ -423,22 +422,25 @@ gwts() {
 
   local active_wt
   active_wt="$(git rev-parse --show-toplevel 2>/dev/null)"
-  local wt_path wt_branch marker is_active status_out status_str
-  local staged unstaged untracked ahead behind upstream_count sync_str
-  local wt_name wt_display_branch
+  local wt_path="" wt_branch="" marker="" is_active=false status_out="" status_str=""
+  local staged=0 unstaged=0 untracked=0 ahead=0 behind=0 upstream_count="" sync_str=""
+  local wt_name="" wt_display_branch=""
   local -a parts
+  local is_bare=false is_detached=false line=""
 
   printf "\n\033[1;38;2;203;166;247m%-3s %-14s %-38s %-16s %s\033[0m\n" "" "WORKTREE" "BRANCH" "SYNC" "WORKING TREE"
   printf "\033[38;2;108;112;134m%s\033[0m\n" "────────────────────────────────────────────────────────────────────────────────────────"
 
-  while IFS= read -r line; do
-    wt_path=$(echo "$line" | awk '{print $1}')
-    wt_branch=$(echo "$line" | awk '{print $3}' | tr -d '[]')
-    [[ "$wt_branch" == "(bare)" || -z "$wt_branch" ]] && continue
+  _render_gwts_entry() {
+    [[ "$is_bare" = true || -z "$wt_path" ]] && return 0
+    if [[ "$is_detached" = true && -z "$wt_branch" ]]; then
+      wt_branch="(detached HEAD)"
+    fi
+    [[ -z "$wt_branch" ]] && return 0
 
     marker="  "
     is_active=false
-    if [ "$wt_path" = "$active_wt" ]; then
+    if [[ "$wt_path" == "$active_wt" || "${wt_path:A}" == "${active_wt:A}" ]]; then
       marker="\033[1;32m➜ \033[0m"
       is_active=true
     fi
@@ -488,7 +490,39 @@ gwts() {
     else
       printf "%b%-14s \033[2m%-38s\033[0m %-26b %b\n" "$marker" "$wt_name" "$wt_display_branch" "$sync_str" "$status_str"
     fi
-  done < <(git worktree list 2>/dev/null)
+  }
+
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      worktree\ *)
+        _render_gwts_entry
+        wt_path="${line#worktree }"
+        wt_branch=""
+        is_bare=false
+        is_detached=false
+        ;;
+      bare)
+        is_bare=true
+        ;;
+      detached)
+        is_detached=true
+        ;;
+      branch\ refs/heads/*)
+        wt_branch="${line#branch refs/heads/}"
+        ;;
+      branch\ *)
+        wt_branch="${line#branch }"
+        ;;
+      "")
+        _render_gwts_entry
+        wt_path=""
+        wt_branch=""
+        is_bare=false
+        is_detached=false
+        ;;
+    esac
+  done < <(git worktree list --porcelain 2>/dev/null)
+  _render_gwts_entry
   printf "\n"
 }
 
@@ -504,14 +538,49 @@ gwtdel() {
   active_wt="$(git rev-parse --show-toplevel 2>/dev/null)"
 
   # Collect eligible worktrees (exclude active worktree, bare repo, and protected branches)
-  while IFS= read -r line; do
-    p="$(echo "$line" | awk '{print $1}')"
-    b="$(echo "$line" | awk '{print $3}' | tr -d '[]')"
-    [[ "$b" == "(bare)" || -z "$b" ]] && continue
-    [[ "$p" == "$active_wt" ]] && continue
-    [[ "$b" =~ ^(main|master|develop|qa|stage|staging)$ ]] && continue
-    eligible+=("${p}|${b}")
-  done < <(git worktree list 2>/dev/null)
+  local _p="" _b="" _is_bare=false _is_detached=false
+  _collect_gwtdel_entry() {
+    [[ "$_is_bare" = true || -z "$_p" ]] && return 0
+    if [[ "$_is_detached" = true && -z "$_b" ]]; then
+      _b="(detached HEAD)"
+    fi
+    [[ -z "$_b" ]] && return 0
+    [[ "$_p" == "$active_wt" || "${_p:A}" == "${active_wt:A}" ]] && return 0
+    [[ "$_b" =~ ^(main|master|develop|qa|stage|staging)$ ]] && return 0
+    eligible+=("${_p}|${_b}")
+  }
+
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      worktree\ *)
+        _collect_gwtdel_entry
+        _p="${line#worktree }"
+        _b=""
+        _is_bare=false
+        _is_detached=false
+        ;;
+      bare)
+        _is_bare=true
+        ;;
+      detached)
+        _is_detached=true
+        ;;
+      branch\ refs/heads/*)
+        _b="${line#branch refs/heads/}"
+        ;;
+      branch\ *)
+        _b="${line#branch }"
+        ;;
+      "")
+        _collect_gwtdel_entry
+        _p=""
+        _b=""
+        _is_bare=false
+        _is_detached=false
+        ;;
+    esac
+  done < <(git worktree list --porcelain 2>/dev/null)
+  _collect_gwtdel_entry
 
   if [ "${#eligible[@]}" -eq 0 ]; then
     printf "\033[33mNo disposable worktrees found (excluding active worktree and protected branches).\033[0m\n"

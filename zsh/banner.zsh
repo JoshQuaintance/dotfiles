@@ -4,6 +4,10 @@
 
 if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
   () {
+    local _cols="${COLUMNS:-}"
+    [[ -z "$_cols" || "$_cols" -le 0 ]] && _cols="$(tput cols 2>/dev/null || echo 80)"
+    [[ -z "$_cols" || "$_cols" -le 0 ]] && _cols=80
+
     local _arch="${CPUTYPE:-$(uname -m)}"
     local _os_name _os_str
 
@@ -125,9 +129,11 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
       fi
     fi
 
-    # 5. Disk Space
-    local _disk_str
-    _disk_str="$(df -h / 2>/dev/null | awk 'NR==2 {printf "%s (%s)", $4, $5}')"
+    # 5. Disk Space (skip df fork on ultra-narrow mobile viewports)
+    local _disk_str=""
+    if (( _cols >= 60 )); then
+      _disk_str="$(df -h / 2>/dev/null | awk 'NR==2 {printf "%s (%s)", $4, $5}')"
+    fi
 
     # 6. Rotating Shortcuts / Tips
     local -a _tips=(
@@ -150,7 +156,7 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
       "'ga' / 'gstash'   → Interactive git staging & stash manager"
       "'strdiff <a> <b>' → Colored character/word diff & scratch diff"
       "'take <dir>'      → mkdir -p and cd in one step"
-      "'sz' / 'als'      → Reload ~/.zshrc or toggle auto-ls on cd"
+      "'sz' / 'als'      → Reload shell or toggle auto-ls on cd"
       "'autonotify'      → Toggle desktop alerts for long commands (>15s)"
       "'fa' / 'aliases'  → Fuzzy search aliases, functions & comments"
       "'fenv' / 'cheath' → Inspect env vars or browse tldr cheat sheets"
@@ -163,15 +169,50 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
 
     # Render Left Accent Bar (total measured here so it includes the banner's own probes above)
     printf -v _tot_str "%.2fs" $(( EPOCHREALTIME - _t_start ))
-    _step "Startup banner (system probes)"
-    printf "${_c_border}▌${_c_reset}\n"
-    printf "${_c_border}▌${_c_reset} ${_c_title}%s${_c_reset} ${_c_dim}•${_c_reset} %s ${_c_dim}•${_c_reset} %s ${_c_dim}•${_c_reset} ${_c_check}Ready in %s${_c_reset}\n" \
-      "$_title" "$_os_str" "zsh ${ZSH_VERSION:-5.9}" "$_tot_str"
-    printf "${_c_border}▌${_c_reset} ${_c_key}Dotfiles:${_c_reset} %s\n" "$_dot_info"
-    printf "${_c_border}▌${_c_reset} ${_c_key}System:${_c_reset}   %s up ${_c_dim}•${_c_reset} %s RAM ${_c_dim}•${_c_reset} %s Disk ${_c_dim}•${_c_reset} %s %s\n" \
-      "$_uptime_str" "$_mem_str" "$_disk_str" "$_batt_label" "$_batt_info"
-    printf "${_c_border}▌${_c_reset} ${_c_dim}%s${_c_reset}\n" "$_tip_line"
-    echo ""
+    (( $+functions[_step] )) && _step "Startup banner (system probes)" || true
+
+    if (( _cols < 60 )); then
+      # Ultra-compact layout: mobile portrait & narrow splits (<60 cols)
+      local _title_str="$_title"
+      local _max_title=$(( _cols - 12 ))
+      (( _max_title < 4 )) && _max_title=4
+      if (( ${#_title_str} > _max_title )); then
+        local _t_len=$(( _max_title - 3 ))
+        (( _t_len < 1 )) && _t_len=1
+        _title_str="${_title_str[1,$_t_len]}..."
+      fi
+      printf "${_c_border}▌${_c_reset}\n"
+      printf "${_c_border}▌${_c_reset} ${_c_title}%s${_c_reset} ${_c_dim}•${_c_reset} ${_c_check}%s${_c_reset}\n" \
+        "$_title_str" "$_tot_str"
+      printf "${_c_border}▌${_c_reset} ${_c_key}Dot:${_c_reset} %s\n" "$_dot_info"
+      printf "${_c_border}▌${_c_reset} ${_c_key}Sys:${_c_reset} %s up ${_c_dim}•${_c_reset} %s RAM\n" \
+        "$_uptime_str" "$_mem_str"
+      echo ""
+    elif (( _cols < 80 )); then
+      # Compact layout: 60 to 79 cols
+      printf "${_c_border}▌${_c_reset}\n"
+      printf "${_c_border}▌${_c_reset} ${_c_title}%s${_c_reset} ${_c_dim}•${_c_reset} %s ${_c_dim}•${_c_reset} ${_c_check}Ready in %s${_c_reset}\n" \
+        "$_title" "$_os_str" "$_tot_str"
+      printf "${_c_border}▌${_c_reset} ${_c_key}Dotfiles:${_c_reset} %s\n" "$_dot_info"
+      printf "${_c_border}▌${_c_reset} ${_c_key}System:${_c_reset}   %s up ${_c_dim}•${_c_reset} %s RAM ${_c_dim}•${_c_reset} %s\n" \
+        "$_uptime_str" "$_mem_str" "$_batt_info"
+      if (( ${#_tip_line} > _cols - 6 )); then
+        printf "${_c_border}▌${_c_reset} ${_c_dim}%s...${_c_reset}\n" "${_tip_line[1,$(( _cols - 9 ))]}"
+      else
+        printf "${_c_border}▌${_c_reset} ${_c_dim}%s${_c_reset}\n" "$_tip_line"
+      fi
+      echo ""
+    else
+      # Full desktop layout: >= 80 cols
+      printf "${_c_border}▌${_c_reset}\n"
+      printf "${_c_border}▌${_c_reset} ${_c_title}%s${_c_reset} ${_c_dim}•${_c_reset} %s ${_c_dim}•${_c_reset} %s ${_c_dim}•${_c_reset} ${_c_check}Ready in %s${_c_reset}\n" \
+        "$_title" "$_os_str" "zsh ${ZSH_VERSION:-5.9}" "$_tot_str"
+      printf "${_c_border}▌${_c_reset} ${_c_key}Dotfiles:${_c_reset} %s\n" "$_dot_info"
+      printf "${_c_border}▌${_c_reset} ${_c_key}System:${_c_reset}   %s up ${_c_dim}•${_c_reset} %s RAM ${_c_dim}•${_c_reset} %s Disk ${_c_dim}•${_c_reset} %s %s\n" \
+        "$_uptime_str" "$_mem_str" "$_disk_str" "$_batt_label" "$_batt_info"
+      printf "${_c_border}▌${_c_reset} ${_c_dim}%s${_c_reset}\n" "$_tip_line"
+      echo ""
+    fi
   }
 fi
 unfunction _step 2>/dev/null || true

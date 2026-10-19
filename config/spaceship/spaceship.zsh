@@ -4,7 +4,10 @@
 # ==============================================================================
 
 # Core Prompt Behavior — only spawn zpty async workers when attached to an interactive TTY with ZLE
-if [[ -t 1 && -t 2 && -o zle ]]; then
+# (suppressed on mobile/SSH or when explicitly disabled by the user/caller)
+if [[ "${SPACESHIP_PROMPT_ASYNC:-}" == "false" || "${_IS_MOBILE:-false}" == true || -n "${SSH_MOBILE:-}" || "${LC_TERMINAL:-}" == (Blink|Termius|blink|termius) || "${TERM_PROGRAM:-}" == (Blink|Termius|blink|termius) ]]; then
+  SPACESHIP_PROMPT_ASYNC=false
+elif [[ -t 1 && -t 2 && -o zle ]]; then
   SPACESHIP_PROMPT_ASYNC=true
 else
   SPACESHIP_PROMPT_ASYNC=false

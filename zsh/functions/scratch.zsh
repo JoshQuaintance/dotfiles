@@ -6,7 +6,6 @@
 #   scratch -g [query]    # Search inside all scratchpads with rg/grep + fzf preview
 #   scratch -d / --dir    # Jump to scratch directory
 #   curl ... | scratch    # Pipe stdin directly into a scratchpad
-
 scratch() {
   local scratch_dir="${SCRATCH_DIR:-$HOME/.scratch}"
   mkdir -p "$scratch_dir"

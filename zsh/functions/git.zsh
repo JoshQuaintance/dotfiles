@@ -63,6 +63,7 @@ clone() {
     local stripped_url="${clone_url%.git}"
     target_dir="${stripped_url:t}"
   fi
+  target_dir="${target_dir:A}"
 
   local -a clone_extra_opts
   if [ "$shallow_mode" = true ]; then
@@ -83,16 +84,43 @@ clone() {
     git -C "$target_dir" config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
     git -C "$target_dir" fetch origin --quiet 2>/dev/null || true
 
-    local def_branch
-    def_branch="$(git -C "$target_dir" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|^refs/remotes/origin/||')"
+    local def_branch raw_ref candidate
+    # 1. Primary: Query the bare repository's HEAD symbolic-ref.
+    #    git clone --bare sets HEAD to the upstream's default branch (e.g. trunk, main, develop).
+    def_branch="$(git -C "$target_dir" symbolic-ref --short HEAD 2>/dev/null)"
+
+    # 2. Secondary: Remote tracking origin/HEAD detection.
+    #    If HEAD is detached or non-symbolic, query origin to set refs/remotes/origin/HEAD.
     if [ -z "$def_branch" ]; then
-      if git -C "$target_dir" show-ref --verify --quiet refs/remotes/origin/develop; then
-        def_branch="develop"
-      elif git -C "$target_dir" show-ref --verify --quiet refs/remotes/origin/main; then
-        def_branch="main"
-      else
-        def_branch="master"
+      git -C "$target_dir" remote set-head origin --auto 2>/dev/null || true
+      raw_ref="$(git -C "$target_dir" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null)"
+      def_branch="${raw_ref#refs/remotes/origin/}"
+    fi
+
+    # 3. Tertiary: Probe standard default branch names in order of prevalence, verifying existence.
+    if [ -z "$def_branch" ]; then
+      for candidate in main master develop trunk; do
+        if git -C "$target_dir" show-ref --verify --quiet "refs/heads/$candidate" || \
+           git -C "$target_dir" show-ref --verify --quiet "refs/remotes/origin/$candidate"; then
+          def_branch="$candidate"
+          break
+        fi
+      done
+    fi
+
+    # 4. Quaternary: Fall back to any available local branch or remote tracking branch.
+    if [ -z "$def_branch" ]; then
+      def_branch="$(git -C "$target_dir" for-each-ref --format="%(refname:short)" --count=1 refs/heads/ 2>/dev/null)"
+      if [ -z "$def_branch" ]; then
+        raw_ref="$(git -C "$target_dir" for-each-ref --format="%(refname:short)" refs/remotes/origin/ 2>/dev/null | grep -v '/HEAD$' | head -n 1)"
+        def_branch="${raw_ref#origin/}"
       fi
+    fi
+
+    # 5. Guard: If no valid branch exists, abort cleanly instead of crashing worktree add.
+    if [ -z "$def_branch" ]; then
+      printf "\033[31m✖ Could not determine default branch for repository.\033[0m\n" >&2
+      return 1
     fi
 
     git -C "$target_dir" worktree add "$target_dir/$def_branch" "$def_branch" || return 1
@@ -108,6 +136,7 @@ clone() {
   fi
 }
 
+# Search git commit messages across all branches (gsearch)
 gsearch() {
   git log --all --grep="$1" --oneline
 }
@@ -257,7 +286,9 @@ gco() {
       _copy_or_print "$target" "branch name: $target"
       ;;
     *)
-      if [[ "$target" == */* ]]; then
+      if git show-ref --verify --quiet "refs/heads/$target"; then
+        git checkout "$target"
+      elif [[ "$target" == */* ]]; then
         local local_name="${target#*/}"
         git checkout --track "$target" 2>/dev/null || git checkout -b "$local_name" "$target" 2>/dev/null || git checkout "$local_name"
       else
@@ -343,11 +374,11 @@ gstash() {
   esac
 }
 
+unalias ga 2>/dev/null || true
+
 # Interactive Git File Stage / Unstage / Discard Picker (ga / gadd)
 # When run with arguments: passes directly to git add "$@"
 # When run without arguments: opens modal-Vim FZF picker for modified/staged/untracked files
-unalias ga 2>/dev/null || true
-
 ga() {
   if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     printf "\033[1;38;2;203;166;247mga\033[0m (alias: \033[1mgadd\033[0m) — Interactive modal-Vim Git stage / unstage / discard picker\n\n"
@@ -597,7 +628,7 @@ gbclean() {
 
   # Active worktree branches should never be deleted
   local active_branches
-  active_branches=$(git worktree list 2>/dev/null | awk '{print $3}' | tr -d '[]')
+  active_branches=$(git worktree list --porcelain 2>/dev/null | sed -n 's/^branch refs\/heads\///p')
 
   local merged_branches=()
   local b="" b_clean=""
