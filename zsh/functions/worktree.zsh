@@ -219,8 +219,36 @@ gwtenv() {
   fi
 }
 
+# Ensure bare worktree hubs cloned with `git clone --bare` have remote.origin.fetch configured
+# so `git fetch --prune` populates `refs/remotes/origin/*` instead of leaving remote branches invisible.
+_gwt_ensure_origin_fetch() {
+  if git config --get remote.origin.url &>/dev/null && ! git config --get remote.origin.fetch &>/dev/null; then
+    git config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*" 2>/dev/null || true
+  fi
+}
+
+# List unattached branches (both remote origin/* and local refs/heads/*) not checked out in any worktree
+_gwtnew_available_branches() {
+  local -A checked_out seen
+  local line wt_br b b_clean
+  while IFS= read -r line; do
+    wt_br=$(echo "$line" | awk '{print $3}' | tr -d '[]')
+    [ -n "$wt_br" ] && checked_out[$wt_br]=1
+  done < <(git worktree list 2>/dev/null)
+
+  while IFS= read -r b; do
+    b_clean="${b#origin/}"
+    [[ -z "$b_clean" || "$b_clean" == "HEAD"* || "$b_clean" == "origin" || "$b_clean" == dura/* ]] && continue
+    (( ${+checked_out[$b_clean]} || ${+seen[$b_clean]} )) && continue
+    seen[$b_clean]=1
+    printf "%s\n" "$b_clean"
+  done < <(
+    git for-each-ref --sort=-committerdate --format='%(refname:short)' refs/remotes/origin/ refs/heads/ 2>/dev/null
+  )
+}
+
 # Git Worktree New / Create (gwtnew / gwtn)
-# Creates a new worktree from an existing remote branch or a new branch
+# Creates a new worktree from an existing remote/local branch or a new branch
 gwtnew() {
   local auto_env=false
   local target_input=""
@@ -242,6 +270,7 @@ gwtnew() {
   done
 
   _require_git_repo || return 1
+  _gwt_ensure_origin_fetch
 
   local main_root base_branch src_wt
   main_root="$(_git_main_root)"
@@ -251,7 +280,7 @@ gwtnew() {
   target_input="${target_input#"${target_input%%[![:space:]]*}"}"
   target_input="${target_input%"${target_input##*[![:space:]]}"}"
 
-  # If no argument given, offer interactive FZF selection of remote branches
+  # If no argument given, offer interactive FZF selection of remote & unattached local branches
   if [ -z "$target_input" ]; then
     if ! command -v fzf &>/dev/null; then
       printf "Usage: gwtnew [-e|--env] <branch-name-or-ticket>\n" >&2
@@ -261,23 +290,14 @@ gwtnew() {
     printf "\033[1;34m==>\033[0m Fetching remote branches...\n"
     git fetch --prune 2>/dev/null || true
 
-    # Collect existing active worktree branches to exclude
-    local existing_wts
-    existing_wts=$(git worktree list 2>/dev/null | awk '{print $3}' | tr -d '[]')
-
-    # Get remote branches excluding HEAD and already checked-out branches
-    local remote_branches=()
+    local -a remote_branches
+    local b
     while IFS= read -r b; do
-      local b_clean="${b#origin/}"
-      [[ "$b_clean" == "HEAD"* ]] && continue
-      if echo "$existing_wts" | grep -qx "$b_clean"; then
-        continue
-      fi
-      remote_branches+=("$b_clean")
-    done < <(git branch -r 2>/dev/null | sed 's/^[ *]*//')
+      [ -n "$b" ] && remote_branches+=("$b")
+    done < <(_gwtnew_available_branches)
 
     if [ "${#remote_branches[@]}" -eq 0 ]; then
-      printf "\033[33mNo unattached remote branches found. Provide a branch name to create a new one.\033[0m\n"
+      printf "\033[33mNo unattached branches found. Provide a branch name to create a new one.\033[0m\n"
       printf "Usage: gwtnew [-e|--env] <new-branch-name>\n"
       return 0
     fi
@@ -291,7 +311,7 @@ gwtnew() {
       --height=~45% \
       "${fzf_mode_flags[@]}" \
       --color="header:italic:dim,prompt:bold:green,pointer:bold:green" \
-      --preview='git log -n 10 --oneline --color=always "origin/{}" 2>/dev/null' \
+      --preview='git log -n 10 --oneline --color=always "origin/{}" 2>/dev/null || git log -n 10 --oneline --color=always "{}" 2>/dev/null' \
       --preview-window='right:55%:wrap')
 
     local query_line selected_line
@@ -320,12 +340,12 @@ gwtnew() {
   local target_branch="$target_input"
   local target_folder=""
 
-  # Check if target_input matches an existing remote branch (e.g. "3549" -> "origin/feat/SALES-3549/...")
-  local matched_remote
-  matched_remote=$(git branch -r 2>/dev/null | sed 's/^[ *]*//' | grep -v 'HEAD' | grep -i "${target_input}" | head -n 1)
+  # Check if target_input matches an existing remote or local branch (e.g. "3709" -> "feat/SALES-3709/...")
+  local matched_branch
+  matched_branch=$(_gwtnew_available_branches | grep -i "${target_input}" | head -n 1)
 
-  if [ -n "$matched_remote" ]; then
-    target_branch="${matched_remote#origin/}"
+  if [ -n "$matched_branch" ]; then
+    target_branch="$matched_branch"
   fi
 
   # If purely numeric, format as ticket branch default if not matched
@@ -631,6 +651,7 @@ gwtclean() {
 
   local main_worktree
   main_worktree="$(_git_main_root)"
+  _gwt_ensure_origin_fetch
 
   printf "\033[1;34m==>\033[0m Fetching and pruning remote branches (git fetch --prune)...\n"
   git fetch --prune 2>/dev/null || {
@@ -840,15 +861,14 @@ _wt() {
 }
 (( $+functions[compdef] )) && compdef _wt wt gwtenv
 
-# Tab completion for gwtnew: list available remote branches
+# Tab completion for gwtnew: list available remote & local unattached branches
 _gwtnew() {
   local -a branches
-  local b="" b_clean=""
+  local b=""
   while IFS= read -r b; do
-    b_clean="${b#origin/}"
-    [[ "$b_clean" != "HEAD"* ]] && branches+=("$b_clean")
-  done < <(git branch -r 2>/dev/null | sed 's/^[ *]*//')
-  _describe 'remote branch' branches
+    [ -n "$b" ] && branches+=("$b")
+  done < <(_gwtnew_available_branches)
+  _describe 'branch' branches
 }
 (( $+functions[compdef] )) && compdef _gwtnew gwtnew gwtn
 
