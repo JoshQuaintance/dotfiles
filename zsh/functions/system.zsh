@@ -567,7 +567,7 @@ extract() {
     *.gz)               gunzip "$file" ;;
     *.zip)              unzip "$file" ;;
     *.z)                uncompress "$file" ;;
-    *.7z)               7z x "$file" ;;
+    *.7z)               if command -v 7zz &>/dev/null; then 7zz x "$file"; else 7z x "$file"; fi ;;
     *.zst)              zstd -d "$file" ;;
     *)
       printf "\033[31m✖ Cannot extract '%s' — unsupported extension.\033[0m\n" "$file" >&2
@@ -575,6 +575,12 @@ extract() {
       ;;
   esac
 }
+
+# Tab completion for extract / x: complete supported archive files
+_extract() {
+  _files -g '*.(tar.bz2|tbz2|tar.gz|tgz|tar.xz|txz|tar.zst|tar|bz2|rar|gz|zip|Z|z|7z|zst)(-.)'
+}
+(( $+functions[compdef] )) && compdef _extract extract x || true
 
 # Universal Archive Creator (pack)
 # Companion to extract: creates archives from files/directories based on output extension.
@@ -634,7 +640,7 @@ pack() {
       *.tar.zst)          tar --zstd -cvf "$archive" "$@" 2>/dev/null || { tar cvf - "$@" | zstd -o "$archive"; } ;;
       *.tar)              tar cvf "$archive" "$@" ;;
       *.zip)              zip -r "$archive" "$@" ;;
-      *.7z)               7z a "$archive" "$@" ;;
+      *.7z)               if command -v 7zz &>/dev/null; then 7zz a "$archive" "$@"; else 7z a "$archive" "$@"; fi ;;
       *.gz)               gzip -k -c "$1" > "$archive" ;;
       *.bz2)              bzip2 -k -c "$1" > "$archive" ;;
       *.zst)              zstd -k "$1" -o "$archive" ;;

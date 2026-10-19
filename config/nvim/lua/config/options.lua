@@ -42,3 +42,13 @@ vim.g.loaded_ruby_provider = 0
 if vim.fn.executable("python3") == 1 then
   vim.g.python3_host_prog = vim.fn.exepath("python3")
 end
+
+-- Mobile / Termux / PRoot environment detection (shared across plugins)
+vim.g.is_mobile = vim.fn.has("android") == 1
+  or vim.fn.filereadable("/data/data/com.termux/files/usr/bin/termux-info") == 1
+  or os.getenv("TERMUX_VERSION") ~= nil
+  or os.getenv("PROOT_TMP_DIR") ~= nil
+  or (
+    vim.fn.filereadable("/proc/version") == 1
+    and (vim.fn.readfile("/proc/version")[1] or ""):lower():match("android") ~= nil
+  )

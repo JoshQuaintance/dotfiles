@@ -428,3 +428,9 @@ fjq() {
   [ -n "$tmp_json" ] && rm -f -- "$tmp_json"
   return 0
 }
+
+# Tab completion for fjq: complete JSON, YAML, and TOML files
+_fjq() {
+  _files -g '*.(json|yaml|yml|toml)(-.)'
+}
+(( $+functions[compdef] )) && compdef _fjq fjq || true

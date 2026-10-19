@@ -44,6 +44,7 @@ def get_cli_tool_manifest() -> list[ToolEntry]:
         ToolEntry("jq", "jq JSON processor", ["jq", "--version"], "jq"),
         ToolEntry("yq", "yq YAML/TOML processor", ["yq", "--version"], "yq"),
         ToolEntry("ouch", "ouch archive compressor", ["ouch", "--version"], "ouch"),
+        ToolEntry("7zz", "7-Zip archiver (Yazi previews)", ["7zz", "--help"], "sevenzip"),
         ToolEntry("mise", "Mise polyglot runtime", ["mise", "--version"]),
         ToolEntry("nvim", "Neovim editor", ["nvim", "--version"], "neovim"),
         ToolEntry("yazi", "Yazi file manager", ["yazi", "--version"], "yazi"),

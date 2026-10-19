@@ -10,14 +10,8 @@ return {
 
       ts.setup()
 
-      local is_mobile = vim.fn.has("android") == 1
-        or vim.fn.filereadable("/data/data/com.termux/files/usr/bin/termux-info") == 1
-        or os.getenv("TERMUX_VERSION") ~= nil
-        or os.getenv("PROOT_TMP_DIR") ~= nil
-        or (vim.fn.filereadable("/proc/version") == 1 and (vim.fn.readfile("/proc/version")[1] or ""):lower():match("android") ~= nil)
-
       local parsers
-      if is_mobile then
+      if vim.g.is_mobile then
         parsers = { "bash", "json", "lua", "markdown", "markdown_inline", "vim", "vimdoc" }
       else
         parsers = {
@@ -29,6 +23,8 @@ return {
           "lua",
           "markdown",
           "markdown_inline",
+          "python",
+          "toml",
           "tsx",
           "typescript",
           "vim",

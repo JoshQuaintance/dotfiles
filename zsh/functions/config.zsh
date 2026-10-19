@@ -174,6 +174,8 @@ conf() {
   if [ "$before_sum" != "$after_sum" ]; then
     if [ "$is_shell_rc" = true ]; then
       echo "Changes detected. Sourcing $target_file..."
+      local real_target="${target_file:A}"
+      zcompile -R -- "${real_target}.zwc" "$real_target" 2>/dev/null || true
       source "$target_file"
       echo "✔ Terminal environment updated!"
     elif [[ "$target_file" == *"/windows-terminal/settings.json" ]] && [ -n "$WSL_DISTRO_NAME" ] && command -v wsl-setup-terminal &>/dev/null; then
@@ -434,5 +436,31 @@ _conf() {
   done < <(_conf_candidates 2>/dev/null | awk -F'\t' '!seen[$1]++')
   _describe 'config target' targets
 }
-(( $+functions[compdef] )) && compdef _conf conf
+(( $+functions[compdef] )) && compdef _conf conf || true
+
+# Tab completion for dotbranch / .branch / .b: list ~/.dotfiles branches and flags
+_dotbranch() {
+  local dot_dir="${DOTFILES_DIR:-$HOME/.dotfiles}"
+  local -a branches flags
+  flags=(
+    '-:Toggle to previous dotfiles branch'
+    '-s:Show current dotfiles branch and status'
+    '--status:Show current dotfiles branch and status'
+    '-b:Create and switch to a new dotfiles branch'
+    '--create:Create and switch to a new dotfiles branch'
+    '-h:Show help message'
+    '--help:Show help message'
+  )
+  local b
+  while IFS= read -r b; do
+    [[ -z "$b" || "$b" == "HEAD"* || "$b" == "origin" || "$b" == dura/* ]] && continue
+    branches+=("${b#origin/}")
+  done < <(
+    git -C "$dot_dir" for-each-ref --sort=-committerdate --format='%(refname:short)' refs/heads/ refs/remotes/origin/ 2>/dev/null
+  )
+  branches=("${(@u)branches}")
+  _describe 'dotfiles branch' branches
+  _describe 'flag' flags
+}
+(( $+functions[compdef] )) && compdef _dotbranch dotbranch .branch .b || true
 

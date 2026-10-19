@@ -32,6 +32,7 @@ brew "hyperfine"    # Statistical command-line benchmarking tool
 brew "jq"           # Lightweight and flexible command-line JSON processor
 brew "yq"           # Portable command-line YAML, JSON, XML, and TOML processor
 brew "ouch"         # Obvious Unified Compression Helper (archive pack/extract)
+brew "sevenzip"     # 7-Zip archiver (7zz) for Yazi archive previews & 7z format
 brew "shellcheck"   # Static analysis and linting tool for shell scripts
 brew "shfmt"        # Shell parser, formatter, and simplifier
 brew "fzf-tab"      # Interactive zsh completion menu

@@ -24,6 +24,12 @@ return {
         map("n", "[h", gs.prev_hunk, { desc = "Prev Git hunk" })
         map("n", "<leader>hp", gs.preview_hunk, { desc = "Preview Git hunk" })
         map("n", "<leader>hb", function() gs.blame_line({ full = true }) end, { desc = "Blame line" })
+        map("n", "<leader>hs", gs.stage_hunk, { desc = "Stage Git hunk" })
+        map("n", "<leader>hr", gs.reset_hunk, { desc = "Reset Git hunk" })
+        map("v", "<leader>hs", function() gs.stage_hunk({ vim.fn.line("."), vim.fn.line("v") }) end, { desc = "Stage selected Git hunk" })
+        map("v", "<leader>hr", function() gs.reset_hunk({ vim.fn.line("."), vim.fn.line("v") }) end, { desc = "Reset selected Git hunk" })
+        map("n", "<leader>hS", gs.stage_buffer, { desc = "Stage entire buffer" })
+        map("n", "<leader>hu", gs.undo_stage_hunk, { desc = "Undo stage Git hunk" })
       end,
     },
   },

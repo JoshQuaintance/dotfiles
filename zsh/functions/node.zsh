@@ -145,3 +145,16 @@ for _pm in npm bun pnpm; do
   "
 done
 unset _pm
+
+# Tab completion for npmr, bunr, pnpmr: complete script names & commands from nearest package.json
+_pkg_scripts() {
+  local pkg_file
+  pkg_file=$(_find_package_json) || return 0
+  local -a scripts
+  local k v
+  while IFS=$'\t' read -r k v; do
+    [ -n "$k" ] && scripts+=("${k//:/\\:}:${v}")
+  done < <(_extract_pkg_scripts "$pkg_file")
+  (( ${#scripts[@]} )) && _describe 'package.json script' scripts
+}
+(( $+functions[compdef] )) && compdef _pkg_scripts npmr bunr pnpmr || true

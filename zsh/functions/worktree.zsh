@@ -854,12 +854,13 @@ _wt() {
   local line="" p="" b=""
   while IFS= read -r line; do
     p="$(echo "$line" | awk '{print $1}')"
-    b="$(basename "$p")"
+    # :t = tail (basename) without forking a subshell
+    b="${p:t}"
     [[ "$b" != ".bare" && "$b" != ".git" ]] && wts+=("$b")
   done < <(git worktree list 2>/dev/null)
   _describe 'worktree' wts
 }
-(( $+functions[compdef] )) && compdef _wt wt gwtenv
+(( $+functions[compdef] )) && compdef _wt wt gwtenv || true
 
 # Tab completion for gwtnew: list available remote & local unattached branches
 _gwtnew() {
@@ -870,7 +871,7 @@ _gwtnew() {
   done < <(_gwtnew_available_branches)
   _describe 'branch' branches
 }
-(( $+functions[compdef] )) && compdef _gwtnew gwtnew gwtn
+(( $+functions[compdef] )) && compdef _gwtnew gwtnew gwtn || true
 
 # Tab completion for gwtdel: list disposable worktrees
 _gwtdel() {
@@ -879,7 +880,8 @@ _gwtdel() {
   local line="" p="" b="" br=""
   while IFS= read -r line; do
     p="$(echo "$line" | awk '{print $1}')"
-    b="$(basename "$p")"
+    # :t = tail (basename) without forking a subshell
+    b="${p:t}"
     br="$(echo "$line" | awk '{print $3}' | tr -d '[]')"
     [[ "$b" == ".bare" || "$b" == ".git" || "$p" == "$active_wt" ]] && continue
     [[ "$br" =~ ^(main|master|develop|qa|stage|staging)$ ]] && continue
@@ -887,4 +889,4 @@ _gwtdel() {
   done < <(git worktree list 2>/dev/null)
   _describe 'worktree to delete' wts
 }
-(( $+functions[compdef] )) && compdef _gwtdel gwtdel
+(( $+functions[compdef] )) && compdef _gwtdel gwtdel || true

@@ -63,13 +63,7 @@ return {
         },
       }
 
-      local is_mobile = vim.fn.has("android") == 1
-        or vim.fn.filereadable("/data/data/com.termux/files/usr/bin/termux-info") == 1
-        or os.getenv("TERMUX_VERSION") ~= nil
-        or os.getenv("PROOT_TMP_DIR") ~= nil
-        or (vim.fn.filereadable("/proc/version") == 1 and (vim.fn.readfile("/proc/version")[1] or ""):lower():match("android") ~= nil)
-
-      local lsp_ensure = is_mobile and { "lua_ls" } or vim.tbl_keys(servers)
+      local lsp_ensure = vim.g.is_mobile and { "lua_ls" } or vim.tbl_keys(servers)
 
       require("mason-lspconfig").setup({
         ensure_installed = lsp_ensure,

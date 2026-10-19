@@ -58,17 +58,22 @@ desc = "Copy absolute path to system clipboard"
 
 [[mgr.prepend_keymap]]
 on   = [ "D" ]
-run  = 'shell "nvim -d \"$@\"" --block --confirm'
+run  = 'shell "nvim -d %s" --block --confirm'
 desc = "Diff selected files side-by-side in Neovim"
 
 [[mgr.prepend_keymap]]
+on   = [ "x" ]
+run  = 'shell "ouch decompress --here -y %s" --confirm'
+desc = "Extract archive(s) in current directory via ouch"
+
+[[mgr.prepend_keymap]]
 on   = [ "E" ]
-run  = 'shell "nvim \"${@:-.}\"" --block --confirm'
+run  = 'shell "set -- %s; nvim \"${@:-.}\"" --block --confirm'
 desc = "Open selected item or directory in Neovim"
 
 [[mgr.prepend_keymap]]
 on   = [ "V" ]
-run  = 'shell "code \"${@:-.}\"" --confirm'
+run  = 'shell "set -- %s; code \"${@:-.}\"" --confirm'
 desc = "Open selected item or directory in VS Code"
 
 [[mgr.prepend_keymap]]

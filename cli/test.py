@@ -281,7 +281,7 @@ echo "COUNT:${#DOTFILES_FUNCTIONS[@]}"
 
     # Completions engine
     comp_check_code = """
-for comp in _git _uv _fzf_complete _dot _conf _up _wt _gwtnew _gwtdel; do
+for comp in _git _uv _fzf_complete _dot _conf _up _wt _gwtnew _gwtdel _pkg_scripts _fjq _extract _dotbranch; do
     if ! (( $+functions[$comp] )); then
         echo "Missing completion: $comp"
     fi
@@ -290,7 +290,7 @@ done
     code, out, err = run_cmd(["zsh", "-i", "+m", "-c", comp_check_code], timeout=5, env=zsh_env)
     missing_comps = [line.strip() for line in out.splitlines() if line.startswith("Missing completion:")]
     if not missing_comps:
-        report.ok("Completions engine", "All completions active (_git, _uv, _fzf, _dot, _conf, _up, _wt, _gwtn, _gwtdel)")
+        report.ok("Completions engine", "All completions active (_git, _uv, _fzf, _dot, _conf, _up, _wt, _gwtn, _gwtdel, _pkg_scripts, _fjq, _extract, _dotbranch)")
     else:
         report.fail("Completions engine", missing_comps[0])
 
@@ -350,6 +350,7 @@ take /tmp/test-smoke-take >/dev/null && cd - >/dev/null && rm -rf /tmp/test-smok
 notify "test" "dottest" >/dev/null
 extract >/dev/null 2>&1 || true
 pack -h >/dev/null
+genignore -h >/dev/null
 strdiff -h >/dev/null
 strdiff "feat/SALES-1234/my-branch" "feat/SALES-1235/my_branch " >/dev/null
 dotbranch -h >/dev/null

@@ -23,7 +23,7 @@ if [ "${DOTFILES_DRY_RUN:-false}" = true ]; then
   else
     # tool key:binary it provides
     for pair in ripgrep:rg fd:fd fzf:fzf zoxide:zoxide eza:eza bat:bat atuin:atuin yazi:yazi dust:dust btop:btop \
-      git-delta:delta lazygit:lazygit glow:glow tlrc:tldr tokei:tokei hyperfine:hyperfine jq:jq yq:yq ouch:ouch \
+      git-delta:delta lazygit:lazygit glow:glow tlrc:tldr tokei:tokei hyperfine:hyperfine jq:jq yq:yq ouch:ouch sevenzip:7zz \
       shellcheck:shellcheck shfmt:shfmt trash-cli:trash; do
       key="${pair%%:*}"
       is_tool_requested "$key" || continue
@@ -64,7 +64,7 @@ if command -v brew &>/dev/null; then
     # Install only specifically requested tools
     for pkg in "${REQUESTED_TOOLS[@]}"; do
       case "$pkg" in
-        ripgrep | fd | fzf | zoxide | spaceship | eza | atuin | bat | yazi | dust | btop | tlrc | tokei | hyperfine | jq | yq | ouch | shellcheck | shfmt | fzf-tab | zsh-autosuggestions | zsh-syntax-highlighting | git | git-delta | lazygit | glow | trash-cli)
+        ripgrep | fd | fzf | zoxide | spaceship | eza | atuin | bat | yazi | dust | btop | tlrc | tokei | hyperfine | jq | yq | ouch | sevenzip | shellcheck | shfmt | fzf-tab | zsh-autosuggestions | zsh-syntax-highlighting | git | git-delta | lazygit | glow | trash-cli)
           if brew list "$pkg" &>/dev/null; then
             ask_update_tool "$pkg" "$(brew info "$pkg" 2>/dev/null | head -n 1 | awk '{print $3}')" DO_UPD
             [ "$DO_UPD" = true ] && brew upgrade "$pkg" 2>/dev/null || true
@@ -95,7 +95,7 @@ elif [ "$OS" = "Linux" ]; then
     # Ubuntu / Debian
     log "Ensuring base CLI packages via apt..."
     run_sudo apt-get update -y
-    run_sudo apt-get install -y curl wget git build-essential ripgrep fd-find fzf bat trash-cli tar gzip unzip
+    run_sudo apt-get install -y curl wget git build-essential ripgrep fd-find fzf bat trash-cli tar gzip unzip p7zip-full
 
     # Link fdfind -> fd and batcat -> bat if necessary on Debian/Ubuntu
     if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
@@ -109,14 +109,14 @@ elif [ "$OS" = "Linux" ]; then
   elif command -v dnf &>/dev/null; then
     # Fedora / RHEL
     log "Ensuring base CLI packages via dnf..."
-    run_sudo dnf install -y curl wget git make gcc ripgrep fd-find fzf eza bat trash-cli tar gzip unzip
+    run_sudo dnf install -y curl wget git make gcc ripgrep fd-find fzf eza bat trash-cli tar gzip unzip p7zip p7zip-plugins
     if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
       ln -sf "$(which fdfind)" "$HOME/.local/bin/fd"
       [ "$(id -u)" -eq 0 ] && ln -sf "$(which fdfind)" "/usr/local/bin/fd" 2>/dev/null || true
     fi
   elif command -v pacman &>/dev/null; then
     # Arch Linux
-    run_sudo pacman -S --noconfirm --needed curl wget git base-devel ripgrep fd fzf eza atuin bat git-delta glow tlrc tokei hyperfine zsh-autosuggestions zsh-syntax-highlighting trash-cli tar gzip unzip
+    run_sudo pacman -S --noconfirm --needed curl wget git base-devel ripgrep fd fzf eza atuin bat git-delta glow tlrc tokei hyperfine zsh-autosuggestions zsh-syntax-highlighting trash-cli tar gzip unzip p7zip
   fi
 
   # 1. eza
