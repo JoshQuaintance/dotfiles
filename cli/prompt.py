@@ -44,6 +44,15 @@ def get_prompt_config_path() -> Path:
 
 
 def is_mobile_or_proot() -> bool:
+    """Detect mobile terminal, PRoot, Android, or mobile SSH session."""
+    if os.environ.get("SSH_MOBILE") or os.environ.get("_IS_MOBILE", "").strip().lower() in ("true", "1"):
+        return True
+
+    lc_term = os.environ.get("LC_TERMINAL", "").strip().lower()
+    term_prog = os.environ.get("TERM_PROGRAM", "").strip().lower()
+    if lc_term in ("blink", "termius") or term_prog in ("blink", "termius"):
+        return True
+
     if os.environ.get("TERMUX_VERSION") or Path("/data/data/com.termux").is_dir():
         return True
     if os.environ.get("PROOT_TMP_DIR"):
@@ -66,6 +75,16 @@ def is_mobile_or_proot() -> bool:
 
 
 def get_active_prompt() -> tuple[str, str]:
+    # 1. Environment variable override (takes absolute precedence)
+    env_val = os.environ.get("DOTFILES_PROMPT", "").strip().lower()
+    if env_val in PROMPT_ENGINES:
+        return env_val, "environment ($DOTFILES_PROMPT)"
+
+    # 2. Dynamic mobile auto-detection (runs before desktop config)
+    if is_mobile_or_proot():
+        return "native", "auto-detected (mobile/PRoot environment)"
+
+    # 3. Explicit user preference file for desktop / standard sessions
     config_file = get_prompt_config_path()
     if config_file.is_file():
         try:
@@ -74,13 +93,6 @@ def get_active_prompt() -> tuple[str, str]:
                 return val, "configured (~/.config/dotfiles/prompt)"
         except OSError:
             pass
-
-    env_val = os.environ.get("DOTFILES_PROMPT", "").strip().lower()
-    if env_val in PROMPT_ENGINES:
-        return env_val, "environment ($DOTFILES_PROMPT)"
-
-    if is_mobile_or_proot():
-        return "native", "auto-detected (PRoot/Termux environment)"
 
     # Default desktop search: spaceship -> native
     home = Path.home()

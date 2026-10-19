@@ -1,5 +1,6 @@
 import os
 import platform
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -26,13 +27,16 @@ class ToolEntry:
     label: str
     version_cmd: list[str]
     brew_formula: Optional[str] = None
+    alt_bin_names: tuple[str, ...] = ()
 
 
 def get_cli_tool_manifest() -> list[ToolEntry]:
     """Return the canonical catalog of CLI tools audited by `dot doctor`."""
+    sevenzip_bin = "7zz" if shutil.which("7zz") else ("7z" if shutil.which("7z") else ("7z" if platform.system() == "Linux" else "7zz"))
     return [
         ToolEntry("git", "Git version control", ["git", "--version"], "git"),
         ToolEntry("delta", "git-delta syntax diff pager", ["delta", "--version"], "git-delta"),
+        ToolEntry("dura", "dura git snapshot daemon", ["dura", "--version"], "dura"),
         ToolEntry("zsh", "Zsh shell", ["zsh", "--version"]),
         ToolEntry("rg", "ripgrep search", ["rg", "--version"], "ripgrep"),
         ToolEntry("fd", "fd file finder", ["fd", "--version"], "fd"),
@@ -44,7 +48,13 @@ def get_cli_tool_manifest() -> list[ToolEntry]:
         ToolEntry("jq", "jq JSON processor", ["jq", "--version"], "jq"),
         ToolEntry("yq", "yq YAML/TOML processor", ["yq", "--version"], "yq"),
         ToolEntry("ouch", "ouch archive compressor", ["ouch", "--version"], "ouch"),
-        ToolEntry("7zz", "7-Zip archiver (Yazi previews)", ["7zz", "--help"], "sevenzip"),
+        ToolEntry(
+            sevenzip_bin,
+            "7-Zip archiver (Yazi previews)",
+            [sevenzip_bin, "--help"],
+            "sevenzip",
+            alt_bin_names=("7z", "7zz", "/usr/bin/7z"),
+        ),
         ToolEntry("mise", "Mise polyglot runtime", ["mise", "--version"]),
         ToolEntry("nvim", "Neovim editor", ["nvim", "--version"], "neovim"),
         ToolEntry("yazi", "Yazi file manager", ["yazi", "--version"], "yazi"),

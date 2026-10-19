@@ -1,3 +1,14 @@
+# ==============================================================================
+# Catppuccin Mocha theme for Yazi
+# Upstream: https://github.com/catppuccin/yazi
+# Author: Catppuccin (https://github.com/catppuccin)
+# License: MIT (https://github.com/catppuccin/yazi/blob/main/LICENSE)
+# Copyright (c) 2021 Catppuccin
+#
+# Flavor: Catppuccin Mocha (darkest variant)
+# Consumed by: ~/.config/yazi/theme.toml
+# ==============================================================================
+
 [app]
 overall = { bg = "#1e1e2e" }
 
@@ -19,7 +30,9 @@ count_selected = { fg = "#1e1e2e", bg = "#89b4fa" }
 border_symbol = "│"
 border_style  = { fg = "#7f849c" }
 
-syntect_theme = "~/.config/yazi/Catppuccin-mocha.tmTheme"
+# Optional: TextMate theme for code preview syntax highlighting.
+# If Catppuccin-mocha.tmTheme is placed in ~/.config/yazi/, uncomment:
+# syntect_theme = "~/.config/yazi/Catppuccin-mocha.tmTheme"
 
 [tabs]
 active   = { fg = "#1e1e2e", bg = "#cdd6f4", bold = true }

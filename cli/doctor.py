@@ -180,8 +180,15 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
         return False
 
     for tool in get_cli_tool_manifest():
-        if shutil.which(tool.bin_name):
-            _, ver, _ = run_cmd(tool.version_cmd)
+        resolved_bin = shutil.which(tool.bin_name)
+        if not resolved_bin and getattr(tool, "alt_bin_names", None):
+            for alt in tool.alt_bin_names:
+                if shutil.which(alt):
+                    resolved_bin = shutil.which(alt)
+                    break
+        if resolved_bin:
+            vcmd = [resolved_bin] + tool.version_cmd[1:] if tool.version_cmd else [resolved_bin, "--version"]
+            _, ver, _ = run_cmd(vcmd)
             first_line = ver.splitlines()[0] if ver else "installed"
             report.ok(tool.label, first_line[:38])
         elif shutil.which("brew") and tool.brew_formula:
@@ -189,9 +196,9 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
             if _should_install(tool.label, formula):
                 print(f"  \033[1;34m==>\033[0m Installing {formula} via brew...")
                 code, _, _ = run_cmd(["brew", "install", formula], timeout=600)
-                if code == 0 and not shutil.which(tool.bin_name):
+                if code == 0 and not (shutil.which(tool.bin_name) or any(shutil.which(a) for a in getattr(tool, "alt_bin_names", ()))):
                     run_cmd(["brew", "link", "--overwrite", formula], timeout=60)
-                if code == 0 and shutil.which(tool.bin_name):
+                if code == 0 and (shutil.which(tool.bin_name) or any(shutil.which(a) for a in getattr(tool, "alt_bin_names", ()))):
                     report.fixed(tool.label, f"Installed {formula} via brew")
                 else:
                     report.warn(tool.label, f"brew install {formula} failed")

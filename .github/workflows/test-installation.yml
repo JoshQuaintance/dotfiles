@@ -16,10 +16,10 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install Shellcheck & Zsh
+      - name: Install Shellcheck, shfmt & Zsh
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y zsh shellcheck
+          sudo apt-get install -y zsh shellcheck shfmt
 
       # Oldest Python the CLI supports (macOS Command Line Tools ship 3.9)
       - name: Set up Python 3.9
@@ -56,6 +56,14 @@ jobs:
             head -1 "$f" | grep -qE '^#!.*(bash|/sh)' && scripts+=("$f")
           done
           shellcheck -S warning -e SC1090,SC1091 "${scripts[@]}"
+
+      - name: Validate Shell Script Formatting (shfmt)
+        run: |
+          scripts=()
+          for f in bin/* install/*.sh install.sh; do
+            head -1 "$f" | grep -qE '^#!.*(bash|/sh)' && scripts+=("$f")
+          done
+          shfmt -d -i 2 -ci "${scripts[@]}"
 
       - name: Zsh Function Unit Tests
         run: |

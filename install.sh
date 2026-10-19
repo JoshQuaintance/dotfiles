@@ -388,7 +388,7 @@ if [[ "$CHOICE" == "3" || "$CHOICE" == "--custom" || -z "$CHOICE" ]]; then
   echo ""
   # shellcheck disable=SC2034  # read by name in multiselect
   env_options=(
-    "Zsh Shell & Config      - Portable .zshrc, .aliases & Oh My Zsh"
+    "Zsh Shell & Config      - Portable .zshrc, .aliases & modular functions"
     "Neovim & Configuration   - Modern Lua setup, Lazy, Treesitter, LSP"
     "Visual Studio Code       - Settings, keybindings & snippets"
     "Mise & Node LTS          - Polyglot runtime manager with Node LTS"

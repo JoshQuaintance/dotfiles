@@ -26,7 +26,8 @@ BREWFILE_ENTRY = re.compile(r'^\s*(brew|cask)\s+"([^"]+)"')
 TOML_TABLE = re.compile(r"^\s*\[([^\]]+)\]")
 TOML_KEY = re.compile(r'^\s*"?([^"=\s]+)"?\s*=')
 MISE_CONFIG = "config/mise/config.toml"
-COMPLETIONS_DIR = "zsh/custom/completions/"
+COMPLETION_DIRS: tuple[str, ...] = ("zsh/functions/", "zsh/completions/", "zsh/custom/completions/")
+COMPLETIONS_DIR = COMPLETION_DIRS
 
 
 @dataclass
@@ -120,9 +121,9 @@ def find_stale_links(dotfiles: Path, old: str, gone: set[str]) -> list[tuple[Pat
 
 
 def find_stale_caches(dotfiles: Path, gone: set[str]) -> list[Path]:
-    """Compiled .zwc files left beside deleted zsh sources, plus compdumps if a completion was removed."""
+    """Compiled .zwc files left beside deleted zsh sources, plus compdumps if a completion or function was removed."""
     caches = [dotfiles / f"{rel}.zwc" for rel in sorted(gone) if (dotfiles / f"{rel}.zwc").exists()]
-    if any(rel.startswith(COMPLETIONS_DIR) for rel in gone):
+    if any(rel.startswith(COMPLETION_DIRS) for rel in gone):
         caches += sorted(Path(os.environ.get("ZDOTDIR", Path.home())).glob(".zcompdump*"))
     return caches
 
