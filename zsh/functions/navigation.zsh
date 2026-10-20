@@ -331,7 +331,9 @@ APPLESCRIPT
 }
 
 # Internal helper: list discovered Git repositories under ~/Codes (or $DOTFILES_PROJECTS_DIR) and ~/.dotfiles
-# Output format: <name>\t<branch>\t<path>
+# Uses search-root-relative names (e.g. `sales/ui/develop`, `sales/service/develop`, `CRM/service`)
+# so worktrees and multi-repo layouts sharing branch names like `develop` are always unambiguous.
+# Output format: <relative_name>\t<branch>\t<path>
 _proj_list_repos() {
   local dot_dir="${DOTFILES_DIR:-$HOME/.dotfiles}"
   local -a search_dirs=()
@@ -344,31 +346,37 @@ _proj_list_repos() {
     done
   fi
 
-  local -a git_entries=()
   local -A seen_paths=()
-  local sdir
+  local sdir entry repo rel_name branch
+  local -a sdir_entries=()
+
   for sdir in "${search_dirs[@]}"; do
     [[ -d "$sdir" ]] || continue
+    sdir="${sdir%/}"
     if command -v fd &>/dev/null; then
-      git_entries+=(${(f)"$(fd --hidden --no-ignore -g '.git' --max-depth 4 "$sdir" 2>/dev/null)"})
+      sdir_entries=(${(f)"$(fd --hidden --no-ignore -g '.git' --max-depth 4 "$sdir" 2>/dev/null)"})
     else
-      git_entries+=(${(f)"$(find "$sdir" -maxdepth 4 -name '.git' 2>/dev/null)"})
+      sdir_entries=(${(f)"$(find "$sdir" -maxdepth 4 -name '.git' 2>/dev/null)"})
     fi
+    for entry in "${sdir_entries[@]}"; do
+      [[ -z "$entry" ]] && continue
+      entry="${entry%/}"
+      repo="${entry:h}"
+      [[ -z "$repo" || ! -d "$repo" ]] && continue
+      (( ${+seen_paths[$repo]} )) && continue
+      seen_paths[$repo]=1
+      rel_name="${repo#${sdir}/}"
+      [[ -z "$rel_name" || "$rel_name" == "$repo" ]] && rel_name="${repo:t}"
+      branch="$(_proj_repo_branch "$repo")"
+      printf "%s\t%s\t%s\n" "$rel_name" "$branch" "$repo"
+    done
   done
-  [[ -e "$dot_dir/.git" ]] && git_entries+=("$dot_dir/.git")
 
-  local entry repo name branch
-  for entry in "${git_entries[@]}"; do
-    [[ -z "$entry" ]] && continue
-    entry="${entry%/}"
-    repo="${entry:h}"
-    [[ -z "$repo" || ! -d "$repo" ]] && continue
-    (( ${+seen_paths[$repo]} )) && continue
-    seen_paths[$repo]=1
-    name="${repo:t}"
-    branch="$(_proj_repo_branch "$repo")"
-    printf "%s\t%s\t%s\n" "$name" "$branch" "$repo"
-  done | sort -f -k1,1
+  if [[ -e "$dot_dir/.git" ]] && (( ! ${+seen_paths[$dot_dir]} )); then
+    seen_paths[$dot_dir]=1
+    branch="$(_proj_repo_branch "$dot_dir")"
+    printf "%s\t%s\t%s\n" "${dot_dir:t}" "$branch" "$dot_dir"
+  fi
 }
 
 # Interactive Git Project & Repository Switcher (proj / fp)
@@ -400,7 +408,7 @@ proj() {
   fi
 
   local rows
-  rows="$(_proj_list_repos)"
+  rows="$(_proj_list_repos | sort -f -k1,1)"
   if [[ -z "$rows" ]]; then
     printf "\033[33mNo Git repositories found in %s.\033[0m\n" "${DOTFILES_PROJECTS_DIR:-$HOME/Codes}" >&2
     return 1
@@ -408,21 +416,28 @@ proj() {
 
   local query="$*"
 
-  # Direct exact-name jump when a query is passed (e.g. `proj dotfiles` or via tab completion)
+  # Direct jump when a query uniquely matches a project's relative name or leaf basename
   if [[ "$list_only" == false && -n "$query" ]]; then
-    local n b p exact_path=""
-    local -a substring_paths=()
+    local n b p leaf
+    local -a exact_rel_paths=() exact_leaf_paths=() substring_paths=()
     while IFS=$'\t' read -r n b p; do
+      leaf="${n:t}"
       if [[ "${n:l}" == "${query:l}" ]]; then
-        exact_path="$p"
-        break
-      elif [[ "${n:l}" == *"${query:l}"* ]]; then
+        exact_rel_paths+=("$p")
+      fi
+      if [[ "${leaf:l}" == "${query:l}" ]]; then
+        exact_leaf_paths+=("$p")
+      fi
+      if [[ "${n:l}" == *"${query:l}"* ]]; then
         substring_paths+=("$p")
       fi
     done <<< "$rows"
 
-    if [[ -n "$exact_path" && -d "$exact_path" ]]; then
-      cd "$exact_path"
+    if (( ${#exact_rel_paths[@]} == 1 )) && [[ -d "${exact_rel_paths[1]}" ]]; then
+      cd "${exact_rel_paths[1]}"
+      return 0
+    elif (( ${#exact_leaf_paths[@]} == 1 )) && [[ -d "${exact_leaf_paths[1]}" ]]; then
+      cd "${exact_leaf_paths[1]}"
       return 0
     elif (( ${#substring_paths[@]} == 1 )) && [[ ! -t 1 || ! -x "$(command -v fzf)" ]]; then
       cd "${substring_paths[1]}"
@@ -441,11 +456,29 @@ proj() {
 
   local formatted
   formatted=$(printf "%s\n" "$rows" | awk -F'\t' -v home="$HOME" '{
-    disp_path = $3;
+    rel = $1;
+    branch = $2;
+    full = $3;
+    disp_path = full;
     if (index(disp_path, home) == 1) {
       disp_path = "~" substr(disp_path, length(home) + 1);
     }
-    printf "\033[1;38;2;137;180;250m%-26s\033[0m\t\033[38;2;166;227;161m%-20s\033[0m\t\033[2m%s\033[0m\t%s\n", $1, " " $2, disp_path, $3
+    # Highlight parent namespace (e.g. `sales/ui/`) in mauve and leaf repo/worktree in bold blue
+    slash_idx = 0;
+    for (i = length(rel); i >= 1; i--) {
+      if (substr(rel, i, 1) == "/") { slash_idx = i; break; }
+    }
+    pad = 36 - length(rel);
+    if (pad < 1) pad = 1;
+    spaces = sprintf("%*s", pad, "");
+    if (slash_idx > 0) {
+      prefix = substr(rel, 1, slash_idx);
+      leaf = substr(rel, slash_idx + 1);
+      name_col = sprintf("\033[38;2;203;166;247m%s\033[1;38;2;137;180;250m%s\033[0m%s", prefix, leaf, spaces);
+    } else {
+      name_col = sprintf("\033[1;38;2;137;180;250m%s\033[0m%s", rel, spaces);
+    }
+    printf "%s\t\033[38;2;166;227;161m%-28s\033[0m\t\033[2m%s\033[0m\t%s\n", name_col, " " branch, disp_path, full
   }')
 
   local hdr="  j/k: navigate │ /: search │ enter: cd │ e: edit │ l: lazygit │ t: new tab │ y: copy path │ q: quit"
@@ -502,4 +535,126 @@ _proj() {
   (( ${#repos[@]} )) && _describe 'git project' repos
 }
 (( $+functions[compdef] )) && compdef _proj proj || true
+
+# Cross-Platform Path Translator (wpath) — WSL <-> Windows, file:// URIs & Drag-and-Drop Paths
+# Usage:
+#   wpath 'C:\Users\me\Desktop'   -> /mnt/c/Users/me/Desktop
+#   wpath -w /mnt/c/Users/me      -> C:\Users\me
+#   wpath -c [path]               -> Translate path (defaults to $PWD) and copy to clipboard
+wpath() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "\033[1;38;2;137;180;250mwpath\033[0m — Cross-platform WSL <-> Windows & URI path translator\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  wpath <path>          Auto-translate Windows path -> Unix (or Unix -> host path)\n"
+    printf "  wpath -u <path>       Convert Windows / file:// path to POSIX path\n"
+    printf "  wpath -w [path]       Convert POSIX path to Windows path (C:\\...)\n"
+    printf "  wpath -c [path]       Copy translated path to clipboard\n"
+    return 0
+  fi
+
+  local mode="auto"
+  local copy_out=false
+  while [[ "$1" == -* ]]; do
+    case "$1" in
+      -u|--unix)    mode="unix"; shift ;;
+      -w|--windows) mode="win"; shift ;;
+      -c|--copy)    copy_out=true; shift ;;
+      --)           shift; break ;;
+      *)            break ;;
+    esac
+  done
+
+  local raw="${1:-$PWD}"
+  # Strip surrounding quotes if pasted with literal quotes
+  if [[ ( "$raw" == \"*\" && "$raw" == *\" ) || ( "$raw" == \'*\' && "$raw" == *\' ) ]]; then
+    raw="${raw[2,-2]}"
+  fi
+  # Strip file:// prefix
+  raw="${raw#file://}"
+
+  local out=""
+  if [[ "$mode" == "auto" ]]; then
+    if [[ "$raw" =~ ^[A-Za-z]:[\\/] || "$raw" == \\\\* ]]; then
+      mode="unix"
+    elif [[ -n "$WSL_DISTRO_NAME" ]]; then
+      mode="win"
+    else
+      mode="unix"
+    fi
+  fi
+
+  if [[ "$mode" == "unix" ]]; then
+    if [[ -n "$WSL_DISTRO_NAME" ]] && command -v wslpath &>/dev/null && [[ "$raw" =~ ^[A-Za-z]:[\\/] || "$raw" == \\\\* ]]; then
+      out="$(wslpath -u "$raw" 2>/dev/null)"
+    fi
+    if [[ -z "$out" ]]; then
+      if [[ "$raw" =~ ^([A-Za-z]):[\\/](.*)$ ]]; then
+        local drive="${match[1]:l}"
+        local rest="${match[2]//\\//}"
+        out="/mnt/${drive}/${rest}"
+      elif [[ "$raw" =~ ^([A-Za-z]):$ ]]; then
+        out="/mnt/${match[1]:l}"
+      else
+        out="$raw"
+      fi
+    fi
+  else
+    if [[ -n "$WSL_DISTRO_NAME" ]] && command -v wslpath &>/dev/null; then
+      out="$(wslpath -w "$raw" 2>/dev/null)"
+    fi
+    if [[ -z "$out" ]]; then
+      if [[ "$raw" =~ ^/mnt/([a-zA-Z])(/.*)?$ ]]; then
+        local drive="${match[1]:u}"
+        local rest="${match[2]:-}"
+        rest="${rest#/}"
+        rest="${rest//\//\\}"
+        out="${drive}:\\${rest}"
+      else
+        out="${raw//\//\\}"
+      fi
+    fi
+  fi
+
+  if [[ "$copy_out" == true ]]; then
+    _copy_or_print "$out" "path: $out"
+  else
+    printf "%s\n" "$out"
+  fi
+}
+
+# Jump to a Windows, file://, or Drag-and-Drop Path (wcd)
+# Reads from clipboard if no path argument is supplied
+wcd() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "\033[1;38;2;137;180;250mwcd\033[0m — cd into a Windows (C:\\...), file://, or clipboard path\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  wcd 'C:\\Users\\me\\Project'   Convert Windows path and cd into it\n"
+    printf "  wcd file:///path/to/file.ts   cd into parent directory of file URI\n"
+    printf "  wcd                           Convert path currently in clipboard and cd into it\n"
+    return 0
+  fi
+
+  local raw="$1"
+  if [[ -z "$raw" ]]; then
+    raw="$(clippaste 2>/dev/null)"
+    raw="${raw%$'\r'}"
+    raw="${raw%$'\n'}"
+  fi
+  if [[ -z "$raw" ]]; then
+    printf "\033[31m✖ Provide a path or copy one to the clipboard first.\033[0m\n" >&2
+    return 1
+  fi
+
+  local target
+  target="$(wpath -u "$raw")"
+  target="${target/#\~/$HOME}"
+  if [[ -f "$target" ]]; then
+    target="${target:h}"
+  fi
+  if [[ ! -d "$target" ]]; then
+    printf "\033[31m✖ Directory does not exist: %s\033[0m\n" "$target" >&2
+    return 1
+  fi
+  cd "$target"
+}
 

@@ -1377,3 +1377,407 @@ fpkg() {
   fi
 }
 
+# Universal Token, JWT, Epoch Timestamp, URL & Base64 Decoder (decode)
+# Reads from argument, piped stdin, or system clipboard when called with no arguments
+decode() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "\033[1;38;2;203;166;247mdecode\033[0m — Auto-detecting JWT, Epoch timestamp, URL, and Base64 decoder\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  decode <value>       Decode JWT (eyJ...), epoch timestamp, URL, or Base64\n"
+    printf "  echo <val> | decode  Decode from piped stdin\n"
+    printf "  decode               Decode current clipboard content\n"
+    return 0
+  fi
+
+  local input=""
+  if (( $# > 0 )); then
+    input="$*"
+  elif [[ ! -t 0 ]]; then
+    input="$(cat)"
+  else
+    input="$(clippaste 2>/dev/null)"
+  fi
+  input="${input#"${input%%[![:space:]]*}"}"
+  input="${input%"${input##*[![:space:]]}"}"
+
+  if [[ -z "$input" ]]; then
+    printf "\033[31m✖ Provide a value to decode, pipe via stdin, or copy to clipboard.\033[0m\n" >&2
+    return 1
+  fi
+
+  python3 - "$input" <<'PYEOF'
+import base64
+import datetime
+import json
+import re
+import sys
+import urllib.parse
+
+raw = sys.argv[1].strip()
+# Strip optional "Bearer " prefix
+if raw.lower().startswith("bearer "):
+    raw = raw[7:].strip()
+
+C_MAUVE = "\033[1;38;2;203;166;247m"
+C_BLUE  = "\033[1;38;2;137;180;250m"
+C_GREEN = "\033[1;38;2;166;227;161m"
+C_RED   = "\033[1;38;2;243;139;168m"
+C_DIM   = "\033[2m"
+C_RST   = "\033[0m"
+
+
+def b64url_decode(segment: str) -> bytes:
+    padded = segment + "=" * ((4 - len(segment) % 4) % 4)
+    return base64.urlsafe_b64decode(padded.encode("ascii"))
+
+
+def fmt_epoch(ts: float) -> str:
+    utc_dt = datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
+    local_dt = utc_dt.astimezone()
+    now = datetime.datetime.now(tz=datetime.timezone.utc)
+    delta = utc_dt - now
+    secs = int(delta.total_seconds())
+    abs_s = abs(secs)
+    if abs_s >= 86400:
+        rel = f"{abs_s // 86400}d {(abs_s % 86400) // 3600}h"
+    elif abs_s >= 3600:
+        rel = f"{abs_s // 3600}h {(abs_s % 3600) // 60}m"
+    else:
+        rel = f"{abs_s // 60}m {abs_s % 60}s"
+    rel_str = f"in {rel}" if secs >= 0 else f"{rel} ago"
+    return f"{utc_dt.strftime('%Y-%m-%d %H:%M:%S UTC')} | {local_dt.strftime('%Y-%m-%d %H:%M:%S %Z')} ({rel_str})"
+
+
+# 1. JWT Detection (header.payload.signature)
+parts = raw.split(".")
+if len(parts) in (2, 3) and raw.startswith("eyJ"):
+    try:
+        hdr = json.loads(b64url_decode(parts[0]).decode("utf-8"))
+        pay = json.loads(b64url_decode(parts[1]).decode("utf-8"))
+        print(f"{C_MAUVE}🔑 JWT Header:{C_RST}")
+        print(json.dumps(hdr, indent=2))
+        print(f"\n{C_BLUE}📦 JWT Payload:{C_RST}")
+        print(json.dumps(pay, indent=2))
+        for claim in ("iat", "nbf", "exp"):
+            if isinstance(pay.get(claim), (int, float)):
+                val = float(pay[claim])
+                status = ""
+                if claim == "exp":
+                    now_ts = datetime.datetime.now(tz=datetime.timezone.utc).timestamp()
+                    status = f"{C_GREEN}✔ VALID{C_RST} " if val > now_ts else f"{C_RED}✖ EXPIRED{C_RST} "
+                print(f"\n{C_BLUE}{claim}:{C_RST} {status}{fmt_epoch(val)}")
+        sys.exit(0)
+    except Exception:
+        pass
+
+# 2. Unix Epoch Timestamp (10-digit seconds or 13-digit milliseconds)
+if re.fullmatch(r"\d{10}(\.\d+)?|\d{13}", raw):
+    ts = float(raw)
+    if len(raw.split(".")[0]) == 13:
+        ts /= 1000.0
+    print(f"{C_MAUVE}⏱  Epoch Timestamp:{C_RST} {raw}")
+    print(f"{C_BLUE}➜{C_RST}  {fmt_epoch(ts)}")
+    sys.exit(0)
+
+# 3. URL / Percent-Encoded String
+if "%" in raw or "://" in raw or ("?" in raw and "=" in raw):
+    unquoted = urllib.parse.unquote_plus(raw)
+    if unquoted != raw or "://" in raw:
+        print(f"{C_MAUVE}🌐 Decoded URL:{C_RST}\n{unquoted}")
+        parsed = urllib.parse.urlsplit(raw if "://" in raw else "http://x/?" + raw.lstrip("?"))
+        qs = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+        if qs:
+            print(f"\n{C_BLUE}Query Parameters:{C_RST}")
+            for k, v in qs:
+                print(f"  {C_GREEN}{k}{C_RST} = {v}")
+        sys.exit(0)
+
+# 4. Base64 (standard or URL-safe)
+try:
+    b_out = b64url_decode(raw).decode("utf-8")
+    try:
+        j_obj = json.loads(b_out)
+        print(json.dumps(j_obj, indent=2))
+    except Exception:
+        print(b_out)
+    sys.exit(0)
+except Exception:
+    print(f"{C_RED}✖ Could not decode input as JWT, Epoch timestamp, URL, or UTF-8 Base64.{C_RST}", file=sys.stderr)
+    sys.exit(1)
+PYEOF
+}
+
+# Internal helper: list items in a directory sorted by disk usage (largest first)
+_fsize_list() {
+  local target_dir="${1:-.}"
+  local -a items=("$target_dir"/*(DN))
+  (( ${#items[@]} == 0 )) && return 0
+  du -sh -- "${items[@]}" 2>/dev/null | sort -hr | awk -F'\t' 'NF>=2 {
+    sz = $1; gsub(/^[[:space:]]+|[[:space:]]+$/, "", sz);
+    p = $2;
+    sub(/^\.\//, "", p);
+    printf "%-10s\t%s\n", sz, p
+  }'
+}
+
+# Interactive Directory Size & Large-File Hunter (fsize / bigfiles)
+# Usage:
+#   fsize [dir]        -> Browse files & directories sorted by disk size in modal-Vim FZF
+#   fsize -l [dir]     -> Print size-sorted table (<size>\t<path>)
+#   Keys: enter = cd/edit, x = move to Trash, y = copy path
+fsize() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "\033[1;38;2;249;226;175mfsize\033[0m (alias: \033[1mbigfiles\033[0m) — Interactive modal-Vim disk usage & large-file hunter\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  fsize [dir]        Browse items in [dir] sorted largest-first\n"
+    printf "  fsize -l [dir]     Print tab-separated size breakdown\n"
+    printf "  Enter              cd into directory or open file in \$EDITOR\n"
+    printf "  x                  Move selected item(s) to system Trash\n"
+    printf "  y                  Copy path(s) to clipboard\n"
+    return 0
+  fi
+
+  local list_only=false
+  if [[ "$1" == "-l" || "$1" == "--list" ]]; then
+    list_only=true
+    shift
+  fi
+
+  local target_dir="${1:-.}"
+  if [[ ! -d "$target_dir" ]]; then
+    printf "\033[31m✖ Directory not found: %s\033[0m\n" "$target_dir" >&2
+    return 1
+  fi
+
+  local rows
+  rows="$(_fsize_list "$target_dir")"
+  if [[ -z "$rows" ]]; then
+    printf "\033[33mDirectory is empty: %s\033[0m\n" "$target_dir"
+    return 0
+  fi
+
+  if [[ "$list_only" == true || ! -t 1 ]] || ! command -v fzf &>/dev/null; then
+    printf "%s\n" "$rows"
+    return 0
+  fi
+
+  local formatted
+  formatted=$(printf "%s\n" "$rows" | awk -F'\t' '{
+    printf "\033[1;38;2;249;226;175m%-10s\033[0m\t\033[1;38;2;137;180;250m%s\033[0m\t%s\n", $1, $2, $2
+  }')
+
+  local hdr="  j/k: move │ space: select │ /: search │ enter: open/cd │ x: move to Trash │ y: copy path │ q: quit"
+  local -a fzf_mode_flags
+  _fzf_vim_mode "📊 Disk Size (${target_dir}) > " "$hdr" "open" "space,x,y" "" "space:toggle+down"
+
+  local selection
+  selection=$(printf "%s\n" "$formatted" | fzf \
+    --ansi \
+    --delimiter=$'\t' \
+    --with-nth=1,2 \
+    --multi \
+    --height=~55% \
+    --marker="✓ " \
+    "${fzf_mode_flags[@]}" \
+    --color="header:italic:dim,prompt:bold:yellow,pointer:bold:cyan,marker:bold:red" \
+    --preview='p={3}; if [ -d "$p" ]; then if command -v eza &>/dev/null; then eza --tree --level=2 --icons --color=always "$p" 2>/dev/null; else ls -la "$p" 2>/dev/null; fi; elif [ -f "$p" ]; then if command -v bat &>/dev/null; then bat --color=always --style=numbers --line-range :100 "$p" 2>/dev/null; else head -n 100 "$p" 2>/dev/null; fi; fi' \
+    --preview-window='right:55%:wrap')
+
+  local key="" selected_lines=""
+  _fzf_split_expect "$selection" || return 0
+
+  local -a paths=()
+  local c1 c2 p
+  while IFS=$'\t' read -r c1 c2 p; do
+    [[ -n "$p" ]] && paths+=("$p")
+  done <<< "$selected_lines"
+  (( ${#paths[@]} == 0 )) && return 0
+
+  case "$key" in
+    x)
+      local item
+      for item in "${paths[@]}"; do
+        if command -v trash &>/dev/null; then
+          trash "$item" && printf "  \033[32m✔\033[0m Moved to Trash: %s\n" "$item"
+        elif command -v gio &>/dev/null; then
+          gio trash "$item" && printf "  \033[32m✔\033[0m Moved to Trash: %s\n" "$item"
+        else
+          local trash_dir="${XDG_DATA_HOME:-$HOME/.local/share}/Trash/files"
+          mkdir -p "$trash_dir"
+          command mv -f -- "$item" "$trash_dir/" && printf "  \033[32m✔\033[0m Moved to %s: %s\n" "$trash_dir" "$item"
+        fi
+      done
+      ;;
+    y)
+      _copy_or_print "${(j: :)paths}" "path(s): ${(j: :)paths}"
+      ;;
+    *)
+      local first="${paths[1]}"
+      if [[ -d "$first" ]]; then
+        cd "$first"
+      else
+        _edit_file "$first"
+      fi
+      ;;
+  esac
+}
+
+# Internal helper: list SSH known_hosts entries and active ControlMaster sockets
+_fknown_list() {
+  local kh_file="${1:-$HOME/.ssh/known_hosts}"
+  local sock_dir="${2:-$HOME/.ssh/sockets}"
+
+  if [[ -d "$sock_dir" ]]; then
+    local s
+    for s in "$sock_dir"/*(N); do
+      [[ -S "$s" ]] && printf "socket\t%s\tActive SSH ControlMaster socket\n" "${s:t}"
+    done
+  fi
+
+  if [[ -f "$kh_file" ]]; then
+    awk '
+      !/^[[:space:]]*(#|$)/ {
+        host = $1;
+        ktype = $2;
+        sub(/,.*/, "", host);
+        if (!seen[host]++) {
+          printf "known_host\t%s\t%s (line %d)\n", host, ktype, NR
+        }
+      }
+    ' "$kh_file" 2>/dev/null
+  fi
+}
+
+# Interactive SSH Known-Hosts & Multiplexed Socket Manager (fknown)
+# Usage:
+#   fknown             -> Browse ~/.ssh/known_hosts & ~/.ssh/sockets in modal-Vim FZF
+#   fknown <query>     -> Open pre-filtered by <query>
+#   fknown -l, --list  -> Print tab-separated table
+#   Keys: x = remove host key (ssh-keygen -R) or close socket, y = copy host
+fknown() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "\033[1;38;2;137;180;250mfknown\033[0m — Interactive SSH known_hosts & ControlMaster socket manager\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  fknown             Browse known_hosts & active SSH sockets in FZF\n"
+    printf "  fknown <query>     Open pre-filtered by <query>\n"
+    printf "  fknown -l, --list  List known_hosts & active sockets\n"
+    printf "  x                  Remove host key (ssh-keygen -R) or close socket\n"
+    printf "  y                  Copy host / socket name to clipboard\n"
+    return 0
+  fi
+
+  local list_only=false
+  if [[ "$1" == "-l" || "$1" == "--list" ]]; then
+    list_only=true
+    shift
+  fi
+
+  local query="$*"
+  local rows
+  rows="$(_fknown_list)"
+  if [[ -z "$rows" ]]; then
+    printf "\033[33mNo SSH known_hosts entries or active sockets found.\033[0m\n"
+    return 0
+  fi
+
+  if [[ "$list_only" == true || ! -t 1 ]] || ! command -v fzf &>/dev/null; then
+    if [[ -n "$query" ]]; then
+      printf "%s\n" "$rows" | grep -i "$query"
+    else
+      printf "%s\n" "$rows"
+    fi
+    return 0
+  fi
+
+  local formatted
+  formatted=$(printf "%s\n" "$rows" | awk -F'\t' '{
+    kind = $1; target = $2; meta = $3;
+    if (kind == "socket") k_col = sprintf("\033[38;2;166;227;161m%-12s\033[0m", "⚡ socket");
+    else                  k_col = sprintf("\033[38;2;137;180;250m%-12s\033[0m", "🔑 host");
+    printf "%s\t\033[1m%-32s\033[0m\t\033[2m%s\033[0m\t%s\t%s\n", k_col, target, meta, kind, target
+  }')
+
+  local hdr="  j/k: move │ space: select │ /: search │ enter/y: copy host │ x: remove key / close socket │ q: quit"
+  local -a fzf_mode_flags
+  _fzf_vim_mode "🔐 SSH Known Hosts & Sockets > " "$hdr" "copy" "space,x,y" "$query" "space:toggle+down"
+
+  local selection
+  selection=$(printf "%s\n" "$formatted" | fzf \
+    --ansi \
+    --delimiter=$'\t' \
+    --with-nth=1,2,3 \
+    --multi \
+    --height=~55% \
+    --marker="✓ " \
+    "${fzf_mode_flags[@]}" \
+    --color="header:italic:dim,prompt:bold:blue,pointer:bold:cyan,marker:bold:red" \
+    --preview='kind={4}; target={5}; if [ "$kind" = "socket" ]; then ls -la "$HOME/.ssh/sockets/$target" 2>/dev/null; else ssh-keygen -l -F "$target" 2>/dev/null; fi' \
+    --preview-window='right:55%:wrap')
+
+  local key="" selected_lines=""
+  _fzf_split_expect "$selection" || return 0
+
+  local -a targets=()
+  local c1 c2 c3 kind target
+  while IFS=$'\t' read -r c1 c2 c3 kind target; do
+    [[ -z "$target" ]] && continue
+    targets+=("$target")
+    if [[ "$key" == "x" ]]; then
+      if [[ "$kind" == "socket" ]]; then
+        command rm -f -- "$HOME/.ssh/sockets/$target"
+        printf "  \033[32m✔\033[0m Closed SSH ControlMaster socket: %s\n" "$target"
+      else
+        ssh-keygen -R "$target" >/dev/null 2>&1
+        printf "  \033[32m✔\033[0m Removed host key from known_hosts: %s\n" "$target"
+      fi
+    fi
+  done <<< "$selected_lines"
+
+  if [[ "$key" != "x" ]] && (( ${#targets[@]} > 0 )); then
+    _copy_or_print "${(j: :)targets}" "SSH host(s): ${(j: :)targets}"
+  fi
+}
+
+# Terminal Truecolor, Catppuccin Palette, Font Attributes & Nerd Font Diagnostic Card (termtest)
+termtest() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "\033[1;38;2;203;166;247mtermtest\033[0m — Render Truecolor, Catppuccin Mocha, font styles, and Nerd Font glyph diagnostics\n"
+    return 0
+  fi
+
+  local cols="${COLUMNS:-80}"
+  local lines="${LINES:-24}"
+  printf "\n\033[1;38;2;203;166;247m╭────────────────────────────────────────────────────────╮\033[0m\n"
+  printf "\033[1;38;2;203;166;247m│\033[0m  \033[1mTerminal Capabilities & Glyph Diagnostic (termtest)\033[0m   \033[1;38;2;203;166;247m│\033[0m\n"
+  printf "\033[1;38;2;203;166;247m╰────────────────────────────────────────────────────────╯\033[0m\n\n"
+
+  printf "  \033[1;38;2;137;180;250mTERM:\033[0m         %s\n" "${TERM:-unknown}"
+  printf "  \033[1;38;2;137;180;250mCOLORTERM:\033[0m    %s\n" "${COLORTERM:-none}"
+  printf "  \033[1;38;2;137;180;250mTERM_PROGRAM:\033[0m %s\n" "${TERM_PROGRAM:-${WT_SESSION:+Windows Terminal}}"
+  printf "  \033[1;38;2;137;180;250mViewport:\033[0m     %sx%s cols/rows\n" "$cols" "$lines"
+  printf "  \033[1;38;2;137;180;250mLocale:\033[0m       %s\n\n" "${LANG:-${LC_ALL:-POSIX}}"
+
+  printf "  \033[1m1. 24-Bit Truecolor RGB Gradient:\033[0m\n  "
+  local i r g b
+  for (( i = 0; i < 48; i++ )); do
+    r=$(( 255 - (i * 255 / 47) ))
+    g=$(( i < 24 ? (i * 255 / 23) : ((47 - i) * 255 / 23) ))
+    b=$(( i * 255 / 47 ))
+    printf "\033[48;2;%d;%d;%dm " "$r" "$g" "$b"
+  done
+  printf "\033[0m\n\n"
+
+  printf "  \033[1m2. Catppuccin Mocha Swatches:\033[0m\n  "
+  local rgb
+  for rgb in "245;224;220" "242;205;205" "245;194;231" "203;166;247" "243;139;168" "250;179;135" "249;226;175" "166;227;161" "148;226;213" "137;220;235" "116;199;236" "137;180;250" "180;190;254"; do
+    printf "\033[48;2;%sm   \033[0m " "$rgb"
+  done
+  printf "\n\n"
+
+  printf "  \033[1m3. Text Attributes:\033[0m\n"
+  printf "  \033[1mBold\033[0m  │  \033[2mDim\033[0m  │  \033[3mItalic\033[0m  │  \033[4mUnderline\033[0m  │  \033[9mStrikethrough\033[0m  │  \033[7mReverse\033[0m\n\n"
+
+  printf "  \033[1m4. Nerd Font & Unicode Glyphs:\033[0m\n"
+  printf "  OS:  🐧 🪟  │  Git:     │  Status: ✔ ✖ ⚠ ⚡  │  UI: ❯ ◆ 🚀 📂 🐳 🔌\n\n"
+}
+

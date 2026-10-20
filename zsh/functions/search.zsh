@@ -439,3 +439,139 @@ _fjq() {
   _files -g '*.(json|yaml|yml|toml)(-.)'
 }
 (( $+functions[compdef] )) && compdef _fjq fjq || true
+
+# Internal helper: list command snippets from repo defaults and user ~/.config/dotfiles/snippets.txt
+_snip_list() {
+  local dot_dir="${DOTFILES_DIR:-$HOME/.dotfiles}"
+  local default_file="$dot_dir/config/dotfiles/snippets.txt"
+  local user_file="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/snippets.txt"
+  local f line
+  for f in "$default_file" "$user_file"; do
+    [[ -f "$f" ]] || continue
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      line="${line%$'\r'}"
+      [[ -z "$line" || "$line" == \#* ]] && continue
+      printf "%s\n" "$line"
+    done < "$f"
+  done
+}
+
+# Interactive Command Bookmark & Snippet Runner (snip)
+# Usage:
+#   snip                     -> Browse command snippets in modal-Vim FZF
+#   snip <query>             -> Open pre-filtered by <query>
+#   snip -a <name> <cmd> [d] -> Save a new custom snippet to ~/.config/dotfiles/snippets.txt
+#   snip -e, --edit          -> Edit ~/.config/dotfiles/snippets.txt in $EDITOR
+#   snip -l, --list          -> Print tab-separated snippets catalog
+snip() {
+  local user_file="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/snippets.txt"
+
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "\033[1;38;2;203;166;247msnip\033[0m — Interactive modal-Vim command bookmark & snippet runner\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  snip                       Browse snippets in modal-Vim FZF\n"
+    printf "  snip <query>               Open pre-filtered by <query>\n"
+    printf "  snip -a <title> <cmd> [d]  Add custom snippet to ~/.config/dotfiles/snippets.txt\n"
+    printf "  snip -e, --edit            Edit custom snippets in \$EDITOR\n"
+    printf "  snip -l, --list            List all snippets\n"
+    printf "  Enter                      Fill <placeholders> & place command on Zsh prompt\n"
+    printf "  y                          Copy snippet command to clipboard\n"
+    return 0
+  fi
+
+  if [[ "$1" == "-e" || "$1" == "--edit" ]]; then
+    mkdir -p "${user_file:h}"
+    if [[ ! -f "$user_file" ]]; then
+      printf "# User Command Snippets (format: <category/title>\\t<command>\\t<description>)\n" > "$user_file"
+    fi
+    _edit_file "$user_file"
+    return 0
+  fi
+
+  if [[ "$1" == "-a" || "$1" == "--add" ]]; then
+    shift
+    if (( $# < 2 )); then
+      printf "\033[31m✖ Usage: snip -a <category/title> <command> [description]\033[0m\n" >&2
+      return 1
+    fi
+    local title="$1" cmd="$2" desc="${3:-Custom snippet}"
+    mkdir -p "${user_file:h}"
+    printf "%s\t%s\t%s\n" "$title" "$cmd" "$desc" >> "$user_file"
+    printf "\033[32m✔ Added snippet '%s' to %s\033[0m\n" "$title" "${user_file/#$HOME/~}"
+    return 0
+  fi
+
+  local list_only=false
+  if [[ "$1" == "-l" || "$1" == "--list" ]]; then
+    list_only=true
+    shift
+  fi
+
+  local query="$*"
+  local rows
+  rows="$(_snip_list)"
+  if [[ -z "$rows" ]]; then
+    printf "\033[33mNo snippets found.\033[0m\n" >&2
+    return 1
+  fi
+
+  if [[ "$list_only" == true || ! -t 1 ]] || ! command -v fzf &>/dev/null; then
+    if [[ -n "$query" ]]; then
+      printf "%s\n" "$rows" | grep -i "$query"
+    else
+      printf "%s\n" "$rows"
+    fi
+    return 0
+  fi
+
+  local formatted
+  formatted=$(printf "%s\n" "$rows" | awk -F'\t' '{
+    printf "\033[1;38;2;203;166;247m%-26s\033[0m\t\033[38;2;137;180;250m%-46s\033[0m\t\033[2m%s\033[0m\t%s\n", $1, $2, $3, $2
+  }')
+
+  local hdr="  j/k: navigate │ /: search │ enter: fill & paste │ y: copy cmd │ e: edit user snippets │ q: quit"
+  local -a fzf_mode_flags
+  _fzf_vim_mode "🔖 Snippets > " "$hdr" "paste" "y,e" "$query"
+
+  local selection
+  selection=$(printf "%s\n" "$formatted" | fzf \
+    --ansi \
+    --delimiter=$'\t' \
+    --with-nth=1,2,3 \
+    --height=~55% \
+    "${fzf_mode_flags[@]}" \
+    --color="header:italic:dim,prompt:bold:magenta,pointer:bold:cyan" \
+    --preview='printf "\033[1;38;2;203;166;247m# %s\033[0m\n\033[2m# %s\033[0m\n\n%s\n" {1} {3} {4} | if command -v bat &>/dev/null; then bat -l bash --color=always --style=plain; else cat; fi' \
+    --preview-window='right:50%:wrap')
+
+  local key="" selected_lines=""
+  _fzf_split_expect "$selection" || return 0
+  local chosen_line="${selected_lines%%$'\n'*}"
+  local cmd="${chosen_line##*$'\t'}"
+  [[ -z "$cmd" ]] && return 0
+
+  case "$key" in
+    e)
+      snip --edit
+      ;;
+    y)
+      _copy_or_print "$cmd" "snippet: $cmd"
+      ;;
+    *)
+      # Prompt interactively for any <placeholder> tokens when running in a TTY
+      local -a placeholders=()
+      local rest="$cmd" ph val
+      while [[ "$rest" =~ \<([A-Za-z_][A-Za-z0-9_-]*)\> ]]; do
+        ph="${match[1]}"
+        (( ${placeholders[(I)$ph]} )) || placeholders+=("$ph")
+        rest="${rest#*\<${ph}\>}"
+      done
+      for ph in "${placeholders[@]}"; do
+        printf "\033[1;36m?\033[0m Value for \033[1;33m<%s>\033[0m (Enter to keep): " "$ph"
+        IFS= read -r val
+        [[ -n "$val" ]] && cmd="${cmd//\<${ph}\>/$val}"
+      done
+      print -z "$cmd"
+      ;;
+  esac
+}

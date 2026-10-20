@@ -6,14 +6,14 @@ ZSH_FUNCTIONS_DIR="${0:A:h}/functions"
 # Canonical registry of all user-facing custom dotfiles shell functions
 # Consumed by 'fa' (search.zsh) and the deep runtime test suite (cli/test.py)
 typeset -ga DOTFILES_FUNCTIONS=(
-  take d up tree lt groot gmain proj
+  take d up tree lt groot gmain proj wpath wcd
   conf dotbranch clone
-  port fkill fcon fssh dotenv fpkg
+  port fkill fcon fssh dotenv fpkg decode fsize fknown termtest
   wt gwtnew gwtenv gwts gwtdel gwtclean
   gbclean gstash ga gfile gl gco gsearch
   y copy clippaste scratch extract pack
   npmr bunr pnpmr
-  fa fenv cheath fjq
+  fa fenv cheath fjq snip
   toggle-autols toggle-autonotify notify strdiff
 )
 

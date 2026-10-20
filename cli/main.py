@@ -1,6 +1,7 @@
 import argparse
 import sys
 
+from cli.backup import run_backup, run_restore
 from cli.bench import run_bench
 from cli.clean import run_clean
 from cli.doctor import run_doctor
@@ -72,6 +73,17 @@ def main():
     parser_prompt.add_argument("action", nargs="?", choices=["set", "benchmark"], help="Prompt action ('set' or 'benchmark')")
     parser_prompt.add_argument("engine", nargs="?", help="Prompt engine to set ('native', 'spaceship')")
 
+    # dot backup
+    parser_backup = subparsers.add_parser("backup", help="Snapshot untracked local machine overrides, scratchpads, and state")
+    parser_backup.add_argument("-o", "--output", help="Custom output .tar.gz path")
+    parser_backup.add_argument("-n", "--dry-run", action="store_true", help="Preview files to back up without writing archive")
+    parser_backup.add_argument("-l", "--list", action="store_true", help="List existing backup archives")
+
+    # dot restore
+    parser_restore = subparsers.add_parser("restore", help="Restore untracked local machine overrides and state from a backup snapshot")
+    parser_restore.add_argument("archive", nargs="?", help="Backup archive path (default: most recent archive)")
+    parser_restore.add_argument("-n", "--dry-run", action="store_true", help="Preview files that would be restored without extracting")
+
     args = parser.parse_args()
 
     if not args.subcommand or args.subcommand == "status":
@@ -108,6 +120,10 @@ def main():
             test_after=args.test,
             prune=not args.no_prune,
         ))
+    elif args.subcommand == "backup":
+        sys.exit(run_backup(output_path=args.output, dry_run=args.dry_run, list_only=args.list))
+    elif args.subcommand == "restore":
+        sys.exit(run_restore(archive_path=args.archive, dry_run=args.dry_run))
 
 if __name__ == "__main__":
     main()

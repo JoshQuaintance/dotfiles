@@ -356,6 +356,8 @@ _dot() {
       'update:Sync dotfiles repo & upgrade Brew / Mise tools'
       'link:Verify and heal all declarative configuration symlinks'
       'prompt:Benchmark and select shell prompt (native, spaceship)'
+      'backup:Snapshot untracked local machine overrides & state'
+      'restore:Restore local machine overrides & state from snapshot'
     )
     _describe 'dot command' subcommands
   else
@@ -422,6 +424,22 @@ _dot() {
         elif [[ "${words[3]}" == set ]]; then
           flags=('native:Fast 0-fork vcs_info prompt' 'spaceship:Feature-rich async Spaceship prompt')
         fi
+        ;;
+      backup)
+        flags=(
+          '-n:Preview files to back up without writing archive'
+          '--dry-run:Preview files to back up without writing archive'
+          '-l:List existing backup archives'
+          '--list:List existing backup archives'
+          '-o:Custom output .tar.gz path'
+          '--output:Custom output .tar.gz path'
+        )
+        ;;
+      restore)
+        flags=(
+          '-n:Preview files that would be restored without extracting'
+          '--dry-run:Preview files that would be restored without extracting'
+        )
         ;;
     esac
     (( ${#flags[@]} )) && _describe 'flag' flags

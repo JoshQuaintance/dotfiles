@@ -165,6 +165,10 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
       "'proj' / 'fp'     → Interactive Git project & repo switcher"
       "'dotenv [-u|-l]'  → Safely load or unload .env files in shell"
       "'fpkg' / 'fbrew'  → Inspect, upgrade or remove Brew/Mise packages"
+      "'snip'            → Interactive command bookmark & snippet runner"
+      "'decode [val]'    → Auto-decode JWTs, epoch timestamps, URLs & Base64"
+      "'fsize' / 'wcd'   → Hunt large files or jump to Windows/URI paths"
+      "'.backup'         → Snapshot untracked local overrides & scratchpads"
     )
     local _random_tip="${_tips[$(( (RANDOM % ${#_tips[@]}) + 1 ))]}"
     local _tip_line="💡 ${_random_tip}"

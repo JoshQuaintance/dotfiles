@@ -89,18 +89,25 @@ test_d_index_out_of_range_fails() {
 
 test_proj_discovers_repos_and_jumps_by_exact_name() {
   export DOTFILES_PROJECTS_DIR="$HOME/Codes"
-  mkdir -p "$DOTFILES_PROJECTS_DIR"
+  mkdir -p "$DOTFILES_PROJECTS_DIR/sales/ui" "$DOTFILES_PROJECTS_DIR/sales/service"
   git_test init -q "$DOTFILES_PROJECTS_DIR/alpha-service"
   git_test -C "$DOTFILES_PROJECTS_DIR/alpha-service" checkout -q -b feat/login
-  git_test init -q "$DOTFILES_PROJECTS_DIR/beta-web"
+  git_test init -q "$DOTFILES_PROJECTS_DIR/sales/ui/develop"
+  git_test -C "$DOTFILES_PROJECTS_DIR/sales/ui/develop" checkout -q -b develop
+  git_test init -q "$DOTFILES_PROJECTS_DIR/sales/service/develop"
+  git_test -C "$DOTFILES_PROJECTS_DIR/sales/service/develop" checkout -q -b develop
 
   local list_out
   list_out="$(proj -l)"
   assert_contains "$list_out" $'alpha-service\tfeat/login\t'
-  assert_contains "$list_out" $'beta-web\t'
+  assert_contains "$list_out" $'sales/ui/develop\tdevelop\t'
+  assert_contains "$list_out" $'sales/service/develop\tdevelop\t'
 
   proj alpha-service
   assert_eq "${DOTFILES_PROJECTS_DIR:A}/alpha-service" "${PWD:A}"
+
+  proj sales/ui/develop
+  assert_eq "${DOTFILES_PROJECTS_DIR:A}/sales/ui/develop" "${PWD:A}"
 }
 
 test_dotenv_loads_without_eval_and_unloads_cleanly() {
@@ -148,4 +155,68 @@ printf "node 24.21.0 ~/.config/mise/config.toml 24\n"' > "$HOME/pkg_stubs/mise"
   assert_contains "$out" $'brew\tripgrep\t15.2.0'
   assert_contains "$out" $'cask\tghostty\t1.2.0'
   assert_contains "$out" $'mise\tnode\t24.21.0'
+}
+
+test_wpath_and_wcd_translate_windows_and_uri_paths() {
+  assert_eq "/mnt/c/Users/josh/Desktop" "$(wpath -u 'C:\Users\josh\Desktop')"
+  assert_eq 'C:\Users\josh\Desktop' "$(wpath -w '/mnt/c/Users/josh/Desktop')"
+
+  mkdir -p "$HOME/win_target"
+  touch "$HOME/win_target/app.ts"
+  wcd "file://$HOME/win_target/app.ts"
+  assert_eq "${HOME:A}/win_target" "${PWD:A}"
+}
+
+test_snip_lists_and_adds_custom_snippets() {
+  local out
+  out="$(snip -l)"
+  assert_contains "$out" "git/undo-commit"
+  assert_contains "$out" "ssh/port-forward-local"
+
+  snip -a "custom/hello" "echo '<greeting>'" "Print greeting" >/dev/null
+  assert_contains "$(snip -l custom/hello)" $'custom/hello\techo \'<greeting>\'\tPrint greeting'
+}
+
+test_decode_handles_jwt_epoch_url_and_base64() {
+  # 1. JWT ({"alg":"HS256"} . {"sub":"1234567890","name":"Josh"})
+  local jwt="eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6Ikpvc2gifQ.sig"
+  local jwt_out
+  jwt_out="$(decode "$jwt")"
+  assert_contains "$jwt_out" '"alg": "HS256"'
+  assert_contains "$jwt_out" '"name": "Josh"'
+
+  # 2. Epoch timestamp
+  local ep_out
+  ep_out="$(decode 1700000000)"
+  assert_contains "$ep_out" "2023-11-14"
+
+  # 3. URL & query string
+  local url_out
+  url_out="$(decode 'https://example.com/search?q=hello%20world&lang=en')"
+  assert_contains "$url_out" "hello world"
+  assert_contains "$url_out" "lang"
+
+  # 4. Base64
+  local b64_out
+  b64_out="$(decode 'aGVsbG8tZGVjb2Rl')"
+  assert_eq "hello-decode" "$b64_out"
+}
+
+test_fsize_fknown_and_termtest() {
+  mkdir -p "$HOME/sz_test/sub"
+  printf "hello world\n" > "$HOME/sz_test/file.txt"
+  local sz_out
+  sz_out="$(fsize -l "$HOME/sz_test")"
+  assert_contains "$sz_out" "file.txt"
+
+  mkdir -p "$HOME/.ssh"
+  printf "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl\n" > "$HOME/.ssh/known_hosts"
+  local kh_out
+  kh_out="$(fknown -l)"
+  assert_contains "$kh_out" $'known_host\tgithub.com\tssh-ed25519'
+
+  local tt_out
+  tt_out="$(termtest)"
+  assert_contains "$tt_out" "Truecolor RGB Gradient"
+  assert_contains "$tt_out" "Catppuccin Mocha Swatches"
 }

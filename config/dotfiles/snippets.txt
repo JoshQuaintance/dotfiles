@@ -1,0 +1,19 @@
+# Dotfiles Reusable Command Snippets (consumed by `snip`)
+# Format: <category/title>	<command with <placeholders>>	<description>
+git/undo-commit	git reset --soft HEAD~1	Undo last commit while keeping all changes staged
+git/amend-author	git commit --amend --author="<name> <<email>>" --no-edit	Update author of the most recent commit
+git/search-commit-diff	git log -S "<search_string>" -p	Find commits that added or removed a specific string (pickaxe)
+git/cherry-pick-range	git cherry-pick <start_sha>^..<end_sha>	Cherry-pick an inclusive range of commits
+git/fetch-pr	git fetch origin pull/<pr_number>/head:pr-<pr_number> && git switch pr-<pr_number>	Fetch and switch to a GitHub PR by number without gh CLI
+ssh/port-forward-local	ssh -N -L <local_port>:127.0.0.1:<remote_port> <user>@<host>	Forward local port to remote service over SSH tunnel
+ssh/port-forward-remote	ssh -N -R <remote_port>:127.0.0.1:<local_port> <user>@<host>	Expose local port on remote server over SSH tunnel
+ssh/socks-proxy	ssh -D 1080 -N <user>@<host>	Start a local SOCKS5 proxy over SSH on port 1080
+ssh/copy-id	ssh-copy-id -i ~/.ssh/id_ed25519.pub <user>@<host>	Install local Ed25519 public key on remote host
+net/curl-timing	curl -s -o /dev/null -w "DNS: %{time_namelookup}s | TCP: %{time_connect}s | TLS: %{time_appconnect}s | TTFB: %{time_starttransfer}s | Total: %{time_total}s\n" <url>	Measure HTTP DNS, TCP, TLS, TTFB, and total response latency
+net/tls-expiry	echo | openssl s_client -servername <domain> -connect <domain>:443 2>/dev/null | openssl x509 -noout -dates -subject -issuer	Inspect TLS certificate issuer, subject, and expiration dates
+net/http-server	python3 -m http.server <port> --bind 127.0.0.1	Serve current directory over local HTTP
+files/find-large	fd --type f --size +50m --exec ls -lh {}	Find files larger than 50MB in current directory tree
+files/replace-in-repo	rg -l "<old_text>" | xargs sed -i.bak 's/<old_text>/<new_text>/g'	Find and replace text across repository files
+docker/cleanup-all	docker system prune -af --volumes	Remove all unused containers, networks, images, and volumes
+node/kill-port	port -k <port>	Terminate process bound to a local TCP port
+python/uv-run-with	uv run --with <package> python3 -c "import <package>"	Run ephemeral Python one-liner with an isolated package via uv

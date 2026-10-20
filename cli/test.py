@@ -630,6 +630,7 @@ def test_cli_architecture(report: TestReport, dotfiles: Path):
         ("CLI smoke: clean (-n)", ["dot", "clean", "-n"], "Cache & temp files cleaner preview", None),
         ("CLI smoke: prune (-n)", ["dot", "prune", "-n"], "Upstream removed files preview", [patch("cli.prune._scan_roots", return_value=[])]),
         ("CLI smoke: sync (-n)", ["dot", "sync", "-n"], "Two-way git sync preview", None),
+        ("CLI smoke: backup (-n)", ["dot", "backup", "-n"], "Local overrides & state snapshot preview", None),
     ]
 
     for label, argv, detail, patches in subcommand_specs:
