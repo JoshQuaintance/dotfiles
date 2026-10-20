@@ -130,3 +130,22 @@ EOF
   assert_eq "" "${SINGLE_QUOTED:-}"
   assert_eq "" "${CRLF_KEY:-}"
 }
+
+test_fpkg_lists_brew_and_mise_packages() {
+  mkdir -p "$HOME/pkg_stubs"
+  print -r -- '#!/bin/sh
+if [ "$2" = "--formula" ]; then
+  printf "ripgrep 15.2.0\nfd 10.5.0\n"
+elif [ "$2" = "--cask" ]; then
+  printf "ghostty 1.2.0\n"
+fi' > "$HOME/pkg_stubs/brew"
+  print -r -- '#!/bin/sh
+printf "node 24.21.0 ~/.config/mise/config.toml 24\n"' > "$HOME/pkg_stubs/mise"
+  chmod +x "$HOME/pkg_stubs/brew" "$HOME/pkg_stubs/mise"
+
+  local out
+  out="$(PATH="$HOME/pkg_stubs:$PATH" fpkg -l)"
+  assert_contains "$out" $'brew\tripgrep\t15.2.0'
+  assert_contains "$out" $'cask\tghostty\t1.2.0'
+  assert_contains "$out" $'mise\tnode\t24.21.0'
+}

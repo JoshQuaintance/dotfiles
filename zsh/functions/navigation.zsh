@@ -284,21 +284,77 @@ _proj_repo_branch() {
   printf "main"
 }
 
+# Internal helper: open a directory in a new terminal tab/window across macOS, Linux & WSL
+_open_terminal_tab() {
+  local target_dir="${1:-$PWD}"
+  if [[ -n "$TMUX" ]]; then
+    tmux new-window -c "$target_dir"
+  elif [[ -n "$ZELLIJ" ]]; then
+    zellij action new-tab --cwd "$target_dir"
+  elif [[ "$TERM_PROGRAM" == "WezTerm" ]] && command -v wezterm &>/dev/null; then
+    wezterm cli spawn --cwd "$target_dir" >/dev/null
+  elif [[ -n "$KITTY_LISTEN_ON" ]] && command -v kitty &>/dev/null; then
+    kitty @ launch --type=tab --cwd="$target_dir" >/dev/null
+  elif [[ "$OSTYPE" == darwin* ]]; then
+    if [[ "$TERM_PROGRAM" == "ghostty" || -d "/Applications/Ghostty.app" ]]; then
+      osascript - "$target_dir" <<'APPLESCRIPT' >/dev/null 2>&1
+on run argv
+  set targetDir to item 1 of argv
+  tell application "Ghostty"
+    set cfg to new surface configuration
+    set initial working directory of cfg to targetDir
+    if (count of windows) > 0 then
+      new tab in front window with configuration cfg
+    else
+      new window with configuration cfg
+    end if
+    activate
+  end tell
+end run
+APPLESCRIPT
+    elif [[ "$TERM_PROGRAM" == "iTerm.app" ]]; then
+      open -a iTerm "$target_dir"
+    else
+      open -a Terminal "$target_dir"
+    fi
+  elif [[ -n "$WT_SESSION" ]] && command -v wt.exe &>/dev/null; then
+    wt.exe -w 0 nt -d "$target_dir"
+  elif command -v gnome-terminal &>/dev/null; then
+    gnome-terminal --tab --working-directory="$target_dir"
+  elif command -v konsole &>/dev/null; then
+    konsole --new-tab --workdir "$target_dir"
+  elif command -v xfce4-terminal &>/dev/null; then
+    xfce4-terminal --tab --working-directory="$target_dir"
+  else
+    cd "$target_dir"
+  fi
+}
+
 # Internal helper: list discovered Git repositories under ~/Codes (or $DOTFILES_PROJECTS_DIR) and ~/.dotfiles
 # Output format: <name>\t<branch>\t<path>
 _proj_list_repos() {
-  local base_dir="${DOTFILES_PROJECTS_DIR:-$HOME/Codes}"
   local dot_dir="${DOTFILES_DIR:-$HOME/.dotfiles}"
+  local -a search_dirs=()
+  if [[ -n "$DOTFILES_PROJECTS_DIR" ]]; then
+    search_dirs=(${(s.:.)DOTFILES_PROJECTS_DIR})
+  else
+    local d
+    for d in "$HOME/Codes" "$HOME/Projects" "$HOME/repos" "$HOME/src"; do
+      [[ -d "$d" ]] && search_dirs+=("$d")
+    done
+  fi
+
   local -a git_entries=()
   local -A seen_paths=()
-
-  if [[ -d "$base_dir" ]]; then
+  local sdir
+  for sdir in "${search_dirs[@]}"; do
+    [[ -d "$sdir" ]] || continue
     if command -v fd &>/dev/null; then
-      git_entries=(${(f)"$(fd --hidden --no-ignore -g '.git' --max-depth 4 "$base_dir" 2>/dev/null)"})
+      git_entries+=(${(f)"$(fd --hidden --no-ignore -g '.git' --max-depth 4 "$sdir" 2>/dev/null)"})
     else
-      git_entries=(${(f)"$(find "$base_dir" -maxdepth 4 -name '.git' 2>/dev/null)"})
+      git_entries+=(${(f)"$(find "$sdir" -maxdepth 4 -name '.git' 2>/dev/null)"})
     fi
-  fi
+  done
   [[ -e "$dot_dir/.git" ]] && git_entries+=("$dot_dir/.git")
 
   local entry repo name branch
@@ -321,7 +377,7 @@ _proj_list_repos() {
 #   proj / fp          -> Browse all discovered Git projects in modal-Vim FZF
 #   proj <name>        -> Jump directly to matching project (or open FZF filtered by <name>)
 #   proj -l, --list    -> List discovered projects (<name>\t<branch>\t<path>)
-#   Keys: enter = cd, e = open in $EDITOR, l = open lazygit, y = copy path
+#   Keys: enter = cd, e = open in $EDITOR, l = open lazygit, t = open in new terminal tab, y = copy path
 proj() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     printf "\033[1;38;2;137;180;250mproj\033[0m (alias: \033[1mfp\033[0m) — Interactive modal-Vim Git project & repository switcher\n\n"
@@ -332,6 +388,7 @@ proj() {
     printf "  Enter              cd into selected repository\n"
     printf "  e                  Open repository in \$EDITOR (nvim)\n"
     printf "  l                  Open lazygit in selected repository\n"
+    printf "  t                  Open repository in a new terminal tab\n"
     printf "  y                  Copy repository path to clipboard\n"
     return 0
   fi
@@ -391,9 +448,9 @@ proj() {
     printf "\033[1;38;2;137;180;250m%-26s\033[0m\t\033[38;2;166;227;161m%-20s\033[0m\t\033[2m%s\033[0m\t%s\n", $1, " " $2, disp_path, $3
   }')
 
-  local hdr="  j/k: navigate │ /: search │ enter: cd │ e: edit │ l: lazygit │ y: copy path │ q: quit"
+  local hdr="  j/k: navigate │ /: search │ enter: cd │ e: edit │ l: lazygit │ t: new tab │ y: copy path │ q: quit"
   local -a fzf_mode_flags
-  _fzf_vim_mode "🚀 Projects > " "$hdr" "cd" "e,l,y" "$query"
+  _fzf_vim_mode "🚀 Projects > " "$hdr" "cd" "e,l,t,y" "$query"
 
   local selection
   selection=$(printf "%s\n" "$formatted" | fzf \
@@ -422,6 +479,9 @@ proj() {
       else
         cd "$chosen"
       fi
+      ;;
+    t)
+      _open_terminal_tab "$chosen"
       ;;
     y)
       _copy_or_print "$chosen" "project path: $chosen"
