@@ -87,6 +87,14 @@ run  = 'shell "ya emit cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\
 desc = "Jump to current Git repository root"
 
 [[mgr.prepend_keymap]]
+on   = [ "g", "w" ]
+run  = '''shell --block --confirm '
+  target="$(git worktree list 2>/dev/null | fzf --height=100% --reverse --prompt="🌳 Worktree > " | awk "{print \$1}")"
+  [ -n "$target" ] && ya emit cd "$target"
+' '''
+desc = "Jump to a Git worktree via FZF"
+
+[[mgr.prepend_keymap]]
 on   = [ "g", "D" ]
 run  = "cd ~/.dotfiles"
 desc = "Jump to ~/.dotfiles"

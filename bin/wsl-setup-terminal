@@ -130,6 +130,21 @@ for k, v in tpl_defaults.items():
     else:
         data["profiles"]["defaults"][k] = v
 
+# 4. Merge ergonomic keybindings / actions (matched by "keys")
+if "actions" in template and isinstance(template["actions"], list):
+    target_key = "actions" if "actions" in data or "keybindings" not in data else "keybindings"
+    if target_key not in data or not isinstance(data[target_key], list):
+        data[target_key] = []
+    for tpl_action in template["actions"]:
+        keys = tpl_action.get("keys")
+        if not keys:
+            continue
+        act_idx = next((i for i, a in enumerate(data[target_key]) if a.get("keys") == keys), None)
+        if act_idx is not None:
+            data[target_key][act_idx] = tpl_action
+        else:
+            data[target_key].append(tpl_action)
+
 with open(settings_path, "w", encoding="utf-8") as f:
     json.dump(data, f, indent=4)
 

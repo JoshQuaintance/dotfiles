@@ -16,3 +16,25 @@ max_height = 1200
 image_filter = "triangle"
 image_quality = 80
 sixel_fraction = 15
+
+[opener]
+open = [
+  { run = '''
+    for f in "$@"; do
+      if [ "$(uname -s)" = "Darwin" ]; then
+        open "$f"
+      elif [ -n "$WSL_DISTRO_NAME" ]; then
+        if command -v wslview >/dev/null 2>&1; then
+          wslview "$f"
+        elif command -v explorer.exe >/dev/null 2>&1; then
+          explorer.exe "$(wslpath -w "$f" 2>/dev/null || printf '%s' "$f")"
+        fi
+      elif command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$f" >/dev/null 2>&1 &
+      fi
+    done
+  ''', desc = "Open with system default application", orphan = true },
+]
+edit = [
+  { run = '${EDITOR:-nvim} "$@"', desc = "$EDITOR", block = true },
+]

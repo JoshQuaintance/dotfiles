@@ -461,27 +461,44 @@ y() {
   rm -f -- "$tmp"
 }
 
-# Cross-Platform Clipboard Helpers (macOS, Linux Wayland, Linux X11, WSL)
+# Cross-Platform Clipboard Helpers (macOS, Linux Wayland, Linux X11, WSL, SSH/OSC-52)
 # WSL prefers win32yank.exe: clip.exe mangles UTF-8, and Get-Clipboard is slow and adds CRLF.
+# Remote SSH / headless sessions fall back to OSC-52 escape sequences (with tmux passthrough).
 # The paste side is `clippaste` so coreutils `paste` keeps working.
 copy() {
   if command -v pbcopy &>/dev/null; then
     pbcopy "$@"
   elif [[ -n "$WSL_DISTRO_NAME" ]] && command -v win32yank.exe &>/dev/null; then
     win32yank.exe -i --crlf
-  elif command -v wl-copy &>/dev/null; then
+  elif [[ -n "$WAYLAND_DISPLAY" ]] && command -v wl-copy &>/dev/null; then
     wl-copy "$@"
-  elif command -v xclip &>/dev/null; then
+  elif [[ -n "$DISPLAY" ]] && command -v xclip &>/dev/null; then
     xclip -selection clipboard "$@"
-  elif command -v xsel &>/dev/null; then
+  elif [[ -n "$DISPLAY" ]] && command -v xsel &>/dev/null; then
     xsel --clipboard --input "$@"
   elif command -v clip.exe &>/dev/null; then
     # clip.exe reads the console code page unless given UTF-16LE with a BOM
     { printf '\xff\xfe'; iconv -f UTF-8 -t UTF-16LE; } | clip.exe
-  elif [ -n "$TMUX" ]; then
-    tmux load-buffer -
+  elif [[ -n "$TMUX" || -n "$SSH_TTY" || -n "$SSH_CONNECTION" || -n "$SSH_CLIENT" || -n "$DOTFILES_OSC52" ]]; then
+    local data b64 target_tty="/dev/stdout"
+    data="$(cat "$@"; printf x)"
+    data="${data%x}"
+    b64="$(printf "%s" "$data" | base64 | tr -d '\r\n')"
+    if [[ -z "$DOTFILES_OSC52_STDOUT" ]]; then
+      if [[ -n "$SSH_TTY" && -w "$SSH_TTY" ]]; then
+        target_tty="$SSH_TTY"
+      elif [[ -w /dev/tty ]]; then
+        target_tty="/dev/tty"
+      fi
+    fi
+    if [[ -n "$TMUX" ]]; then
+      printf "%s" "$data" | tmux load-buffer - 2>/dev/null || true
+      printf "\033Ptmux;\033\033]52;c;%s\a\033\\" "$b64" > "$target_tty"
+    else
+      printf "\033]52;c;%s\a" "$b64" > "$target_tty"
+    fi
   else
-    printf "\033[33mNo clipboard utility found (pbcopy, win32yank.exe, wl-copy, xclip, clip.exe)\033[0m\n" >&2
+    printf "\033[33mNo clipboard utility found (pbcopy, win32yank.exe, wl-copy, xclip, clip.exe, or SSH/OSC-52)\033[0m\n" >&2
     return 1
   fi
 }
@@ -492,14 +509,16 @@ clippaste() {
     pbpaste "$@"
   elif [[ -n "$WSL_DISTRO_NAME" ]] && command -v win32yank.exe &>/dev/null; then
     win32yank.exe -o --lf
-  elif command -v wl-paste &>/dev/null; then
+  elif [[ -n "$WAYLAND_DISPLAY" ]] && command -v wl-paste &>/dev/null; then
     wl-paste "$@"
-  elif command -v xclip &>/dev/null; then
+  elif [[ -n "$DISPLAY" ]] && command -v xclip &>/dev/null; then
     xclip -selection clipboard -o "$@"
-  elif command -v xsel &>/dev/null; then
+  elif [[ -n "$DISPLAY" ]] && command -v xsel &>/dev/null; then
     xsel --clipboard --output "$@"
   elif command -v powershell.exe &>/dev/null; then
     powershell.exe -NoProfile -Command '[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-Clipboard -Raw' | tr -d '\r'
+  elif [[ -n "$TMUX" ]]; then
+    tmux save-buffer -
   else
     printf "\033[33mNo clipboard utility found (pbpaste, win32yank.exe, wl-paste, xclip, powershell.exe)\033[0m\n" >&2
     return 1
