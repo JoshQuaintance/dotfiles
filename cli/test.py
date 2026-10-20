@@ -366,6 +366,18 @@ strdiff -h >/dev/null
 strdiff "feat/SALES-1234/my-branch" "feat/SALES-1235/my_branch " >/dev/null
 dotbranch -h >/dev/null
 dotbranch -s >/dev/null
+lastout -h >/dev/null
+clip -h >/dev/null
+fnet -h >/dev/null
+fhash -h >/dev/null
+decode -h >/dev/null
+snip -h >/dev/null
+fpkg -h >/dev/null
+fsize -h >/dev/null
+fknown -h >/dev/null
+termtest -h >/dev/null
+wpath -h >/dev/null
+wcd -h >/dev/null
 
 # Git-dependent functions (must run inside git repo)
 (
@@ -631,6 +643,7 @@ def test_cli_architecture(report: TestReport, dotfiles: Path):
         ("CLI smoke: prune (-n)", ["dot", "prune", "-n"], "Upstream removed files preview", [patch("cli.prune._scan_roots", return_value=[])]),
         ("CLI smoke: sync (-n)", ["dot", "sync", "-n"], "Two-way git sync preview", None),
         ("CLI smoke: backup (-n)", ["dot", "backup", "-n"], "Local overrides & state snapshot preview", None),
+        ("CLI smoke: env", ["dot", "env"], "Environment & $PATH shadowing audit", None),
     ]
 
     for label, argv, detail, patches in subcommand_specs:

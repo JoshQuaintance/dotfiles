@@ -8,10 +8,10 @@ ZSH_FUNCTIONS_DIR="${0:A:h}/functions"
 typeset -ga DOTFILES_FUNCTIONS=(
   take d up tree lt groot gmain proj wpath wcd
   conf dotbranch clone
-  port fkill fcon fssh dotenv fpkg decode fsize fknown termtest
+  port fkill fcon fssh dotenv fpkg decode fsize fknown termtest fnet fhash
   wt gwtnew gwtenv gwts gwtdel gwtclean
   gbclean gstash ga gfile gl gco gsearch
-  y copy clippaste scratch extract pack
+  y copy clippaste clip lastout scratch extract pack
   npmr bunr pnpmr
   fa fenv cheath fjq snip
   toggle-autols toggle-autonotify notify strdiff

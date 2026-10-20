@@ -26,6 +26,8 @@ alias kp="fkill" # Interactive process & port killer
 alias fport="port" # Interactive listening port inspector & killer
 alias fbrew="fpkg" # Interactive Homebrew, Mise & system package inspector
 alias bigfiles="fsize" # Interactive directory size & large-file hunter
+alias netinfo="fnet" # Cross-platform network, DNS, VPN & latency diagnostic card
+alias hashfile="fhash" # Multi-digest file checksum & integrity verifier
 alias dps="fcon" # Interactive Docker/Podman container manager
 alias cheat="cheath" # Interactive tldr cheat-sheet browser
 if command -v tokei &>/dev/null; then
@@ -83,6 +85,7 @@ alias .prune="dot prune" # Remove links, caches & packages deleted from the dotf
 alias .sync="dot sync" # Commit, rebase & push local dotfiles changes
 alias .backup="dot backup" # Snapshot untracked local machine overrides & state
 alias .restore="dot restore" # Restore local machine overrides & state from snapshot
+alias .env="dot env" # Audit environment variables, PATH precedence & shadowed binaries
 alias .prompt="dot prompt" # Benchmark & select shell prompt (native, spaceship)
 alias .branch="dotbranch" # Switch active ~/.dotfiles branch & reload shell
 alias .b="dotbranch" # Switch active ~/.dotfiles branch & reload shell

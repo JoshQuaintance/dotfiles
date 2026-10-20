@@ -358,6 +358,7 @@ _dot() {
       'prompt:Benchmark and select shell prompt (native, spaceship)'
       'backup:Snapshot untracked local machine overrides & state'
       'restore:Restore local machine overrides & state from snapshot'
+      'env:Audit environment variables, PATH precedence & shadowed binaries'
     )
     _describe 'dot command' subcommands
   else
@@ -439,6 +440,12 @@ _dot() {
         flags=(
           '-n:Preview files that would be restored without extracting'
           '--dry-run:Preview files that would be restored without extracting'
+        )
+        ;;
+      env)
+        flags=(
+          '-a:Show all PATH entries without truncation'
+          '--all:Show all PATH entries without truncation'
         )
         ;;
     esac

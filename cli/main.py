@@ -5,6 +5,7 @@ from cli.backup import run_backup, run_restore
 from cli.bench import run_bench
 from cli.clean import run_clean
 from cli.doctor import run_doctor
+from cli.env_audit import run_env_audit
 from cli.prompt import run_prompt_command
 from cli.prune import run_prune
 from cli.status import run_status
@@ -84,6 +85,10 @@ def main():
     parser_restore.add_argument("archive", nargs="?", help="Backup archive path (default: most recent archive)")
     parser_restore.add_argument("-n", "--dry-run", action="store_true", help="Preview files that would be restored without extracting")
 
+    # dot env
+    parser_env = subparsers.add_parser("env", help="Audit environment variables, $PATH precedence, and shadowed binaries")
+    parser_env.add_argument("-a", "--all", action="store_true", help="Show all $PATH entries without truncation")
+
     args = parser.parse_args()
 
     if not args.subcommand or args.subcommand == "status":
@@ -124,6 +129,8 @@ def main():
         sys.exit(run_backup(output_path=args.output, dry_run=args.dry_run, list_only=args.list))
     elif args.subcommand == "restore":
         sys.exit(run_restore(archive_path=args.archive, dry_run=args.dry_run))
+    elif args.subcommand == "env":
+        sys.exit(run_env_audit(show_all_path=args.all))
 
 if __name__ == "__main__":
     main()

@@ -58,13 +58,16 @@ dot prune [REF] [-n]  # Remove links, caches & packages deleted since REF (defau
 dot prune --orphans   # ...and offer to uninstall brew packages & mise versions the dotfiles don't declare
 dot update --all      # Upstream Git sync + Homebrew & Mise updates + automated test run (.update)
 dot link --fix        # Reconcile all declarative configuration symlinks
+dot env [-a]          # Audit environment variables, $PATH precedence & shadowed binaries (.env)
+dot backup [-l] [-n]  # Snapshot untracked local machine overrides, scratchpads & state (.backup)
+dot restore [ARC]     # Restore untracked local machine overrides & state from snapshot (.restore)
 ```
 
 *Pruning:* after pulling, `dot update` removes what upstream deleted since your previous commit. Symlinks into removed repo files and stale zsh caches (`.zwc`, compdumps) are removed automatically. Homebrew formulae/casks dropped from the `Brewfile` and tools dropped from `config/mise/config.toml` are listed and only uninstalled after you confirm, even with `-y`. `dot update -c` previews the list; `--no-prune` skips it. Run the same cleanup on its own with `dot prune` (e.g. after a manual `git pull`).
 
 *Shell function tests:* `zsh tests/zsh/run.zsh [filter]` runs the unit tests in `tests/zsh/` (each test gets a throwaway `$HOME`); CI runs them along with strict `shellcheck` and `ruff`.
 
-*Note: Shorthand aliases (`.status`, `.doctor`, `.test`, `.bench`, `.clean`, `.prune`, `.check`, `.update`, `.branch`) and standalone scripts (`dotdoctor`, `dottest`, `dotcheck`, `dotupdate`) are also available.*
+*Note: Shorthand aliases (`.status`, `.doctor`, `.test`, `.bench`, `.clean`, `.prune`, `.check`, `.update`, `.branch`, `.env`, `.backup`, `.restore`) and standalone scripts (`dotdoctor`, `dottest`, `dotcheck`, `dotupdate`) are also available.*
 
 ---
 

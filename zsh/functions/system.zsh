@@ -846,7 +846,7 @@ if [[ -o interactive ]]; then
 
         # Ignore interactive TUIs, editors, pagers, and FZF shell pickers
         case "$first_word" in
-          nvim|vim|vi|nano|emacs|code|yazi|y|lazygit|lg|btop|htop|top|man|less|more|ssh|mosh|tmux|zellij|fzf|gl|gco|gstash|ga|gadd|gfile|gfh|gsearch|wt|gwtdel|gwtclean|gbclean|conf|dotbranch|.branch|.b|scratch|fa|aliases|fenv|cheath|cheat|fjq|port|fkill|kp|fcon|dps|fssh|npmr|bunr|pnpmr|sdiff|strdiff|watch|fg|bg)
+          nvim|vim|vi|nano|emacs|code|yazi|y|lazygit|lg|btop|htop|top|man|less|more|ssh|mosh|tmux|zellij|fzf|gl|gco|gstash|ga|gadd|gfile|gfh|gsearch|wt|gwtdel|gwtclean|gbclean|conf|dotbranch|.branch|.b|scratch|fa|aliases|fenv|cheath|cheat|fjq|port|fport|fkill|kp|fcon|dps|fssh|fpkg|fbrew|fsize|bigfiles|fknown|proj|fp|snip|npmr|bunr|pnpmr|sdiff|strdiff|lastout|watch|fg|bg)
             ;;
           *)
             local mins=$(( elapsed / 60 ))
@@ -1392,7 +1392,7 @@ decode() {
   local input=""
   if (( $# > 0 )); then
     input="$*"
-  elif [[ ! -t 0 ]]; then
+  elif [[ -p /dev/stdin || ( ! -t 0 && -s /dev/stdin ) ]]; then
     input="$(cat)"
   else
     input="$(clippaste 2>/dev/null)"
@@ -1780,4 +1780,439 @@ termtest() {
   printf "  \033[1m4. Nerd Font & Unicode Glyphs:\033[0m\n"
   printf "  OS:  🐧 🪟  │  Git:     │  Status: ✔ ✖ ⚠ ⚡  │  UI: ❯ ◆ 🚀 📂 🐳 🔌\n\n"
 }
+
+# Quick Last-Command Output Capture (lastout)
+# Re-executes the previous command (or an explicit command) and copies its output to clipboard,
+# appends it to today's scratchpad, or opens it in a pager/Neovim.
+# Usage:
+#   lastout              -> Re-run last command & copy output to clipboard (or print if piped)
+#   lastout -s           -> Re-run last command & append output block to today's scratchpad
+#   lastout -p           -> Re-run last command & open output in $PAGER
+#   lastout [-c|-s|-p] <cmd...> -> Run explicit command and capture output
+lastout() {
+  local mode="copy"
+  while (( $# > 0 )); do
+    case "$1" in
+      -h|--help)
+        printf "\033[1;38;2;203;166;247mlastout\033[0m — Capture output of the last command to clipboard, scratchpad, or pager\n\n"
+        printf "\033[1mUsage:\033[0m\n"
+        printf "  lastout                  Re-run last command and copy output to clipboard\n"
+        printf "  lastout -c, --copy       Copy output to system clipboard (default)\n"
+        printf "  lastout -s, --scratch    Append command & output to today's scratchpad note\n"
+        printf "  lastout -p, --pager      Open captured output in \${PAGER:-less -R}\n"
+        printf "  lastout [flags] <cmd..>  Capture output of an explicit command\n"
+        return 0
+        ;;
+      -c|--copy)
+        mode="copy"
+        shift
+        ;;
+      -s|--scratch)
+        mode="scratch"
+        shift
+        ;;
+      -p|--pager)
+        mode="pager"
+        shift
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -*)
+        printf "\033[31m✖ Unknown option: %s\033[0m\n" "$1" >&2
+        return 1
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  local cmd_str=""
+  if (( $# > 0 )); then
+    cmd_str="$*"
+  else
+    local -a hist_lines
+    hist_lines=("${(@f)$(fc -ln -5 -1 2>/dev/null)}")
+    local idx
+    for (( idx = ${#hist_lines[@]}; idx >= 1; idx-- )); do
+      local candidate="${hist_lines[$idx]}"
+      candidate="${candidate#"${candidate%%[![:space:]]*}"}"
+      if [[ -n "$candidate" && "$candidate" != lastout* ]]; then
+        cmd_str="$candidate"
+        break
+      fi
+    done
+  fi
+
+  if [[ -z "$cmd_str" ]]; then
+    printf "\033[31m✖ No previous command found in history.\033[0m\n" >&2
+    return 1
+  fi
+
+  local output rc=0
+  if (( $# > 0 )); then
+    output="$("$@" 2>&1)" || rc=$?
+  else
+    output="$(eval "$cmd_str" 2>&1)" || rc=$?
+  fi
+
+  case "$mode" in
+    scratch)
+      local scratch_dir="${SCRATCH_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/scratch}"
+      mkdir -p "$scratch_dir"
+      local note_file="$scratch_dir/$(date +%Y-%m-%d).md"
+      {
+        printf "\n## \`%s\` (%s)\n\n\`\`\`text\n%s\n\`\`\`\n" "$cmd_str" "$(date +%H:%M:%S)" "$output"
+      } >> "$note_file"
+      printf "\033[32m✔ Appended output of '%s' to %s\033[0m\n" "$cmd_str" "${note_file/$HOME/~}"
+      ;;
+    pager)
+      if [[ -t 1 ]]; then
+        printf "%s\n" "$output" | ${=PAGER:-less -R}
+      else
+        printf "%s\n" "$output"
+      fi
+      ;;
+    copy)
+      if [[ ! -t 1 ]]; then
+        printf "%s\n" "$output"
+      else
+        _copy_or_print "$output" "output of '$cmd_str' (${#output} chars)"
+      fi
+      ;;
+  esac
+  return $rc
+}
+
+# Clipboard Transform Pipeline (clip)
+# Transforms clipboard contents (or piped stdin) in-place or prints to stdout (-p).
+# Supports: --trim, --json, --min, --sort, --lower, --upper, --urlencode, --urldecode, --b64e, --b64d
+clip() {
+  local op="" print_only=false
+  while (( $# > 0 )); do
+    case "$1" in
+      -h|--help)
+        printf "\033[1;38;2;137;180;250mclip\033[0m — Cross-platform clipboard transform pipeline\n\n"
+        printf "\033[1mUsage:\033[0m\n"
+        printf "  clip                 Print current clipboard content\n"
+        printf "  clip -t, --trim      Strip surrounding whitespace & trailing line spaces\n"
+        printf "  clip -j, --json      Pretty-print JSON (2-space indent)\n"
+        printf "  clip -m, --min       Minify JSON or collapse multi-line text to 1 line\n"
+        printf "  clip -s, --sort      Sort lines and deduplicate\n"
+        printf "  clip -l, --lower     Convert to lowercase\n"
+        printf "  clip -u, --upper     Convert to uppercase\n"
+        printf "  clip --urlencode     Percent-encode URL string\n"
+        printf "  clip --urldecode     Decode percent-encoded URL string\n"
+        printf "  clip --b64e          Encode as Base64\n"
+        printf "  clip --b64d          Decode from Base64\n"
+        printf "  clip -p, --print     Print transformed output to stdout instead of copying\n"
+        return 0
+        ;;
+      -p|--print)     print_only=true; shift ;;
+      -t|--trim)      op="trim"; shift ;;
+      -j|--json)      op="json"; shift ;;
+      -m|--min)       op="min"; shift ;;
+      -s|--sort)      op="sort"; shift ;;
+      -l|--lower)     op="lower"; shift ;;
+      -u|--upper)     op="upper"; shift ;;
+      --urlencode)    op="urlencode"; shift ;;
+      --urldecode)    op="urldecode"; shift ;;
+      --b64e)         op="b64e"; shift ;;
+      --b64d)         op="b64d"; shift ;;
+      *)
+        printf "\033[31m✖ Unknown option: %s (see 'clip --help')\033[0m\n" "$1" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  local input=""
+  if [[ -p /dev/stdin || ( ! -t 0 && -s /dev/stdin ) ]]; then
+    input="$(cat)"
+  else
+    if ! input="$(clippaste 2>/dev/null)"; then
+      printf "\033[31m✖ Failed to read from system clipboard.\033[0m\n" >&2
+      return 1
+    fi
+  fi
+
+  if [[ -z "$op" ]]; then
+    printf "%s\n" "$input"
+    return 0
+  fi
+
+  local transformed
+  if ! transformed="$(python3 - "$op" "$input" <<'PYEOF'
+import base64
+import json
+import sys
+import urllib.parse
+
+op, text = sys.argv[1], sys.argv[2]
+
+if op == "trim":
+    lines = [line.rstrip() for line in text.strip().splitlines()]
+    print("\n".join(lines), end="")
+elif op == "json":
+    try:
+        obj = json.loads(text)
+        print(json.dumps(obj, indent=2, ensure_ascii=False), end="")
+    except Exception as e:
+        print(f"Invalid JSON: {e}", file=sys.stderr)
+        sys.exit(1)
+elif op == "min":
+    try:
+        obj = json.loads(text)
+        print(json.dumps(obj, separators=(",", ":"), ensure_ascii=False), end="")
+    except Exception:
+        print(" ".join(text.split()), end="")
+elif op == "sort":
+    seen = set()
+    lines = []
+    for line in sorted(text.splitlines()):
+        if line not in seen:
+            seen.add(line)
+            lines.append(line)
+    print("\n".join(lines), end="")
+elif op == "lower":
+    print(text.lower(), end="")
+elif op == "upper":
+    print(text.upper(), end="")
+elif op == "urlencode":
+    print(urllib.parse.quote(text.strip(), safe=""), end="")
+elif op == "urldecode":
+    print(urllib.parse.unquote_plus(text.strip()), end="")
+elif op == "b64e":
+    print(base64.b64encode(text.encode("utf-8")).decode("ascii"), end="")
+elif op == "b64d":
+    raw = text.strip()
+    padded = raw + "=" * ((4 - len(raw) % 4) % 4)
+    print(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8", errors="replace"), end="")
+PYEOF
+  )"; then
+    return 1
+  fi
+
+  if [[ "$print_only" == true ]]; then
+    printf "%s\n" "$transformed"
+  else
+    printf "%s" "$transformed" | copy
+    if [[ -t 1 ]]; then
+      printf "\033[32m✔ Transformed clipboard (%s, %d chars)\033[0m\n" "$op" "${#transformed}"
+    fi
+  fi
+}
+
+# Cross-Platform Network, DNS, Tunnel & Latency Diagnostic Card (fnet / netinfo)
+# Works across macOS, Linux, and WSL
+fnet() {
+  local fetch_public=false run_ping=true
+  while (( $# > 0 )); do
+    case "$1" in
+      -h|--help)
+        printf "\033[1;38;2;137;180;250mfnet\033[0m (alias: \033[1mnetinfo\033[0m) — Cross-platform network, DNS, VPN & latency diagnostic card\n\n"
+        printf "\033[1mUsage:\033[0m\n"
+        printf "  fnet                 Show active interface, LAN IP, gateway, DNS, VPN tunnels & ping\n"
+        printf "  fnet -p, --public    Also query external public IP address\n"
+        printf "  fnet --no-ping       Skip 1.1.1.1 latency probe\n"
+        return 0
+        ;;
+      -p|--public) fetch_public=true; shift ;;
+      --no-ping)   run_ping=false; shift ;;
+      *)           shift ;;
+    esac
+  done
+
+  local iface="" lan_ip="" gateway="" dns_list="" tunnels="" ping_rtt="" pub_ip=""
+  if [[ "$OSTYPE" == darwin* ]]; then
+    iface="$(route -n get default 2>/dev/null | awk '/interface:/{print $2; exit}')"
+    [[ -z "$iface" ]] && iface="en0"
+    lan_ip="$(ipconfig getifaddr "$iface" 2>/dev/null)"
+    gateway="$(route -n get default 2>/dev/null | awk '/gateway:/{print $2; exit}')"
+    dns_list="$(scutil --dns 2>/dev/null | awk '/nameserver\[[0-9]+\]/{print $3}' | awk '!seen[$0]++' | paste -sd ', ' -)"
+    tunnels="$(ifconfig 2>/dev/null | awk '
+      /^(utun|ppp|wg|tun|tap|tailscale)[0-9]*:/ { iface=$1; sub(/:/, "", iface) }
+      iface != "" && $1 == "inet" { printf "%s (%s) ", iface, $2; iface="" }
+    ')"
+  else
+    local route_line
+    route_line="$(ip -4 route get 1.1.1.1 2>/dev/null | head -n 1)"
+    iface="$(printf "%s\n" "$route_line" | awk '{for(i=1;i<=NF;i++) if($i=="dev" && i<NF){print $(i+1); exit}}')"
+    lan_ip="$(printf "%s\n" "$route_line" | awk '{for(i=1;i<=NF;i++) if($i=="src" && i<NF){print $(i+1); exit}}')"
+    [[ -z "$lan_ip" ]] && lan_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    gateway="$(printf "%s\n" "$route_line" | awk '{for(i=1;i<=NF;i++) if($i=="via" && i<NF){print $(i+1); exit}}')"
+    tunnels="$(ip -4 -o addr show 2>/dev/null | awk '$2 ~ /^(tun|tap|wg|tailscale|utun|ppp)/ { sub(/\/.*/, "", $4); printf "%s (%s) ", $2, $4 }')"
+  fi
+
+  if [[ -z "$dns_list" && -f /etc/resolv.conf ]]; then
+    dns_list="$(awk '/^[[:space:]]*nameserver[[:space:]]+/ {print $2}' /etc/resolv.conf 2>/dev/null | awk '!seen[$0]++' | paste -sd ', ' -)"
+  fi
+
+  if [[ "$run_ping" == true ]] && command -v ping &>/dev/null; then
+    local ping_out
+    if [[ "$OSTYPE" == darwin* ]]; then
+      ping_out="$(ping -c 1 -t 1 1.1.1.1 2>/dev/null)"
+    else
+      ping_out="$(ping -c 1 -W 1 1.1.1.1 2>/dev/null)"
+    fi
+    ping_rtt="$(printf "%s\n" "$ping_out" | awk -F'time=' 'NF>1 {print $2; exit}')"
+  fi
+
+  if [[ "$fetch_public" == true ]] && command -v curl &>/dev/null; then
+    pub_ip="$(curl -fsSL --max-time 2 https://icanhazip.com 2>/dev/null | tr -d '[:space:]')"
+  fi
+
+  printf "\n\033[1;38;2;137;180;250m╭────────────────────────────────────────────────────────╮\033[0m\n"
+  printf "\033[1;38;2;137;180;250m│\033[0m  \033[1m🌐 Network & Connectivity Diagnostic (fnet)\033[0m           \033[1;38;2;137;180;250m│\033[0m\n"
+  printf "\033[1;38;2;137;180;250m╰────────────────────────────────────────────────────────╯\033[0m\n\n"
+  printf "  \033[1;38;2;203;166;247mHostname:\033[0m     %s\n" "${HOST:-$(hostname 2>/dev/null)}"
+  printf "  \033[1;38;2;203;166;247mInterface:\033[0m    %s\n" "${iface:-unknown}"
+  printf "  \033[1;38;2;203;166;247mLocal IPv4:\033[0m   \033[1;38;2;166;227;161m%s\033[0m\n" "${lan_ip:-offline}"
+  printf "  \033[1;38;2;203;166;247mGateway:\033[0m      %s\n" "${gateway:-none}"
+  printf "  \033[1;38;2;203;166;247mDNS Servers:\033[0m  %s\n" "${dns_list:-none}"
+  printf "  \033[1;38;2;203;166;247mVPN/Tunnels:\033[0m  %s\n" "${tunnels:-none active}"
+  if [[ "$run_ping" == true ]]; then
+    if [[ -n "$ping_rtt" ]]; then
+      printf "  \033[1;38;2;203;166;247m1.1.1.1 RTT:\033[0m  \033[32m✔ %s\033[0m\n" "$ping_rtt"
+    else
+      printf "  \033[1;38;2;203;166;247m1.1.1.1 RTT:\033[0m  \033[33m⚠ unreachable / ICMP blocked\033[0m\n"
+    fi
+  fi
+  if [[ "$fetch_public" == true ]]; then
+    printf "  \033[1;38;2;203;166;247mPublic IP:\033[0m    %s\n" "${pub_ip:-unavailable}"
+  fi
+  printf "\n"
+}
+
+# File Checksum & Integrity Verifier (fhash / hashfile)
+# Computes MD5, SHA-1, SHA-256, and SHA-512 in a single pass and compares against an expected
+# hash (or auto-detects a hex digest in the system clipboard).
+# Usage:
+#   fhash <file> [expected_hash]
+#   fhash -c <file>              -> Copy SHA-256 hash to clipboard
+fhash() {
+  local copy_sha256=false
+  while (( $# > 0 )); do
+    case "$1" in
+      -h|--help)
+        printf "\033[1;38;2;249;226;175mfhash\033[0m (alias: \033[1mhashfile\033[0m) — Multi-digest file checksum & integrity verifier\n\n"
+        printf "\033[1mUsage:\033[0m\n"
+        printf "  fhash <file>                 Compute MD5, SHA-1, SHA-256 & SHA-512 (auto-checks clipboard digest)\n"
+        printf "  fhash <file> <expected_hex>  Verify file against expected checksum\n"
+        printf "  fhash -c, --copy <file>      Also copy SHA-256 digest to clipboard\n"
+        return 0
+        ;;
+      -c|--copy)
+        copy_sha256=true
+        shift
+        ;;
+      --)
+        shift
+        break
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  local file="$1"
+  local expected="${2:-}"
+  if [[ -z "$file" ]]; then
+    printf "\033[33mUsage: fhash [-c] <file> [expected_hash]\033[0m\n" >&2
+    return 1
+  fi
+  if [[ ! -f "$file" ]]; then
+    printf "\033[31m✖ File not found: %s\033[0m\n" "$file" >&2
+    return 1
+  fi
+
+  local expected_source="argument"
+  if [[ -z "$expected" ]]; then
+    local clip_val
+    clip_val="$(clippaste 2>/dev/null | tr -d '[:space:]')"
+    if [[ "$clip_val" =~ ^[0-9a-fA-F]{32}$ || "$clip_val" =~ ^[0-9a-fA-F]{40}$ || "$clip_val" =~ ^[0-9a-fA-F]{64}$ || "$clip_val" =~ ^[0-9a-fA-F]{128}$ ]]; then
+      expected="$clip_val"
+      expected_source="clipboard"
+    fi
+  fi
+
+  local out rc=0
+  out="$(python3 - "$file" "$expected" "$expected_source" <<'PYEOF'
+import hashlib
+import os
+import sys
+
+filepath, expected, source = sys.argv[1], sys.argv[2].strip().lower(), sys.argv[3]
+# Allow "sha256:..." prefix in expected hash
+if ":" in expected:
+    expected = expected.split(":", 1)[1].strip()
+
+h_md5 = hashlib.md5()
+h_sha1 = hashlib.sha1()
+h_sha256 = hashlib.sha256()
+h_sha512 = hashlib.sha512()
+
+with open(filepath, "rb") as f:
+    while chunk := f.read(1024 * 1024):
+        h_md5.update(chunk)
+        h_sha1.update(chunk)
+        h_sha256.update(chunk)
+        h_sha512.update(chunk)
+
+digests = [
+    ("MD5", h_md5.hexdigest()),
+    ("SHA-1", h_sha1.hexdigest()),
+    ("SHA-256", h_sha256.hexdigest()),
+    ("SHA-512", h_sha512.hexdigest()),
+]
+
+C_MAUVE = "\033[1;38;2;203;166;247m"
+C_BLUE  = "\033[1;38;2;137;180;250m"
+C_GREEN = "\033[1;38;2;166;227;161m"
+C_RED   = "\033[1;38;2;243;139;168m"
+C_DIM   = "\033[2m"
+C_RST   = "\033[0m"
+
+sz = os.path.getsize(filepath)
+print(f"{C_MAUVE}📄 {os.path.basename(filepath)}{C_RST} {C_DIM}({sz:,} bytes){C_RST}")
+matched_algo = None
+for name, d in digests:
+    mark = ""
+    if expected and d == expected:
+        matched_algo = name
+        mark = f" {C_GREEN}✔ MATCH{C_RST}"
+    print(f"  {C_BLUE}{name:<8}{C_RST} {d}{mark}")
+
+print(f"__SHA256__:{h_sha256.hexdigest()}")
+if expected:
+    if matched_algo:
+        print(f"\n{C_GREEN}✔ Checksum verified ({matched_algo} matched {source}){C_RST}")
+        sys.exit(0)
+    else:
+        print(f"\n{C_RED}✖ Checksum MISMATCH against {source}: {expected}{C_RST}")
+        sys.exit(1)
+PYEOF
+  )" || rc=$?
+
+  local sha256_val=""
+  local display_lines=()
+  local line
+  for line in "${(@f)out}"; do
+    if [[ "$line" == __SHA256__:* ]]; then
+      sha256_val="${line#__SHA256__:}"
+    else
+      display_lines+=("$line")
+    fi
+  done
+
+  printf "%s\n" "${(F)display_lines}"
+  if [[ "$copy_sha256" == true && -n "$sha256_val" ]]; then
+    _copy_or_print "$sha256_val" "SHA-256: $sha256_val"
+  fi
+  return $rc
+}
+
 

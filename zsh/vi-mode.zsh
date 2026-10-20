@@ -81,6 +81,70 @@ _vi_vicmd_esc() {
 zle -N _vi_vicmd_esc
 bindkey -M vicmd '\e' _vi_vicmd_esc
 
+# 5d. Inline Path & Glob Expansion (Alt-e or Ctrl-X p expands ~, $VAR, ../, symlinks, or globs to canonical path)
+_vi_expand_path_under_cursor() {
+  if [[ -z "${LBUFFER}${RBUFFER}" && -n "$BUFFER" ]]; then
+    local idx="${CURSOR:-${#BUFFER}}"
+    LBUFFER="${BUFFER[1,$idx]}"
+    RBUFFER="${BUFFER[$(( idx + 1 )),-1]}"
+  fi
+  [[ -z "${LBUFFER}${RBUFFER}" ]] && return 0
+
+  local lbuf="$LBUFFER" rbuf="$RBUFFER"
+  local word_tail="${rbuf%%[[:space:]]*}"
+  lbuf="${lbuf}${word_tail}"
+  rbuf="${rbuf#${word_tail}}"
+
+  local token="${lbuf##*[[:space:]]}"
+  [[ -z "$token" ]] && return 0
+  local prefix="${lbuf[1,$(( ${#lbuf} - ${#token} ))]}"
+
+  local raw="${token#[\"\']}"
+  raw="${raw%[\"\']}"
+
+  local expanded="$raw"
+  if [[ "$expanded" == "~" ]]; then
+    expanded="$HOME"
+  elif [[ "$expanded" == "~/"* ]]; then
+    expanded="$HOME/${expanded#\~/}"
+  fi
+  if [[ "$expanded" == *\$* && "$expanded" != *[\`\(]* ]]; then
+    expanded="${(e)expanded}"
+  fi
+
+  local result=""
+  if [[ "$expanded" == *[\*\?\[]* ]]; then
+    local -a matches=( $~expanded(N) )
+    if (( ${#matches[@]} > 0 )); then
+      result="${(j: :)${matches[@]:A}}"
+    fi
+  fi
+  [[ -z "$result" ]] && result="${expanded:A}"
+
+  LBUFFER="${prefix}${result}"
+  RBUFFER="$rbuf"
+  BUFFER="${LBUFFER}${RBUFFER}"
+  CURSOR=${#LBUFFER}
+}
+zle -N _vi_expand_path_under_cursor
+bindkey -M viins '^[e' _vi_expand_path_under_cursor
+bindkey -M vicmd '^[e' _vi_expand_path_under_cursor
+bindkey -M viins '^Xp' _vi_expand_path_under_cursor
+bindkey -M vicmd '^Xp' _vi_expand_path_under_cursor
+
+# 5e. Yank Command Buffer to System Clipboard (Ctrl-Y in Insert Mode, Y in Normal Mode)
+_vi_yank_buffer_to_clipboard() {
+  local buf="${BUFFER:-${LBUFFER}${RBUFFER}}"
+  [[ -z "$buf" ]] && return 0
+  if (( $+functions[copy] )); then
+    printf "%s" "$buf" | copy
+    zle -M "✔ Copied command to clipboard (${#buf} chars)" 2>/dev/null || true
+  fi
+}
+zle -N _vi_yank_buffer_to_clipboard
+bindkey -M viins '^Y' _vi_yank_buffer_to_clipboard
+bindkey -M vicmd 'Y' _vi_yank_buffer_to_clipboard
+
 # 6. Re-bind Atuin or FZF interactive history search in viins
 # bindkey -v above resets the viins keymap, wiping all bindings registered by
 # atuin init zsh — restore them explicitly here.
