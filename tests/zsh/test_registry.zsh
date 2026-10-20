@@ -8,8 +8,9 @@ test_registered_functions_are_defined() {
 }
 
 test_functions_do_not_shadow_commands() {
-  # Deliberate wrappers: tree (eza tree view), open (Linux/WSL opener; Debian's `open` is openvt)
-  local -a allowed=(tree open)
+  # Deliberate wrappers: tree (eza tree view), open (Linux/WSL opener; Debian's `open` is openvt),
+  # dotenv (in-shell .env loader; external dotenv CLI cannot export into parent shell)
+  local -a allowed=(tree open dotenv)
   local fn bin
   for fn in $DOTFILES_FUNCTIONS; do
     (( ${allowed[(I)$fn]} )) && continue

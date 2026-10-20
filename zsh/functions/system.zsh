@@ -1088,6 +1088,11 @@ PYEOF
 #   dotenv -l|--list     -> List keys currently loaded by dotenv
 typeset -gUa _DOTENV_LOADED_KEYS=()
 dotenv() {
+  # Delegate `dotenv run ...` to external dotenv CLI when present
+  if [[ "$1" == "run" ]] && whence -p dotenv &>/dev/null; then
+    command dotenv "$@"
+    return $?
+  fi
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     printf "\033[1;38;2;166;227;161mdotenv\033[0m — Safe .env environment loader & unloader (no eval)\n\n"
     printf "\033[1mUsage:\033[0m\n"
