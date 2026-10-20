@@ -63,7 +63,7 @@ scratch() {
 
     if [ -n "$match" ]; then
       local clean_match file_part line_part
-      clean_match=$(printf "%s" "$match" | sed $'s/\x1b\\[[0-9;]*m//g')
+      clean_match=$(printf "%s" "$match" | sed $'s/\x1b\\[[0-9;]*[a-zA-Z]//g')
       file_part=$(printf "%s" "$clean_match" | cut -d: -f1)
       line_part=$(printf "%s" "$clean_match" | cut -d: -f2)
       _edit_file "$scratch_dir/$file_part" "$line_part"

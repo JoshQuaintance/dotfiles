@@ -30,5 +30,5 @@ git_test() {
 }
 
 strip_ansi() {
-  sed $'s/\e\\[[0-9;]*m//g'
+  sed $'s/\e\\[[0-9;]*[a-zA-Z]//g'
 }
