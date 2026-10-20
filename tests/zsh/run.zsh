@@ -25,7 +25,7 @@ for file in "$ROOT"/tests/zsh/test_*.zsh(N); do
   for t in $tests; do
     tmp="$(mktemp -d)" || exit 1
     output="$(cd "$tmp" && HOME="$tmp" DOTFILES_DIR="$ROOT" zsh -f -c \
-      "source ${(q)ROOT}/tests/zsh/lib.zsh && source ${(q)file} && $t" 2>&1)"
+      "source ${(q)ROOT}/tests/zsh/lib.zsh && source ${(q)file} && $t" </dev/null 2>&1)"
     rc=$?
     [[ -n $tmp && -d $tmp ]] && command rm -rf -- "$tmp"
 

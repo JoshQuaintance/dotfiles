@@ -1394,9 +1394,8 @@ decode() {
     input="$*"
   elif [[ -p /dev/stdin || ( ! -t 0 && -s /dev/stdin ) ]]; then
     input="$(cat)"
-  else
-    input="$(clippaste 2>/dev/null)"
   fi
+  [[ -z "$input" ]] && input="$(clippaste 2>/dev/null)"
   input="${input#"${input%%[![:space:]]*}"}"
   input="${input%"${input##*[![:space:]]}"}"
 
@@ -1931,7 +1930,8 @@ clip() {
   local input=""
   if [[ -p /dev/stdin || ( ! -t 0 && -s /dev/stdin ) ]]; then
     input="$(cat)"
-  else
+  fi
+  if [[ -z "$input" ]]; then
     if ! input="$(clippaste 2>/dev/null)"; then
       printf "\033[31m✖ Failed to read from system clipboard.\033[0m\n" >&2
       return 1
