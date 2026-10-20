@@ -30,9 +30,22 @@ class ToolEntry:
     alt_bin_names: tuple[str, ...] = ()
 
 
+DOT_CONFIG = ".config"
+APP_SUPPORT = "Application Support"
+
+
+def _resolve_sevenzip_bin() -> str:
+    """Resolve the preferred 7-Zip binary name for the current environment."""
+    if shutil.which("7zz"):
+        return "7zz"
+    if shutil.which("7z"):
+        return "7z"
+    return "7z" if platform.system() == "Linux" else "7zz"
+
+
 def get_cli_tool_manifest() -> list[ToolEntry]:
     """Return the canonical catalog of CLI tools audited by `dot doctor`."""
-    sevenzip_bin = "7zz" if shutil.which("7zz") else ("7z" if shutil.which("7z") else ("7z" if platform.system() == "Linux" else "7zz"))
+    sevenzip_bin = _resolve_sevenzip_bin()
     return [
         ToolEntry("git", "Git version control", ["git", "--version"], "git"),
         ToolEntry("delta", "git-delta syntax diff pager", ["delta", "--version"], "git-delta"),
@@ -101,6 +114,8 @@ def get_symlink_manifest() -> list[SymlinkEntry]:
     """Return the complete list of declarative symlinks for the current OS."""
     get_dotfiles_dir()
     home = Path.home()
+    config_dir = home / DOT_CONFIG
+    app_support_dir = home / "Library" / APP_SUPPORT
     os_type = platform.system()
 
     entries: list[SymlinkEntry] = [
@@ -112,42 +127,42 @@ def get_symlink_manifest() -> list[SymlinkEntry]:
         SymlinkEntry(home / ".gitignore_global", "config/git/.gitignore_global", "Global Git ignore"),
 
         # ~/.config tools
-        SymlinkEntry(home / ".config" / "spaceship.zsh", "config/spaceship/spaceship.zsh", "Spaceship prompt configuration", required=False),
-        SymlinkEntry(home / ".config" / "nvim", "config/nvim", "Neovim editor configuration", is_directory=True),
-        SymlinkEntry(home / ".config" / "ghostty" / "config", "config/ghostty/config", "Ghostty terminal configuration"),
-        SymlinkEntry(home / ".config" / "bat" / "config", "config/bat/config", "Bat syntax viewer configuration"),
-        SymlinkEntry(home / ".config" / "eza" / "theme.yml", "config/eza/theme.yml", "Eza modern ls color theme"),
-        SymlinkEntry(home / ".config" / "mise" / "config.toml", "config/mise/config.toml", "Mise polyglot runtime manifest"),
-        SymlinkEntry(home / ".config" / "yazi", "config/yazi", "Yazi terminal file manager", is_directory=True),
-        SymlinkEntry(home / ".config" / "atuin" / "config.toml", "config/atuin/config.toml", "Atuin shell history settings"),
+        SymlinkEntry(config_dir / "spaceship.zsh", "config/spaceship/spaceship.zsh", "Spaceship prompt configuration", required=False),
+        SymlinkEntry(config_dir / "nvim", "config/nvim", "Neovim editor configuration", is_directory=True),
+        SymlinkEntry(config_dir / "ghostty" / "config", "config/ghostty/config", "Ghostty terminal configuration"),
+        SymlinkEntry(config_dir / "bat" / "config", "config/bat/config", "Bat syntax viewer configuration"),
+        SymlinkEntry(config_dir / "eza" / "theme.yml", "config/eza/theme.yml", "Eza modern ls color theme"),
+        SymlinkEntry(config_dir / "mise" / "config.toml", "config/mise/config.toml", "Mise polyglot runtime manifest"),
+        SymlinkEntry(config_dir / "yazi", "config/yazi", "Yazi terminal file manager", is_directory=True),
+        SymlinkEntry(config_dir / "atuin" / "config.toml", "config/atuin/config.toml", "Atuin shell history settings"),
     ]
 
     # lazygit ignores ~/.config on macOS unless XDG_CONFIG_HOME is set
     xdg_config = os.environ.get("XDG_CONFIG_HOME")
     if os_type == "Darwin" and not xdg_config:
-        lazygit_dir = home / "Library" / "Application Support" / "lazygit"
+        lazygit_dir = app_support_dir / "lazygit"
     else:
-        lazygit_dir = Path(xdg_config) if xdg_config else home / ".config"
-        lazygit_dir = lazygit_dir / "lazygit"
+        lazygit_base = Path(xdg_config) if xdg_config else config_dir
+        lazygit_dir = lazygit_base / "lazygit"
     entries.append(SymlinkEntry(lazygit_dir / "config.yml", "config/lazygit/config.yml", "lazygit terminal UI settings"))
 
     # Visual Studio Code configurations
     if os_type == "Darwin":
-        vscode_dir = home / "Library" / "Application Support" / "Code" / "User"
+        vscode_dir = app_support_dir / "Code" / "User"
         entries.extend([
             SymlinkEntry(vscode_dir / "settings.json", "config/vscode/settings.json", "VS Code user settings"),
             SymlinkEntry(vscode_dir / "keybindings.json", "config/vscode/keybindings.json", "VS Code custom keybindings"),
             SymlinkEntry(vscode_dir / "snippets", "config/vscode/snippets", "VS Code user snippets", is_directory=True),
             # Ghostty macOS application support fallback
             SymlinkEntry(
-                home / "Library" / "Application Support" / "com.mitchellh.ghostty" / "config",
+                app_support_dir / "com.mitchellh.ghostty" / "config",
                 "config/ghostty/config",
                 "Ghostty Application Support config",
                 required=False
             ),
         ])
     elif os_type == "Linux":
-        vscode_dir = home / ".config" / "Code" / "User"
+        vscode_dir = config_dir / "Code" / "User"
         entries.extend([
             SymlinkEntry(vscode_dir / "settings.json", "config/vscode/settings.json", "VS Code user settings"),
             SymlinkEntry(vscode_dir / "keybindings.json", "config/vscode/keybindings.json", "VS Code custom keybindings"),

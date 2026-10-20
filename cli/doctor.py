@@ -1,4 +1,5 @@
 import contextlib
+import json
 import os
 import shutil
 import subprocess
@@ -6,8 +7,9 @@ import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
-from cli.manifest import get_cli_tool_manifest, get_dotfiles_dir, get_symlink_manifest
+from cli.manifest import SymlinkEntry, ToolEntry, get_cli_tool_manifest, get_dotfiles_dir, get_symlink_manifest
 from cli.prompt import get_active_prompt
 from cli.ui import (
     C_BOLD,
@@ -19,6 +21,23 @@ from cli.ui import (
     print_header,
     run_cmd,
 )
+
+# Check label & path constants (avoids duplicated literals across status branches)
+LBL_ZSH_BYTECODE = "Zsh bytecode (.zwc)"
+LBL_SPACESHIP_PROMPT = "Active Zsh prompt (Spaceship)"
+MSG_SPACESHIP_FALLBACK = "spaceship.zsh not found (using vcs_info fallback)"
+FILE_FZF_TAB = "fzf-tab.zsh"
+FILE_AUTOSUGGESTIONS = "zsh-autosuggestions.zsh"
+FILE_SYNTAX_HIGHLIGHTING = "zsh-syntax-highlighting.zsh"
+DIR_LOCAL = ".local"
+LBL_MISE_RUNTIMES = "Mise managed runtimes"
+LBL_NVIM_HEALTH = "Neovim healthcheck (:checkhealth)"
+LBL_SSH_CONFIG = "~/.ssh/config"
+LBL_SSH_SOCKETS = "~/.ssh/sockets"
+LBL_SSH_AGENT = "SSH agent"
+LBL_GPG_CACHE = "GPG passphrase cache"
+FILE_SETTINGS_JSON = "settings.json"
+LBL_WT_THEME = "Windows Terminal theme"
 
 
 class DoctorReport:
@@ -45,6 +64,7 @@ class DoctorReport:
         self.passed += 1
         print(f"  {C_GREEN}✔ [FIXED]{C_RESET} {label:<36} {C_GREEN}{detail}{C_RESET}")
 
+
 def check_repository(report: DoctorReport, dotfiles: Path):
     print(f"\n{C_BOLD}1. Dotfiles Repository{C_RESET}")
     if not (dotfiles / ".git").is_dir():
@@ -67,6 +87,7 @@ def check_repository(report: DoctorReport, dotfiles: Path):
         changed_count = len(status.splitlines())
         report.warn("Working tree has uncommitted changes", f"{changed_count} files modified")
 
+
 def stale_zsh_bytecode(dotfiles: Path) -> list[Path]:
     """Repo zsh scripts sourced by ~/.zshrc whose .zwc is missing or older than the source."""
     zsh_dir = dotfiles / "zsh"
@@ -77,6 +98,7 @@ def stale_zsh_bytecode(dotfiles: Path) -> list[Path]:
         if src.is_file() and (not zwc.is_file() or zwc.stat().st_mtime < src.stat().st_mtime):
             stale.append(src)
     return stale
+
 
 def compile_zsh_sources(dotfiles: Path) -> int:
     """zcompile stale repo zsh scripts; returns how many were compiled."""
@@ -89,287 +111,340 @@ def compile_zsh_sources(dotfiles: Path) -> int:
             compiled += 1
     return compiled
 
+
 def check_zsh_bytecode(report: DoctorReport, dotfiles: Path, fix: bool = False):
     stale = stale_zsh_bytecode(dotfiles)
     if not stale:
-        report.ok("Zsh bytecode (.zwc)", "All sourced scripts compiled")
+        report.ok(LBL_ZSH_BYTECODE, "All sourced scripts compiled")
     elif fix:
-        report.fixed("Zsh bytecode (.zwc)", f"Compiled {compile_zsh_sources(dotfiles)} script(s)")
+        report.fixed(LBL_ZSH_BYTECODE, f"Compiled {compile_zsh_sources(dotfiles)} script(s)")
     else:
-        report.warn("Zsh bytecode (.zwc)", f"{len(stale)} script(s) stale. Run with --fix")
+        report.warn(LBL_ZSH_BYTECODE, f"{len(stale)} script(s) stale. Run with --fix")
+
+
+def _audit_existing_symlink(
+    report: DoctorReport,
+    link: Path,
+    target_expected: Path,
+    display_path: str,
+    rel_target: str,
+    fix: bool,
+) -> None:
+    """Validate or repair an existing symlink entry."""
+    try:
+        actual_target = link.resolve()
+    except (OSError, RuntimeError):
+        actual_target = None
+
+    if not link.exists() or actual_target is None or not actual_target.exists():
+        raw_target = os.readlink(link)
+        if fix:
+            link.unlink()
+            link.symlink_to(target_expected)
+            report.fixed(display_path, f"Repaired broken link -> {rel_target}")
+        else:
+            report.fail(f"{display_path} (dangling)", f"Points to missing {raw_target}")
+        return
+
+    if actual_target != target_expected:
+        if fix:
+            link.unlink()
+            link.symlink_to(target_expected)
+            report.fixed(display_path, f"Re-pointed to {rel_target}")
+        else:
+            report.warn(display_path, f"Points to: {actual_target}")
+        return
+
+    report.ok(display_path, f"-> {rel_target}")
+
+
+def _audit_single_symlink(report: DoctorReport, entry: SymlinkEntry, dotfiles: Path, fix: bool) -> None:
+    """Validate or repair a single declarative symlink entry."""
+    link = entry.link_path
+    if not entry.required and not link.parent.exists():
+        return
+
+    target_expected = (dotfiles / entry.rel_target).resolve()
+    if not target_expected.exists():
+        report.fail(entry.description, f"Repo target missing: {entry.rel_target}")
+        return
+
+    display_path = str(link).replace(str(Path.home()), "~")
+    if link.is_symlink():
+        _audit_existing_symlink(report, link, target_expected, display_path, entry.rel_target, fix)
+    elif link.exists():
+        if fix:
+            backup = link.with_name(f"{link.name}.bak.{datetime.now().strftime('%Y%m%d%H%M%S')}")
+            shutil.move(link, backup)
+            link.symlink_to(target_expected)
+            report.fixed(display_path, f"Backed up collision & linked -> {entry.rel_target}")
+        else:
+            report.warn(f"{display_path} is regular file", "Not a symlink. Run with --fix to link")
+    elif fix:
+        link.parent.mkdir(parents=True, exist_ok=True)
+        link.symlink_to(target_expected)
+        report.fixed(display_path, f"Created link -> {entry.rel_target}")
+    else:
+        report.fail(f"{display_path} missing", "Run with --fix or ./install.sh to link")
+
 
 def check_and_heal_symlinks(report: DoctorReport, dotfiles: Path, fix: bool = False):
     print(f"\n{C_BOLD}2. Configuration Symlinks & Health{C_RESET}")
-    manifest = get_symlink_manifest()
+    for entry in get_symlink_manifest():
+        _audit_single_symlink(report, entry, dotfiles, fix)
 
-    for entry in manifest:
-        link = entry.link_path
-        target_expected = (dotfiles / entry.rel_target).resolve()
-        display_path = str(link).replace(str(Path.home()), "~")
 
-        # Skip non-required parent directory paths if the parent app isn't installed
-        if not entry.required and not link.parent.exists():
-            continue
-
-        # Target file in dotfiles repo must exist
-        if not target_expected.exists():
-            report.fail(f"{entry.description}", f"Repo target missing: {entry.rel_target}")
-            continue
-
-        if link.is_symlink():
-            try:
-                actual_target = link.resolve()
-            except (OSError, RuntimeError):
-                actual_target = None
-
-            # 1. Broken / Dangling symlink
-            if not link.exists() or actual_target is None or not actual_target.exists():
-                raw_target = os.readlink(link)
-                if fix:
-                    link.unlink()
-                    link.symlink_to(target_expected)
-                    report.fixed(f"{display_path}", f"Repaired broken link -> {entry.rel_target}")
-                else:
-                    report.fail(f"{display_path} (dangling)", f"Points to missing {raw_target}")
-                continue
-
-            # 2. Symlink points to wrong/unexpected destination
-            if actual_target != target_expected:
-                if fix:
-                    link.unlink()
-                    link.symlink_to(target_expected)
-                    report.fixed(f"{display_path}", f"Re-pointed to {entry.rel_target}")
-                else:
-                    report.warn(f"{display_path}", f"Points to: {actual_target}")
-                continue
-
-            # 3. Healthy symlink
-            report.ok(f"{display_path}", f"-> {entry.rel_target}")
-
-        elif link.exists():
-            # Regular file or directory collision (not a symlink)
-            if fix:
-                backup = link.with_name(f"{link.name}.bak.{datetime.now().strftime('%Y%m%d%H%M%S')}")
-                shutil.move(link, backup)
-                link.symlink_to(target_expected)
-                report.fixed(f"{display_path}", f"Backed up collision & linked -> {entry.rel_target}")
-            else:
-                report.warn(f"{display_path} is regular file", "Not a symlink. Run with --fix to link")
-
-        else:
-            # Link does not exist
-            if fix:
-                link.parent.mkdir(parents=True, exist_ok=True)
-                link.symlink_to(target_expected)
-                report.fixed(f"{display_path}", f"Created link -> {entry.rel_target}")
-            else:
-                report.fail(f"{display_path} missing", "Run with --fix or ./install.sh to link")
-
-def check_cli_tools(report: DoctorReport, fix: bool = False):
-    print(f"\n{C_BOLD}3. Core CLI & Runtime Tools{C_RESET}")
-
-    def _should_install(item_name: str, package: str) -> bool:
-        if fix:
-            return True
-        if sys.stdin.isatty():
-            try:
-                ans = input(f"  {C_YELLOW}?{C_RESET} {item_name} is missing. Install '{package}' via brew? [y/N]: ")
-                return ans.strip().lower().startswith("y")
-            except (EOFError, KeyboardInterrupt):
-                return False
+def _should_brew_install(item_name: str, package: str, fix: bool) -> bool:
+    """Return True if a missing Homebrew package should be installed now."""
+    if fix:
+        return True
+    if not sys.stdin.isatty():
+        return False
+    try:
+        ans = input(f"  {C_YELLOW}?{C_RESET} {item_name} is missing. Install '{package}' via brew? [y/N]: ")
+        return ans.strip().lower().startswith("y")
+    except (EOFError, KeyboardInterrupt):
         return False
 
-    for tool in get_cli_tool_manifest():
-        resolved_bin = shutil.which(tool.bin_name)
-        if not resolved_bin and getattr(tool, "alt_bin_names", None):
-            for alt in tool.alt_bin_names:
-                if shutil.which(alt):
-                    resolved_bin = shutil.which(alt)
-                    break
-        if resolved_bin:
-            vcmd = [resolved_bin, *tool.version_cmd[1:]] if tool.version_cmd else [resolved_bin, "--version"]
-            _, ver, _ = run_cmd(vcmd)
-            first_line = ver.splitlines()[0] if ver else "installed"
-            report.ok(tool.label, first_line[:38])
-        elif shutil.which("brew") and tool.brew_formula:
-            formula = tool.brew_formula
-            if _should_install(tool.label, formula):
-                print(f"  \033[1;34m==>\033[0m Installing {formula} via brew...")
-                code, _, _ = run_cmd(["brew", "install", formula], timeout=600)
-                if code == 0 and not (shutil.which(tool.bin_name) or any(shutil.which(a) for a in getattr(tool, "alt_bin_names", ()))):
-                    run_cmd(["brew", "link", "--overwrite", formula], timeout=60)
-                if code == 0 and (shutil.which(tool.bin_name) or any(shutil.which(a) for a in getattr(tool, "alt_bin_names", ()))):
-                    report.fixed(tool.label, f"Installed {formula} via brew")
-                else:
-                    report.warn(tool.label, f"brew install {formula} failed")
-            else:
-                report.warn(tool.label, f"{tool.bin_name} binary not found")
-        else:
-            report.warn(tool.label, f"{tool.bin_name} binary not found")
 
-    # Check Active Zsh prompt installation
-    home = Path.home()
+def _resolve_tool_binary(tool: ToolEntry) -> Optional[str]:
+    """Return the resolved path for a CLI tool or any of its fallback binary names."""
+    resolved = shutil.which(tool.bin_name)
+    if resolved:
+        return resolved
+    for alt in getattr(tool, "alt_bin_names", ()):
+        alt_resolved = shutil.which(alt)
+        if alt_resolved:
+            return alt_resolved
+    return None
+
+
+def _check_single_cli_tool(report: DoctorReport, tool: ToolEntry, fix: bool) -> None:
+    """Audit or install a single CLI tool from the manifest."""
+    resolved_bin = _resolve_tool_binary(tool)
+    if resolved_bin:
+        vcmd = [resolved_bin, *tool.version_cmd[1:]] if tool.version_cmd else [resolved_bin, "--version"]
+        _, ver, _ = run_cmd(vcmd)
+        first_line = ver.splitlines()[0] if ver else "installed"
+        report.ok(tool.label, first_line[:38])
+        return
+
+    formula = tool.brew_formula
+    if shutil.which("brew") and formula and _should_brew_install(tool.label, formula, fix):
+        print(f"  \033[1;34m==>\033[0m Installing {formula} via brew...")
+        code, _, _ = run_cmd(["brew", "install", formula], timeout=600)
+        if code == 0 and not _resolve_tool_binary(tool):
+            run_cmd(["brew", "link", "--overwrite", formula], timeout=60)
+        if code == 0 and _resolve_tool_binary(tool):
+            report.fixed(tool.label, f"Installed {formula} via brew")
+        else:
+            report.warn(tool.label, f"brew install {formula} failed")
+        return
+
+    report.warn(tool.label, f"{tool.bin_name} binary not found")
+
+
+def _check_active_prompt_health(report: DoctorReport, home: Path, fix: bool) -> None:
+    """Audit the active Zsh prompt engine installation."""
     active_prompt, _ = get_active_prompt()
     if active_prompt == "native":
         report.ok("Active Zsh prompt (Native)", "Fast Native (0-fork pure Zsh vcs_info)")
-    else:
-        spaceship_candidates = [
-            Path("/opt/homebrew/opt/spaceship/spaceship.zsh"),
-            Path("/home/linuxbrew/.linuxbrew/opt/spaceship/spaceship.zsh"),
-            Path("/usr/local/opt/spaceship/spaceship.zsh"),
-            home / ".oh-my-zsh" / "custom" / "themes" / "spaceship-prompt" / "spaceship.zsh",
-            home / ".spaceship-prompt" / "spaceship.zsh",
-        ]
-        sp_found = next((p for p in spaceship_candidates if p.is_file()), None)
-        if sp_found:
-            zwc_status = " (.zwc compiled)" if sp_found.with_name("spaceship.zsh.zwc").is_file() else ""
-            report.ok("Active Zsh prompt (Spaceship)", f"{sp_found.parent.name}{zwc_status}")
-        elif shutil.which("brew"):
-            if _should_install("Spaceship Zsh prompt", "spaceship"):
-                print("  \033[1;34m==>\033[0m Installing spaceship via brew...")
-                code, _, _ = run_cmd(["brew", "install", "spaceship"], timeout=600)
-                if code == 0:
-                    report.fixed("Active Zsh prompt (Spaceship)", "Installed spaceship via brew")
-                else:
-                    report.warn("Active Zsh prompt (Spaceship)", "spaceship.zsh not found (using vcs_info fallback)")
-            else:
-                report.warn("Active Zsh prompt (Spaceship)", "spaceship.zsh not found (using vcs_info fallback)")
-        else:
-            report.warn("Active Zsh prompt (Spaceship)", "spaceship.zsh not found (using vcs_info fallback)")
+        return
 
-    # Check Zsh plugins (fzf-tab, zsh-autosuggestions, zsh-syntax-highlighting)
-    zsh_plugins = [
-        ("fzf-tab completion menu", "fzf-tab.zsh", [
-            Path("/opt/homebrew/opt/fzf-tab/share/fzf-tab/fzf-tab.zsh"),
-            Path("/usr/share/fzf-tab/fzf-tab.zsh"),
-            Path("/home/linuxbrew/.linuxbrew/opt/fzf-tab/share/fzf-tab/fzf-tab.zsh"),
-            home / ".local" / "share" / "fzf-tab" / "fzf-tab.zsh",
-        ]),
-        ("zsh-autosuggestions", "zsh-autosuggestions.zsh", [
-            Path("/opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh"),
-            Path("/home/linuxbrew/.linuxbrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh"),
-            Path("/usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh"),
-            Path("/usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"),
-            home / ".local" / "share" / "zsh-autosuggestions" / "zsh-autosuggestions.zsh",
-        ]),
-        ("zsh-syntax-highlighting", "zsh-syntax-highlighting.zsh", [
-            Path("/opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"),
-            Path("/home/linuxbrew/.linuxbrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"),
-            Path("/usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"),
-            Path("/usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"),
-            home / ".local" / "share" / "zsh-syntax-highlighting" / "zsh-syntax-highlighting.zsh",
-        ]),
+    spaceship_candidates = [
+        Path("/opt/homebrew/opt/spaceship/spaceship.zsh"),
+        Path("/home/linuxbrew/.linuxbrew/opt/spaceship/spaceship.zsh"),
+        Path("/usr/local/opt/spaceship/spaceship.zsh"),
+        home / ".oh-my-zsh" / "custom" / "themes" / "spaceship-prompt" / "spaceship.zsh",
+        home / ".spaceship-prompt" / "spaceship.zsh",
     ]
+    sp_found = next((p for p in spaceship_candidates if p.is_file()), None)
+    if sp_found:
+        zwc_status = " (.zwc compiled)" if sp_found.with_name("spaceship.zsh.zwc").is_file() else ""
+        report.ok(LBL_SPACESHIP_PROMPT, f"{sp_found.parent.name}{zwc_status}")
+        return
+
+    if shutil.which("brew") and _should_brew_install("Spaceship Zsh prompt", "spaceship", fix):
+        print("  \033[1;34m==>\033[0m Installing spaceship via brew...")
+        code, _, _ = run_cmd(["brew", "install", "spaceship"], timeout=600)
+        if code == 0:
+            report.fixed(LBL_SPACESHIP_PROMPT, "Installed spaceship via brew")
+            return
+
+    report.warn(LBL_SPACESHIP_PROMPT, MSG_SPACESHIP_FALLBACK)
+
+
+def _check_zsh_plugins(report: DoctorReport, home: Path, fix: bool) -> None:
+    """Audit or install Zsh interactive plugins (fzf-tab, autosuggestions, syntax-highlighting)."""
+    local_share = home / DIR_LOCAL / "share"
+    zsh_plugins = [
+        (
+            "fzf-tab completion menu",
+            FILE_FZF_TAB,
+            [
+                Path("/opt/homebrew/opt/fzf-tab/share/fzf-tab") / FILE_FZF_TAB,
+                Path("/usr/share/fzf-tab") / FILE_FZF_TAB,
+                Path("/home/linuxbrew/.linuxbrew/opt/fzf-tab/share/fzf-tab") / FILE_FZF_TAB,
+                local_share / "fzf-tab" / FILE_FZF_TAB,
+            ],
+        ),
+        (
+            "zsh-autosuggestions",
+            FILE_AUTOSUGGESTIONS,
+            [
+                Path("/opt/homebrew/share/zsh-autosuggestions") / FILE_AUTOSUGGESTIONS,
+                Path("/home/linuxbrew/.linuxbrew/share/zsh-autosuggestions") / FILE_AUTOSUGGESTIONS,
+                Path("/usr/share/zsh-autosuggestions") / FILE_AUTOSUGGESTIONS,
+                Path("/usr/share/zsh/plugins/zsh-autosuggestions") / FILE_AUTOSUGGESTIONS,
+                local_share / "zsh-autosuggestions" / FILE_AUTOSUGGESTIONS,
+            ],
+        ),
+        (
+            "zsh-syntax-highlighting",
+            FILE_SYNTAX_HIGHLIGHTING,
+            [
+                Path("/opt/homebrew/share/zsh-syntax-highlighting") / FILE_SYNTAX_HIGHLIGHTING,
+                Path("/home/linuxbrew/.linuxbrew/share/zsh-syntax-highlighting") / FILE_SYNTAX_HIGHLIGHTING,
+                Path("/usr/share/zsh-syntax-highlighting") / FILE_SYNTAX_HIGHLIGHTING,
+                Path("/usr/share/zsh/plugins/zsh-syntax-highlighting") / FILE_SYNTAX_HIGHLIGHTING,
+                local_share / "zsh-syntax-highlighting" / FILE_SYNTAX_HIGHLIGHTING,
+            ],
+        ),
+    ]
+    brew_plugins = {FILE_FZF_TAB, FILE_AUTOSUGGESTIONS, FILE_SYNTAX_HIGHLIGHTING}
     for plugin_label, plugin_file, candidates in zsh_plugins:
         found = next((p for p in candidates if p.is_file()), None)
         if found:
             report.ok(plugin_label, str(found).replace(str(home), "~")[:38])
-        elif shutil.which("brew") and plugin_file in {"fzf-tab.zsh", "zsh-autosuggestions.zsh", "zsh-syntax-highlighting.zsh"}:
-            pkg = plugin_file.replace(".zsh", "")
-            if _should_install(plugin_label, pkg):
-                print(f"  \033[1;34m==>\033[0m Installing {pkg} via brew...")
-                code, _, _ = run_cmd(["brew", "install", pkg], timeout=600)
-                if code == 0:
-                    report.fixed(plugin_label, f"Installed {pkg} via brew")
-                else:
-                    report.warn(plugin_label, f"{plugin_file} not found")
-            else:
-                report.warn(plugin_label, f"{plugin_file} not found")
+            continue
+        pkg = plugin_file.replace(".zsh", "")
+        if shutil.which("brew") and plugin_file in brew_plugins and _should_brew_install(plugin_label, pkg, fix):
+            print(f"  \033[1;34m==>\033[0m Installing {pkg} via brew...")
+            code, _, _ = run_cmd(["brew", "install", pkg], timeout=600)
+            if code == 0:
+                report.fixed(plugin_label, f"Installed {pkg} via brew")
+                continue
+        report.warn(plugin_label, f"{plugin_file} not found")
+
+
+def _classify_mise_runtimes(mise_data: dict) -> tuple[list[str], list[str]]:
+    """Classify Mise runtimes into active and missing lists."""
+    active_tools: list[str] = []
+    missing_tools: list[str] = []
+    for tool_name, entries in mise_data.items():
+        for item in entries:
+            ver = item.get("version") or item.get("requested_version") or "unknown"
+            target = active_tools if item.get("installed", False) else missing_tools
+            target.append(f"{tool_name}@{ver}")
+    return active_tools, missing_tools
+
+
+def _check_mise_runtimes(report: DoctorReport, fix: bool) -> None:
+    """Audit or install Mise managed runtimes declared in config/mise/config.toml."""
+    if not shutil.which("mise"):
+        return
+    code, raw_json, _ = run_cmd(["mise", "ls", "--current", "--json"])
+    if code != 0 or not raw_json:
+        return
+    try:
+        mise_data = json.loads(raw_json)
+        active_tools, missing_tools = _classify_mise_runtimes(mise_data)
+    except (ValueError, AttributeError, TypeError):
+        report.warn(LBL_MISE_RUNTIMES, "Unexpected 'mise ls --json' output")
+        return
+
+    if missing_tools:
+        joined = ", ".join(missing_tools)
+        if fix and run_cmd(["mise", "install"], timeout=600)[0] == 0:
+            report.fixed(LBL_MISE_RUNTIMES, f"Installed {joined}")
         else:
-            report.warn(plugin_label, f"{plugin_file} not found")
+            report.warn(LBL_MISE_RUNTIMES, f"Missing: {joined} (run 'mise install')")
+    elif active_tools:
+        report.ok(LBL_MISE_RUNTIMES, ", ".join(active_tools)[:38])
 
-    # Check Mise managed runtimes (declared in config/mise/config.toml)
-    if shutil.which("mise"):
-        import json as _json
-        code, raw_json, _ = run_cmd(["mise", "ls", "--current", "--json"])
-        if code == 0 and raw_json:
-            try:
-                mise_data = _json.loads(raw_json)
-                active_tools = []
-                missing_tools = []
-                for tool_name, entries in mise_data.items():
-                    for item in entries:
-                        ver = item.get("version") or item.get("requested_version") or "unknown"
-                        if item.get("installed", False):
-                            active_tools.append(f"{tool_name}@{ver}")
-                        else:
-                            missing_tools.append(f"{tool_name}@{ver}")
-                if missing_tools:
-                    if fix:
-                        ic, _, _ = run_cmd(["mise", "install"], timeout=600)
-                        if ic == 0:
-                            report.fixed("Mise managed runtimes", f"Installed {', '.join(missing_tools)}")
-                        else:
-                            report.warn("Mise managed runtimes", f"Missing: {', '.join(missing_tools)} (run 'mise install')")
-                    else:
-                        report.warn("Mise managed runtimes", f"Missing: {', '.join(missing_tools)} (run 'mise install')")
-                elif active_tools:
-                    report.ok("Mise managed runtimes", ", ".join(active_tools)[:38])
-            except (ValueError, AttributeError, TypeError):
-                report.warn("Mise managed runtimes", "Unexpected 'mise ls --json' output")
 
-    # Check Neovim health (:checkhealth)
-    if shutil.which("nvim"):
-        # Neovim 0.12+ creates an empty ~/.local/share/nvim/site/pack/core/opt directory,
-        # which triggers warnings in both lazy.nvim and vim.pack healthchecks when unused.
-        nvim_data = Path(os.environ.get("XDG_DATA_HOME", str(home / ".local" / "share"))) / "nvim"
-        pack_core = nvim_data / "site" / "pack" / "core"
-        if fix and pack_core.is_dir():
-            with contextlib.suppress(OSError):
-                for sub in (pack_core / "opt", pack_core / "start", pack_core, pack_core.parent):
-                    if sub.is_dir() and not any(sub.iterdir()):
-                        sub.rmdir()
+def _clean_empty_nvim_pack_core(home: Path) -> None:
+    """Remove empty Neovim 0.12+ site/pack/core directories that trigger healthcheck warnings."""
+    nvim_data = Path(os.environ.get("XDG_DATA_HOME", str(home / DIR_LOCAL / "share"))) / "nvim"
+    pack_core = nvim_data / "site" / "pack" / "core"
+    if not pack_core.is_dir():
+        return
+    with contextlib.suppress(OSError):
+        for sub in (pack_core / "opt", pack_core / "start", pack_core, pack_core.parent):
+            if sub.is_dir() and not any(sub.iterdir()):
+                sub.rmdir()
 
-        with tempfile.NamedTemporaryFile(mode="w+", prefix="nvim_health_", suffix=".txt", delete=False) as tmp:
-            tmp_path = tmp.name
-        try:
-            nvim_env = os.environ.copy()
-            if not nvim_env.get("TERM") or nvim_env.get("TERM") == "dumb":
-                nvim_env["TERM"] = "xterm-256color"
-            res = subprocess.run(
-                ["nvim", "--headless", "+checkhealth", f"+w! {tmp_path}", "+qa"],
-                stdin=subprocess.DEVNULL,
-                capture_output=True,
-                text=True,
-                timeout=15,
-                env=nvim_env,
-                check=False,
-            )
-            content = Path(tmp_path).read_text(encoding="utf-8", errors="replace") if Path(tmp_path).exists() else ""
-            sections = content.split("==============================================================================")
-            errors = []
-            warnings = []
-            for s in sections:
-                s = s.strip()
-                if not s:
-                    continue
-                lines = s.splitlines()
-                header = lines[0].strip()
-                is_optional_provider = "vim.provider" in header
-                for line in lines[1:]:
-                    item_line = line.strip()
-                    if (item_line.startswith(("- ❌", "- ERROR")) or "ERROR" in item_line) and not is_optional_provider:
-                        errors.append(item_line)
-                    elif (item_line.startswith(("- ⚠️", "- WARNING")) or "WARNING" in item_line) and not is_optional_provider:
-                        warnings.append(item_line)
 
-            if res.returncode != 0 and not content:
-                report.warn("Neovim healthcheck (:checkhealth)", "Non-zero exit running headless checkhealth")
-            elif errors:
-                first_err = errors[0].replace("- ❌ ERROR ", "").replace("- ❌ ", "").replace("- ERROR ", "")[:38]
-                report.fail("Neovim healthcheck (:checkhealth)", f"{len(errors)} error(s): {first_err}")
-            elif warnings:
-                first_warn = warnings[0].replace("- ⚠️ WARNING ", "").replace("- ⚠️ ", "").replace("- WARNING ", "")[:38]
-                report.warn("Neovim healthcheck (:checkhealth)", f"{len(warnings)} warning(s): {first_warn}")
-            else:
-                report.ok("Neovim healthcheck (:checkhealth)", "0 errors, 0 warnings")
-        except subprocess.TimeoutExpired:
-            report.warn("Neovim healthcheck (:checkhealth)", "Timed out after 15s")
-        except (OSError, subprocess.SubprocessError) as e:
-            report.warn("Neovim healthcheck (:checkhealth)", f"Check error: {e}")
-        finally:
-            with contextlib.suppress(OSError):
-                Path(tmp_path).unlink(missing_ok=True)
+def _parse_nvim_health_output(content: str) -> tuple[list[str], list[str]]:
+    """Extract non-provider error and warning lines from Neovim :checkhealth output."""
+    errors: list[str] = []
+    warnings: list[str] = []
+    for section in content.split("=============================================================================="):
+        lines = section.strip().splitlines()
+        if not lines or "vim.provider" in lines[0]:
+            continue
+        for raw_line in lines[1:]:
+            item_line = raw_line.strip()
+            if item_line.startswith(("- ❌", "- ERROR")) or "ERROR" in item_line:
+                errors.append(item_line)
+            elif item_line.startswith(("- ⚠️", "- WARNING")) or "WARNING" in item_line:
+                warnings.append(item_line)
+    return errors, warnings
+
+
+def _check_neovim_health(report: DoctorReport, home: Path, fix: bool) -> None:
+    """Run headless Neovim :checkhealth and report errors or warnings."""
+    if not shutil.which("nvim"):
+        return
+    if fix:
+        _clean_empty_nvim_pack_core(home)
+
+    with tempfile.NamedTemporaryFile(mode="w+", prefix="nvim_health_", suffix=".txt", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+    try:
+        nvim_env = os.environ.copy()
+        if not nvim_env.get("TERM") or nvim_env.get("TERM") == "dumb":
+            nvim_env["TERM"] = "xterm-256color"
+        res = subprocess.run(
+            ["nvim", "--headless", "+checkhealth", f"+w! {tmp_path}", "+qa"],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            env=nvim_env,
+            check=False,
+        )
+        content = tmp_path.read_text(encoding="utf-8", errors="replace") if tmp_path.exists() else ""
+        errors, warnings = _parse_nvim_health_output(content)
+        if res.returncode != 0 and not content:
+            report.warn(LBL_NVIM_HEALTH, "Non-zero exit running headless checkhealth")
+        elif errors:
+            first_err = errors[0].replace("- ❌ ERROR ", "").replace("- ❌ ", "").replace("- ERROR ", "")[:38]
+            report.fail(LBL_NVIM_HEALTH, f"{len(errors)} error(s): {first_err}")
+        elif warnings:
+            first_warn = warnings[0].replace("- ⚠️ WARNING ", "").replace("- ⚠️ ", "").replace("- WARNING ", "")[:38]
+            report.warn(LBL_NVIM_HEALTH, f"{len(warnings)} warning(s): {first_warn}")
+        else:
+            report.ok(LBL_NVIM_HEALTH, "0 errors, 0 warnings")
+    except subprocess.TimeoutExpired:
+        report.warn(LBL_NVIM_HEALTH, "Timed out after 15s")
+    except (OSError, subprocess.SubprocessError) as e:
+        report.warn(LBL_NVIM_HEALTH, f"Check error: {e}")
+    finally:
+        with contextlib.suppress(OSError):
+            tmp_path.unlink(missing_ok=True)
+
+
+def check_cli_tools(report: DoctorReport, fix: bool = False):
+    print(f"\n{C_BOLD}3. Core CLI & Runtime Tools{C_RESET}")
+    for tool in get_cli_tool_manifest():
+        _check_single_cli_tool(report, tool, fix)
+
+    home = Path.home()
+    _check_active_prompt_health(report, home, fix)
+    _check_zsh_plugins(report, home, fix)
+    _check_mise_runtimes(report, fix)
+    _check_neovim_health(report, home, fix)
 
 
 def check_locale(report: DoctorReport):
@@ -391,6 +466,7 @@ def check_locale(report: DoctorReport):
         else:
             report.warn("Zsh multibyte parsing", "Single-byte mode active; check ~/.zshenv")
 
+
 def check_ssh(report: DoctorReport, dotfiles: Path, fix: bool = False):
     print(f"\n{C_BOLD}6. SSH Agent & Defaults{C_RESET}")
     if not shutil.which("ssh"):
@@ -405,31 +481,32 @@ def check_ssh(report: DoctorReport, dotfiles: Path, fix: bool = False):
     except OSError:
         current = ""
     if include in current.splitlines():
-        report.ok("~/.ssh/config", "Includes shared dotfiles defaults")
+        report.ok(LBL_SSH_CONFIG, "Includes shared dotfiles defaults")
     elif fix:
         ssh_config.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         ssh_config.write_text(f"{include}\n\n{current}")
         ssh_config.chmod(0o600)
-        report.fixed("~/.ssh/config", "Prepended Include for shared defaults")
+        report.fixed(LBL_SSH_CONFIG, "Prepended Include for shared defaults")
     else:
-        report.warn("~/.ssh/config", "Missing shared defaults Include. Run with --fix")
+        report.warn(LBL_SSH_CONFIG, "Missing shared defaults Include. Run with --fix")
 
     if ssh_sockets.is_dir():
-        report.ok("~/.ssh/sockets", "SSH ControlMaster multiplexing ready")
+        report.ok(LBL_SSH_SOCKETS, "SSH ControlMaster multiplexing ready")
     elif fix:
         ssh_sockets.mkdir(mode=0o700, parents=True, exist_ok=True)
-        report.fixed("~/.ssh/sockets", "Created directory for SSH multiplexing")
+        report.fixed(LBL_SSH_SOCKETS, "Created directory for SSH multiplexing")
     else:
-        report.warn("~/.ssh/sockets", "Missing ControlPath socket directory. Run with --fix")
+        report.warn(LBL_SSH_SOCKETS, "Missing ControlPath socket directory. Run with --fix")
 
     # ssh-add exit codes: 0 = keys loaded, 1 = agent running without keys, 2 = no agent
     code, _, _ = run_cmd(["ssh-add", "-l"])
     if code == 0:
-        report.ok("SSH agent", "Running with keys loaded")
+        report.ok(LBL_SSH_AGENT, "Running with keys loaded")
     elif code == 1:
-        report.ok("SSH agent", "Running (keys load on first use)")
+        report.ok(LBL_SSH_AGENT, "Running (keys load on first use)")
     else:
-        report.warn("SSH agent", "Not reachable; open a new shell to start the shared agent")
+        report.warn(LBL_SSH_AGENT, "Not reachable; open a new shell to start the shared agent")
+
 
 # gpg-agent forgets passphrases after 10 minutes by default, so signing from editors and TUIs
 # (which can't show a terminal pinentry) breaks soon after an unlock. Remember them for a working day.
@@ -450,16 +527,17 @@ def check_gpg_cache(report: DoctorReport, fix: bool = False):
             current[parts[0]] = int(parts[1])
     ttl = current.get("default-cache-ttl", 600)
     if ttl >= GPG_CACHE_TTL["default-cache-ttl"]:
-        report.ok("GPG passphrase cache", f"{ttl // 3600}h after unlock")
+        report.ok(LBL_GPG_CACHE, f"{ttl // 3600}h after unlock")
     elif fix:
         kept = [line for line in lines if not line.split() or line.split()[0] not in GPG_CACHE_TTL]
         kept += [f"{key} {value}" for key, value in GPG_CACHE_TTL.items()]
         home.mkdir(mode=0o700, parents=True, exist_ok=True)
         conf.write_text("\n".join(kept) + "\n")
         run_cmd(["gpg-connect-agent", "reloadagent", "/bye"])
-        report.fixed("GPG passphrase cache", "Raised to 8h (max 24h); unlock once to start it")
+        report.fixed(LBL_GPG_CACHE, "Raised to 8h (max 24h); unlock once to start it")
     else:
-        report.warn("GPG passphrase cache", f"Only {ttl // 60} min; signing outside a terminal fails. Run with --fix")
+        report.warn(LBL_GPG_CACHE, f"Only {ttl // 60} min; signing outside a terminal fails. Run with --fix")
+
 
 def check_git_signing(report: DoctorReport, fix: bool = False):
     print(f"\n{C_BOLD}5. Git Identity & Commit Signing{C_RESET}")
@@ -491,6 +569,7 @@ def check_git_signing(report: DoctorReport, fix: bool = False):
     else:
         report.ok("Commit signing", "Disabled (optional)")
 
+
 def is_wsl() -> bool:
     if os.environ.get("WSL_DISTRO_NAME"):
         return True
@@ -499,7 +578,8 @@ def is_wsl() -> bool:
     except OSError:
         return False
 
-def _find_windows_terminal_settings() -> Path | None:
+
+def _find_windows_terminal_settings() -> Optional[Path]:
     """Locate Windows Terminal settings.json on the Windows host from inside WSL."""
     if not shutil.which("powershell.exe") or not shutil.which("wslpath"):
         return None
@@ -513,11 +593,37 @@ def _find_windows_terminal_settings() -> Path | None:
         return None
     base = Path(mounted)
     candidates = [
-        base / "Packages" / "Microsoft.WindowsTerminal_8wekyb3d8bbwe" / "LocalState" / "settings.json",
-        base / "Packages" / "Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe" / "LocalState" / "settings.json",
-        base / "Microsoft" / "Windows Terminal" / "settings.json",
+        base / "Packages" / "Microsoft.WindowsTerminal_8wekyb3d8bbwe" / "LocalState" / FILE_SETTINGS_JSON,
+        base / "Packages" / "Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe" / "LocalState" / FILE_SETTINGS_JSON,
+        base / "Microsoft" / "Windows Terminal" / FILE_SETTINGS_JSON,
     ]
     return next((p for p in candidates if p.is_file()), None)
+
+
+def _check_windows_terminal_theme(report: DoctorReport, dotfiles: Path, fix: bool) -> None:
+    """Audit or sync the Windows Terminal Catppuccin Mocha theme from WSL."""
+    wt_settings = _find_windows_terminal_settings()
+    if not wt_settings:
+        return
+    try:
+        wt_text = wt_settings.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        wt_text = ""
+
+    if '"Catppuccin Mocha"' in wt_text:
+        report.ok(LBL_WT_THEME, "Catppuccin Mocha & Nerd Fonts active")
+        return
+
+    setup_script = dotfiles / "bin" / "wsl-setup-terminal"
+    if fix and setup_script.is_file():
+        code, _, _ = run_cmd([str(setup_script)])
+        if code == 0:
+            report.fixed(LBL_WT_THEME, "Synced Catppuccin Mocha via wsl-setup-terminal")
+        else:
+            report.warn(LBL_WT_THEME, "wsl-setup-terminal failed")
+        return
+
+    report.warn(LBL_WT_THEME, "Not synced. Run 'wsl-setup-terminal' or 'dot doctor --fix'")
 
 
 def check_wsl(report: DoctorReport, dotfiles: Path, fix: bool = False):
@@ -537,22 +643,8 @@ def check_wsl(report: DoctorReport, dotfiles: Path, fix: bool = False):
     else:
         report.warn("Browser opener (wslview)", "Missing; 'open' falls back to explorer.exe. Install wslu")
 
-    wt_settings = _find_windows_terminal_settings()
-    if wt_settings:
-        try:
-            wt_text = wt_settings.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
-            wt_text = ""
-        if '"Catppuccin Mocha"' in wt_text:
-            report.ok("Windows Terminal theme", "Catppuccin Mocha & Nerd Fonts active")
-        elif fix and (dotfiles / "bin" / "wsl-setup-terminal").is_file():
-            code, _, _ = run_cmd([str(dotfiles / "bin" / "wsl-setup-terminal")])
-            if code == 0:
-                report.fixed("Windows Terminal theme", "Synced Catppuccin Mocha via wsl-setup-terminal")
-            else:
-                report.warn("Windows Terminal theme", "wsl-setup-terminal failed")
-        else:
-            report.warn("Windows Terminal theme", "Not synced. Run 'wsl-setup-terminal' or 'dot doctor --fix'")
+    _check_windows_terminal_theme(report, dotfiles, fix)
+
 
 def run_doctor(fix: bool = False) -> int:
     dotfiles = get_dotfiles_dir()
@@ -585,6 +677,7 @@ def run_doctor(fix: bool = False) -> int:
         return 1
 
     return 0
+
 
 if __name__ == "__main__":
     do_fix = "--fix" in sys.argv or "-f" in sys.argv

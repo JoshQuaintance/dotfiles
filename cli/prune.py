@@ -97,6 +97,23 @@ def _scan_roots() -> list[tuple[Path, int]]:
     return [(path, depth) for path, depth in roots if path.is_dir()]
 
 
+def _stale_link_rel_target(
+    link: Path,
+    current: str,
+    repo_roots: set[str],
+    dotfiles: Path,
+    old: str,
+    gone: set[str],
+) -> Optional[str]:
+    """Return the deleted repo-relative path for a broken/deleted repo symlink, or None."""
+    raw = os.readlink(link)
+    target = os.path.normpath(raw if os.path.isabs(raw) else os.path.join(current, raw))
+    rel = next((target[len(repo) + 1 :] for repo in repo_roots if target.startswith(repo + os.sep)), None)
+    if rel and (not os.path.exists(target) or _fully_deleted(dotfiles, old, rel, gone)):
+        return rel
+    return None
+
+
 def find_stale_links(dotfiles: Path, old: str, gone: set[str]) -> list[tuple[Path, str]]:
     """Symlinks into the repo whose target was deleted since `old` (or no longer exists at all)."""
     repo_roots = {os.path.normpath(str(dotfiles)), os.path.normpath(str(dotfiles.resolve()))}
@@ -110,10 +127,8 @@ def find_stale_links(dotfiles: Path, old: str, gone: set[str]) -> list[tuple[Pat
                 if link in seen or not link.is_symlink():
                     continue
                 seen.add(link)
-                raw = os.readlink(link)
-                target = os.path.normpath(raw if os.path.isabs(raw) else os.path.join(current, raw))
-                rel = next((target[len(repo) + 1:] for repo in repo_roots if target.startswith(repo + os.sep)), None)
-                if rel and (not os.path.exists(target) or _fully_deleted(dotfiles, old, rel, gone)):
+                rel = _stale_link_rel_target(link, current, repo_roots, dotfiles, old, gone)
+                if rel:
                     stale.append((link, rel))
             if len(Path(current).relative_to(root).parts) + 1 >= max_depth:
                 dirnames[:] = []
@@ -218,23 +233,29 @@ def print_orphans(orphans: Orphans) -> None:
         print(f"  {C_YELLOW}?{C_RESET} mise {tool} {C_DIM}(unused by any tracked mise config){C_RESET}")
 
 
+def _uninstall_packages(brew: dict[str, list[str]], mise: list[str], mise_all: bool = False) -> int:
+    """Uninstall brew formulae/casks and mise tools, returning how many were removed."""
+    removed = 0
+    for kind, names in brew.items():
+        cmd = ["brew", "uninstall", "--cask" if kind == "cask" else "--formula", *names]
+        if subprocess.run(cmd, check=False).returncode == 0:
+            removed += len(names)
+        else:
+            print(f"{C_YELLOW}⚠ Some brew {kind}s were not uninstalled (still required by another package?){C_RESET}")
+    for tool in mise:
+        mise_cmd = ["mise", "uninstall", "--all", tool] if mise_all else ["mise", "uninstall", tool]
+        if subprocess.run(mise_cmd, check=False).returncode == 0:
+            removed += 1
+    return removed
+
+
 def apply_orphans(orphans: Orphans) -> int:
     """Uninstall orphans after an explicit yes (defaults to no: some may have been installed on purpose)."""
     total = sum(map(len, orphans.brew.values())) + len(orphans.mise)
     if not _confirm(f"Uninstall these {total} package(s)? [y/N]: ", default=False):
         print("Kept them. Add packages you want to keep to the Brewfile or config/mise/config.toml.")
         return 0
-    removed = 0
-    for kind, names in orphans.brew.items():
-        cmd = ["brew", "uninstall", "--cask" if kind == "cask" else "--formula", *names]
-        if subprocess.run(cmd, check=False).returncode == 0:
-            removed += len(names)
-        else:
-            print(f"{C_YELLOW}⚠ Some brew {kind}s were not uninstalled (still required by another package?){C_RESET}")
-    for tool in orphans.mise:
-        if subprocess.run(["mise", "uninstall", tool], check=False).returncode == 0:
-            removed += 1
-    return removed
+    return _uninstall_packages(orphans.brew, orphans.mise, mise_all=False)
 
 
 def plan_prune(dotfiles: Path, old: str, new: str) -> PrunePlan:
@@ -275,6 +296,14 @@ def preview_prune(dotfiles: Path, old: str, new: str) -> None:
         print()
 
 
+def _prune_empty_parents(cache: Path, dotfiles: Path) -> None:
+    """Remove empty parent directories up to the dotfiles repository root."""
+    parent = cache.parent
+    while parent != dotfiles and parent.is_relative_to(dotfiles) and not any(parent.iterdir()):
+        parent.rmdir()
+        parent = parent.parent
+
+
 def apply_prune(dotfiles: Path, plan: PrunePlan, title: Optional[str] = None) -> None:
     """Remove links and caches right away; ask before uninstalling any brew package or mise tool."""
     if plan.empty:
@@ -287,24 +316,13 @@ def apply_prune(dotfiles: Path, plan: PrunePlan, title: Optional[str] = None) ->
         link.unlink(missing_ok=True)
     for cache in plan.caches:
         remove_target(cache, dry_run=False)
-        parent = cache.parent
-        while parent != dotfiles and parent.is_relative_to(dotfiles) and not any(parent.iterdir()):
-            parent.rmdir()
-            parent = parent.parent
+        _prune_empty_parents(cache, dotfiles)
 
     # Packages may still be used outside these dotfiles, so they always need an explicit yes (even with -y)
     packages = sum(map(len, plan.brew.values())) + len(plan.mise)
     removed_packages = 0
     if packages and _confirm(f"Uninstall the {packages} package(s) listed above? [Y/n]: "):
-        for kind, names in plan.brew.items():
-            cmd = ["brew", "uninstall", "--cask" if kind == "cask" else "--formula", *names]
-            if subprocess.run(cmd, check=False).returncode == 0:
-                removed_packages += len(names)
-            else:
-                print(f"{C_YELLOW}⚠ Some brew {kind}s were not uninstalled (still required by another package?){C_RESET}")
-        for tool in plan.mise:
-            if subprocess.run(["mise", "uninstall", "--all", tool], check=False).returncode == 0:
-                removed_packages += 1
+        removed_packages = _uninstall_packages(plan.brew, plan.mise, mise_all=True)
     elif packages:
         print("Kept packages. Uninstall them later with 'brew uninstall' / 'mise uninstall --all'.")
 
@@ -321,6 +339,20 @@ def _default_base(dotfiles: Path) -> str:
         if res.returncode == 0:
             return orig
     return head
+
+
+def _report_and_prune_orphans(dotfiles: Path, dry_run: bool) -> None:
+    """Display and optionally uninstall packages not declared in the dotfiles."""
+    print(f"\n{C_BLUE}==>{C_RESET} Installed but not declared in the dotfiles:")
+    found = find_orphans(dotfiles)
+    if found.empty:
+        print(f"  {C_GREEN}{ICON_OK}{C_RESET} Every brew package and mise version is accounted for.")
+        return
+    print_orphans(found)
+    if not dry_run:
+        removed = apply_orphans(found)
+        if removed:
+            print(f"{C_GREEN}✔{C_RESET} {C_BOLD}Uninstalled{C_RESET} {removed} orphaned package(s).")
 
 
 def run_prune(ref: Optional[str] = None, dry_run: bool = False, orphans: bool = False) -> int:
@@ -354,14 +386,5 @@ def run_prune(ref: Optional[str] = None, dry_run: bool = False, orphans: bool = 
         apply_prune(dotfiles, plan, title="Pruning")
 
     if orphans:
-        print(f"\n{C_BLUE}==>{C_RESET} Installed but not declared in the dotfiles:")
-        found = find_orphans(dotfiles)
-        if found.empty:
-            print(f"  {C_GREEN}{ICON_OK}{C_RESET} Every brew package and mise version is accounted for.")
-        else:
-            print_orphans(found)
-            if not dry_run:
-                removed = apply_orphans(found)
-                if removed:
-                    print(f"{C_GREEN}✔{C_RESET} {C_BOLD}Uninstalled{C_RESET} {removed} orphaned package(s).")
+        _report_and_prune_orphans(dotfiles, dry_run)
     return 0

@@ -78,7 +78,9 @@ def format_row(label: str, detail: str = "", status_icon: str = "", cols: Option
         lbl_w = 24
         lbl = f"{label[:lbl_w]:<{lbl_w}}"
         max_det = max(0, term_cols - lbl_w - len(prefix) - 1)
-        det = (f"{detail[:max_det - 3]}..." if max_det >= 3 else detail[:max_det]) if len(detail) > max_det else detail
+        det = detail
+        if len(detail) > max_det:
+            det = f"{detail[:max_det - 3]}..." if max_det >= 3 else detail[:max_det]
         return f"{prefix}{lbl} {C_DIM}{det}{C_RESET}"
     else:
         lbl_w = 44

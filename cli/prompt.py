@@ -126,7 +126,7 @@ def set_active_prompt(engine: str) -> bool:
         return False
 
 
-def is_engine_installed(engine: str, dotfiles_dir: Path) -> bool:
+def is_engine_installed(engine: str) -> bool:
     if engine == "native":
         return True
     if engine == "spaceship":
@@ -142,7 +142,7 @@ def is_engine_installed(engine: str, dotfiles_dir: Path) -> bool:
 
 
 def benchmark_engine(engine: str, dotfiles_dir: Path, iterations: int = 3) -> Optional[tuple[float, float, float]]:
-    if not is_engine_installed(engine, dotfiles_dir):
+    if not is_engine_installed(engine):
         return None
 
     zsh_bin = shutil.which("zsh")
@@ -190,6 +190,56 @@ def run_prompt_benchmark(iterations: int = 3) -> dict[str, Optional[tuple[float,
     return results
 
 
+def _format_engine_timing(stats: Optional[tuple[float, float, float]], mobile: bool) -> str:
+    """Format benchmark latency and speed badge for a prompt engine."""
+    if stats is None:
+        return f"{C_DIM}Not installed{C_RESET}"
+    _min_ms, med_ms, _max_ms = stats
+    if med_ms < 10:
+        speed_color = C_GREEN
+        speed_tag = "Instant"
+    elif med_ms < 60:
+        speed_color = C_CYAN
+        speed_tag = "Fast"
+    else:
+        speed_color = C_YELLOW if med_ms < 200 else C_RED
+        speed_tag = "High overhead" if mobile else "Feature-heavy"
+    return f"{speed_color}{med_ms:5.1f}ms{C_RESET} [{speed_color}{speed_tag}{C_RESET}]"
+
+
+def _resolve_selected_engine(choice: str, engine_keys: list[str]) -> Optional[str]:
+    """Map user input ('1', '2', or engine key) to a valid prompt engine name."""
+    if choice in ("1", "2"):
+        return engine_keys[int(choice) - 1]
+    if choice in PROMPT_ENGINES:
+        return choice
+    return None
+
+
+def _prompt_interactive_selection(engine_keys: list[str], mobile: bool) -> None:
+    """Prompt the user to interactively select and persist a shell prompt engine."""
+    default_choice = "2" if (not mobile and is_engine_installed("spaceship")) else "1"
+    print()
+    try:
+        choice = input(f"Select your active prompt [1-2] or press Enter for default [{default_choice}]: ").strip()
+        selected_key = _resolve_selected_engine(choice or default_choice, engine_keys)
+        if not selected_key:
+            print(f"{C_DIM}Selection unchanged.{C_RESET}\n")
+            return
+
+        if not is_engine_installed(selected_key):
+            print(f"{C_YELLOW}{ICON_WARN} {PROMPT_ENGINES[selected_key]['name']} is not yet installed.{C_RESET}")
+            if selected_key == "spaceship":
+                print("Run 'brew install spaceship' or clone into ~/.spaceship-prompt.")
+            confirm = input("Set as default anyway? [y/N]: ").strip().lower()
+            if confirm not in ("y", "yes"):
+                return
+        set_active_prompt(selected_key)
+        print(f"\n{C_GREEN}{ICON_OK} Done! Open a new shell or run 'source ~/.zshrc' to apply.{C_RESET}\n")
+    except (KeyboardInterrupt, EOFError):
+        print(f"\n{C_DIM}Selection cancelled.{C_RESET}\n")
+
+
 def print_prompt_summary(interactive: bool = False) -> None:
     print_header("Shell Prompt Manager & Benchmark")
 
@@ -207,29 +257,11 @@ def print_prompt_summary(interactive: bool = False) -> None:
     print(f"\n{C_BOLD}Measuring prompt render latency across available engines...{C_RESET}\n")
 
     results = run_prompt_benchmark(iterations=3)
-
     engine_keys = list(PROMPT_ENGINES.keys())
     for idx, key in enumerate(engine_keys, 1):
         meta = PROMPT_ENGINES[key]
-        stats = results.get(key)
         prefix = f"  [{idx}] {meta['icon']} {meta['name']:<12}"
-
-        if stats is not None:
-            _min_ms, med_ms, _max_ms = stats
-            if med_ms < 10:
-                speed_color = C_GREEN
-                speed_tag = "Instant"
-            elif med_ms < 60:
-                speed_color = C_CYAN
-                speed_tag = "Fast"
-            else:
-                speed_color = C_YELLOW if med_ms < 200 else C_RED
-                speed_tag = "High overhead" if mobile else "Feature-heavy"
-
-            timing = f"{speed_color}{med_ms:5.1f}ms{C_RESET} [{speed_color}{speed_tag}{C_RESET}]"
-        else:
-            timing = f"{C_DIM}Not installed{C_RESET}"
-
+        timing = _format_engine_timing(results.get(key), mobile)
         active_marker = f" {C_GREEN}\u2714 active{C_RESET}" if key == active_engine else ""
         print(f"{prefix} {timing:<28} {C_DIM}{meta['description']}{C_RESET}{active_marker}")
 
@@ -237,34 +269,7 @@ def print_prompt_summary(interactive: bool = False) -> None:
         print(f"\n{C_DIM}To switch active prompt: 'dot prompt set <native|spaceship>'{C_RESET}\n")
         return
 
-    # Interactive prompt selection
-    default_choice = "1" if mobile else ("2" if is_engine_installed("spaceship", get_dotfiles_dir()) else "1")
-    print()
-    try:
-        choice = input(f"Select your active prompt [1-2] or press Enter for default [{default_choice}]: ").strip()
-        if not choice:
-            choice = default_choice
-
-        selected_key: Optional[str] = None
-        if choice in ("1", "2"):
-            selected_key = engine_keys[int(choice) - 1]
-        elif choice in PROMPT_ENGINES:
-            selected_key = choice
-
-        if selected_key:
-            if not is_engine_installed(selected_key, get_dotfiles_dir()):
-                print(f"{C_YELLOW}{ICON_WARN} {PROMPT_ENGINES[selected_key]['name']} is not yet installed.{C_RESET}")
-                if selected_key == "spaceship":
-                    print("Run 'brew install spaceship' or clone into ~/.spaceship-prompt.")
-                confirm = input("Set as default anyway? [y/N]: ").strip().lower()
-                if confirm not in ("y", "yes"):
-                    return
-            set_active_prompt(selected_key)
-            print(f"\n{C_GREEN}{ICON_OK} Done! Open a new shell or run 'source ~/.zshrc' to apply.{C_RESET}\n")
-        else:
-            print(f"{C_DIM}Selection unchanged.{C_RESET}\n")
-    except (KeyboardInterrupt, EOFError):
-        print(f"\n{C_DIM}Selection cancelled.{C_RESET}\n")
+    _prompt_interactive_selection(engine_keys, mobile)
 
 
 def run_prompt_command(subcommand: Optional[str] = None, value: Optional[str] = None) -> int:
