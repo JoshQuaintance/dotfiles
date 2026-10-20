@@ -19,9 +19,11 @@ alias ..="cd .."
 alias ...="cd ../.."
 alias ....="cd ../../.."
 alias codes="cd ~/Codes/" # Jump to ~/Codes workspace
+alias fp="proj" # Interactive Git project & repository switcher
 alias path="echo \$PATH | tr ':' '\n'" # Print each PATH entry on its own line
 alias x="extract" # Universal archive extractor
 alias kp="fkill" # Interactive process & port killer
+alias fport="port" # Interactive listening port inspector & killer
 alias dps="fcon" # Interactive Docker/Podman container manager
 alias cheat="cheath" # Interactive tldr cheat-sheet browser
 if command -v tokei &>/dev/null; then

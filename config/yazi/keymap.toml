@@ -57,6 +57,27 @@ run  = [ "copy path", "unyank" ]
 desc = "Copy absolute path to system clipboard"
 
 [[mgr.prepend_keymap]]
+on   = [ "c", "c" ]
+run  = '''shell --confirm '
+  cat "$@" | if command -v pbcopy >/dev/null 2>&1; then
+    pbcopy
+  elif [ -n "$WSL_DISTRO_NAME" ] && command -v win32yank.exe >/dev/null 2>&1; then
+    win32yank.exe -i --crlf
+  elif [ -n "$WAYLAND_DISPLAY" ] && command -v wl-copy >/dev/null 2>&1; then
+    wl-copy
+  elif [ -n "$DISPLAY" ] && command -v xclip >/dev/null 2>&1; then
+    xclip -selection clipboard
+  elif [ -n "$DISPLAY" ] && command -v xsel >/dev/null 2>&1; then
+    xsel --clipboard --input
+  elif command -v clip.exe >/dev/null 2>&1; then
+    { printf "\xff\xfe"; iconv -f UTF-8 -t UTF-16LE; } | clip.exe
+  elif [ -n "$TMUX" ]; then
+    tmux load-buffer -
+  fi
+' '''
+desc = "Copy selected file contents to system clipboard"
+
+[[mgr.prepend_keymap]]
 on   = [ "D" ]
 run  = 'shell "nvim -d %s" --block --confirm'
 desc = "Diff selected files side-by-side in Neovim"
@@ -93,6 +114,15 @@ run  = '''shell --block --confirm '
   [ -n "$target" ] && ya emit cd "$target"
 ' '''
 desc = "Jump to a Git worktree via FZF"
+
+[[mgr.prepend_keymap]]
+on   = [ "g", "s" ]
+run  = '''shell --block --confirm '
+  target="$(git status --porcelain=v1 2>/dev/null | fzf --height=100% --reverse --prompt="📝 Git Status > " --preview="f=\$(printf \"%s\" {} | cut -c4-); f=\${f##* -> }; git diff --color=always -- \"\$f\" 2>/dev/null | head -n 100" | cut -c4-)"
+  target="${target##* -> }"
+  [ -n "$target" ] && ya emit reveal "$target"
+' '''
+desc = "Jump to a modified Git file via FZF"
 
 [[mgr.prepend_keymap]]
 on   = [ "g", "D" ]

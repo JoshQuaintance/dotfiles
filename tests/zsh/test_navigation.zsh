@@ -86,3 +86,47 @@ test_d_index_out_of_range_fails() {
   assert_eq 1 $rc
   assert_contains "$out" "out of range"
 }
+
+test_proj_discovers_repos_and_jumps_by_exact_name() {
+  export DOTFILES_PROJECTS_DIR="$HOME/Codes"
+  mkdir -p "$DOTFILES_PROJECTS_DIR"
+  git_test init -q "$DOTFILES_PROJECTS_DIR/alpha-service"
+  git_test -C "$DOTFILES_PROJECTS_DIR/alpha-service" checkout -q -b feat/login
+  git_test init -q "$DOTFILES_PROJECTS_DIR/beta-web"
+
+  local list_out
+  list_out="$(proj -l)"
+  assert_contains "$list_out" $'alpha-service\tfeat/login\t'
+  assert_contains "$list_out" $'beta-web\t'
+
+  proj alpha-service
+  assert_eq "${DOTFILES_PROJECTS_DIR:A}/alpha-service" "${PWD:A}"
+}
+
+test_dotenv_loads_without_eval_and_unloads_cleanly() {
+  cat > .env <<'EOF'
+# Comment line
+SIMPLE_KEY=hello_world # inline comment
+export EXPORTED_KEY="quoted \"value\" with spaces" # trailing comment
+SINGLE_QUOTED='$(echo should_not_execute)'
+CRLF_KEY=win_value
+EOF
+  printf "CRLF_KEY=win_val\r\n" >> .env
+
+  dotenv .env >/dev/null
+  assert_eq "hello_world" "$SIMPLE_KEY"
+  assert_eq 'quoted "value" with spaces' "$EXPORTED_KEY"
+  assert_eq '$(echo should_not_execute)' "$SINGLE_QUOTED"
+  assert_eq "win_val" "$CRLF_KEY"
+
+  local list_out
+  list_out="$(dotenv -l)"
+  assert_contains "$list_out" "SIMPLE_KEY=hello_world"
+  assert_contains "$list_out" "SINGLE_QUOTED=\$(echo should_not_execute)"
+
+  dotenv -u >/dev/null
+  assert_eq "" "${SIMPLE_KEY:-}"
+  assert_eq "" "${EXPORTED_KEY:-}"
+  assert_eq "" "${SINGLE_QUOTED:-}"
+  assert_eq "" "${CRLF_KEY:-}"
+}

@@ -162,6 +162,8 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
       "'fenv' / 'cheath' → Inspect env vars or browse tldr cheat sheets"
       "'fjq <file.json>' → Interactive FZF + jq JSON path explorer"
       "'port' / 'fkill'  → Inspect or kill processes & ports"
+      "'proj' / 'fp'     → Interactive Git project & repo switcher"
+      "'dotenv [-u|-l]'  → Safely load or unload .env files in shell"
     )
     local _random_tip="${_tips[$(( (RANDOM % ${#_tips[@]}) + 1 ))]}"
     local _tip_line="💡 ${_random_tip}"

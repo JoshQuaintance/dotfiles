@@ -259,3 +259,187 @@ d() {
   esac
 }
 
+# Internal helper: resolve active git branch from a repository root without forking git
+_proj_repo_branch() {
+  local repo="$1"
+  local head_file="$repo/.git/HEAD"
+  if [[ -f "$repo/.git" ]]; then
+    local gitdir_line=""
+    read -r gitdir_line < "$repo/.git" 2>/dev/null
+    local gd="${gitdir_line#gitdir: }"
+    [[ "$gd" != /* ]] && gd="$repo/$gd"
+    head_file="$gd/HEAD"
+  fi
+  if [[ -f "$head_file" ]]; then
+    local head_content=""
+    read -r head_content < "$head_file" 2>/dev/null
+    if [[ "$head_content" == ref:\ refs/heads/* ]]; then
+      printf "%s" "${head_content#ref: refs/heads/}"
+      return 0
+    elif [[ -n "$head_content" ]]; then
+      printf "%s" "${head_content[1,7]}"
+      return 0
+    fi
+  fi
+  printf "main"
+}
+
+# Internal helper: list discovered Git repositories under ~/Codes (or $DOTFILES_PROJECTS_DIR) and ~/.dotfiles
+# Output format: <name>\t<branch>\t<path>
+_proj_list_repos() {
+  local base_dir="${DOTFILES_PROJECTS_DIR:-$HOME/Codes}"
+  local dot_dir="${DOTFILES_DIR:-$HOME/.dotfiles}"
+  local -a git_entries=()
+  local -A seen_paths=()
+
+  if [[ -d "$base_dir" ]]; then
+    if command -v fd &>/dev/null; then
+      git_entries=(${(f)"$(fd --hidden --no-ignore -g '.git' --max-depth 4 "$base_dir" 2>/dev/null)"})
+    else
+      git_entries=(${(f)"$(find "$base_dir" -maxdepth 4 -name '.git' 2>/dev/null)"})
+    fi
+  fi
+  [[ -e "$dot_dir/.git" ]] && git_entries+=("$dot_dir/.git")
+
+  local entry repo name branch
+  for entry in "${git_entries[@]}"; do
+    [[ -z "$entry" ]] && continue
+    entry="${entry%/}"
+    repo="${entry:h}"
+    [[ -z "$repo" || ! -d "$repo" ]] && continue
+    (( ${+seen_paths[$repo]} )) && continue
+    seen_paths[$repo]=1
+    name="${repo:t}"
+    branch="$(_proj_repo_branch "$repo")"
+    printf "%s\t%s\t%s\n" "$name" "$branch" "$repo"
+  done | sort -f -k1,1
+}
+
+# Interactive Git Project & Repository Switcher (proj / fp)
+# Scans ~/Codes (or $DOTFILES_PROJECTS_DIR) and ~/.dotfiles for Git repositories & worktrees
+# Usage:
+#   proj / fp          -> Browse all discovered Git projects in modal-Vim FZF
+#   proj <name>        -> Jump directly to matching project (or open FZF filtered by <name>)
+#   proj -l, --list    -> List discovered projects (<name>\t<branch>\t<path>)
+#   Keys: enter = cd, e = open in $EDITOR, l = open lazygit, y = copy path
+proj() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "\033[1;38;2;137;180;250mproj\033[0m (alias: \033[1mfp\033[0m) — Interactive modal-Vim Git project & repository switcher\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  proj / fp          Browse all Git repositories in ~/Codes & ~/.dotfiles\n"
+    printf "  proj <name>        Jump directly to <name> (or filter in FZF if multiple match)\n"
+    printf "  proj -l, --list    Print tab-separated table of discovered projects\n"
+    printf "  Enter              cd into selected repository\n"
+    printf "  e                  Open repository in \$EDITOR (nvim)\n"
+    printf "  l                  Open lazygit in selected repository\n"
+    printf "  y                  Copy repository path to clipboard\n"
+    return 0
+  fi
+
+  local list_only=false
+  if [[ "$1" == "-l" || "$1" == "--list" ]]; then
+    list_only=true
+    shift
+  fi
+
+  local rows
+  rows="$(_proj_list_repos)"
+  if [[ -z "$rows" ]]; then
+    printf "\033[33mNo Git repositories found in %s.\033[0m\n" "${DOTFILES_PROJECTS_DIR:-$HOME/Codes}" >&2
+    return 1
+  fi
+
+  local query="$*"
+
+  # Direct exact-name jump when a query is passed (e.g. `proj dotfiles` or via tab completion)
+  if [[ "$list_only" == false && -n "$query" ]]; then
+    local n b p exact_path=""
+    local -a substring_paths=()
+    while IFS=$'\t' read -r n b p; do
+      if [[ "${n:l}" == "${query:l}" ]]; then
+        exact_path="$p"
+        break
+      elif [[ "${n:l}" == *"${query:l}"* ]]; then
+        substring_paths+=("$p")
+      fi
+    done <<< "$rows"
+
+    if [[ -n "$exact_path" && -d "$exact_path" ]]; then
+      cd "$exact_path"
+      return 0
+    elif (( ${#substring_paths[@]} == 1 )) && [[ ! -t 1 || ! -x "$(command -v fzf)" ]]; then
+      cd "${substring_paths[1]}"
+      return 0
+    fi
+  fi
+
+  if [[ "$list_only" == true || ! -t 1 ]] || ! command -v fzf &>/dev/null; then
+    if [[ -n "$query" ]]; then
+      printf "%s\n" "$rows" | grep -i "$query"
+    else
+      printf "%s\n" "$rows"
+    fi
+    return 0
+  fi
+
+  local formatted
+  formatted=$(printf "%s\n" "$rows" | awk -F'\t' -v home="$HOME" '{
+    disp_path = $3;
+    if (index(disp_path, home) == 1) {
+      disp_path = "~" substr(disp_path, length(home) + 1);
+    }
+    printf "\033[1;38;2;137;180;250m%-26s\033[0m\t\033[38;2;166;227;161m%-20s\033[0m\t\033[2m%s\033[0m\t%s\n", $1, " " $2, disp_path, $3
+  }')
+
+  local hdr="  j/k: navigate │ /: search │ enter: cd │ e: edit │ l: lazygit │ y: copy path │ q: quit"
+  local -a fzf_mode_flags
+  _fzf_vim_mode "🚀 Projects > " "$hdr" "cd" "e,l,y" "$query"
+
+  local selection
+  selection=$(printf "%s\n" "$formatted" | fzf \
+    --ansi \
+    --delimiter=$'\t' \
+    --with-nth=1,2,3 \
+    --height=~55% \
+    "${fzf_mode_flags[@]}" \
+    --color="header:italic:dim,prompt:bold:blue,pointer:bold:green" \
+    --preview='p={4}; git -C "$p" status -sb 2>/dev/null; echo ""; git -C "$p" log --oneline --graph --decorate --color=always -n 8 2>/dev/null; echo ""; if command -v eza &>/dev/null; then eza --tree --level=2 --icons --color=always "$p" 2>/dev/null; else ls -la "$p" 2>/dev/null; fi' \
+    --preview-window='right:55%:wrap')
+
+  local key="" selected_lines=""
+  _fzf_split_expect "$selection" || return 0
+  local chosen_line="${selected_lines%%$'\n'*}"
+  local chosen="${chosen_line##*$'\t'}"
+  [[ -z "$chosen" || ! -d "$chosen" ]] && return 0
+
+  case "$key" in
+    e)
+      (cd "$chosen" && "${EDITOR:-nvim}" .)
+      ;;
+    l)
+      if command -v lazygit &>/dev/null; then
+        lazygit -p "$chosen"
+      else
+        cd "$chosen"
+      fi
+      ;;
+    y)
+      _copy_or_print "$chosen" "project path: $chosen"
+      ;;
+    *)
+      cd "$chosen"
+      ;;
+  esac
+}
+
+# Tab completion for proj / fp: dynamically completes discovered Git repository names
+_proj() {
+  local -a repos
+  local n b p
+  while IFS=$'\t' read -r n b p; do
+    [[ -n "$n" ]] && repos+=("${n//:/\\:}:${b} (${p/#$HOME/~})")
+  done < <(_proj_list_repos)
+  (( ${#repos[@]} )) && _describe 'git project' repos
+}
+(( $+functions[compdef] )) && compdef _proj proj || true
+

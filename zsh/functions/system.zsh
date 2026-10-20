@@ -28,18 +28,23 @@ _port_list_listening() {
   fi
 }
 
-# Interactive TCP Port Inspector & Killer (port)
+# Interactive TCP Port Inspector & Killer (port / fport)
 # Usage:
-#   port             -> Interactive modal-Vim FZF browser of all listening TCP ports (Enter/x to kill)
+#   port / fport     -> Interactive modal-Vim FZF browser of all listening TCP ports
 #   port <number>    -> Inspect process listening on <number>
 #   port -k <number> -> Kill process listening on <number>
+#   Keys: enter = SIGTERM (-15), x = SIGKILL (-9), o = open localhost URL, y = copy port, u = copy URL
 port() {
   if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
-    printf "\033[1;38;2;137;180;250mport\033[0m — Inspect or kill processes listening on TCP ports (macOS & Linux)\n\n"
+    printf "\033[1;38;2;137;180;250mport\033[0m (alias: \033[1mfport\033[0m) — Inspect, open, or kill processes listening on TCP ports\n\n"
     printf "\033[1mUsage:\033[0m\n"
-    printf "  port               Interactive modal-Vim FZF browser of listening ports\n"
+    printf "  port / fport       Interactive modal-Vim FZF browser of listening ports\n"
     printf "  port <port>        Show process bound to <port>\n"
     printf "  port -k <port>     Terminate process bound to <port>\n"
+    printf "  Enter              Graceful terminate (SIGTERM -15)\n"
+    printf "  x                  Force kill (SIGKILL -9)\n"
+    printf "  o                  Open http://localhost:<port> in system browser\n"
+    printf "  y / u              Copy port number (y) or localhost URL (u) to clipboard\n"
     return 0
   fi
 
@@ -49,8 +54,9 @@ port() {
     shift
   fi
 
-  # Direct port argument provided
-  if [ -n "$1" ]; then
+  local initial_query=""
+  # Direct numeric port argument provided (or kill mode)
+  if [ "$kill_mode" = true ] || [[ "$1" =~ ^:?[0-9]+$ ]]; then
     local target_port="${1#:}"
     if [ "$kill_mode" = true ]; then
       local pids=()
@@ -83,9 +89,11 @@ port() {
       return 1
     fi
     return $?
+  elif [ $# -gt 0 ]; then
+    initial_query="$*"
   fi
 
-  # No port specified: non-TTY or missing fzf prints table
+  # No direct port specified: non-TTY or missing fzf prints table
   local rows
   rows="$(_port_list_listening)"
   if [ -z "$rows" ]; then
@@ -95,39 +103,71 @@ port() {
 
   if [ ! -t 1 ] || ! command -v fzf &>/dev/null; then
     printf "\033[1;38;2;137;180;250m%-8s\t%-8s\t%-18s\t%s\033[0m\n" "PORT" "PID" "PROCESS" "ADDRESS"
-    printf "%s\n" "$rows"
+    if [ -n "$initial_query" ]; then
+      printf "%s\n" "$rows" | grep -i "$initial_query"
+    else
+      printf "%s\n" "$rows"
+    fi
     return 0
   fi
 
-  local hdr=$'  j/k: navigate │ space: select │ /: search │ enter/x: kill process │ q: quit\n  PORT    \tPID     \tPROCESS           \tADDRESS'
+  local hdr=$'  j/k: move │ space: select │ enter: SIGTERM │ x: SIGKILL │ o: open URL │ y: copy port │ u: copy URL │ q: quit\n  PORT    \tPID     \tPROCESS           \tADDRESS'
   local -a fzf_mode_flags
-  _fzf_vim_mode "🔌 Listening Ports > " "$hdr" "kill" "space,x" "" "space:toggle+down,x:accept"
+  _fzf_vim_mode "🔌 Listening Ports > " "$hdr" "SIGTERM" "space,x,o,y,u" "$initial_query" "space:toggle+down"
 
   local selected
   selected=$(printf "%s\n" "$rows" | fzf \
     --delimiter='\t' \
     --multi \
-    --height=~50% \
+    --height=~55% \
     --marker="✓ " \
     "${fzf_mode_flags[@]}" \
     --color="header:italic:dim,prompt:bold:cyan,pointer:bold:red,marker:bold:red" \
-    --preview='pid=$(echo {2} | tr -d " "); if [ -n "$pid" ] && [ "$pid" != "-" ]; then ps -p "$pid" -o pid,ppid,user,%cpu,%mem,etime,command 2>/dev/null; echo ""; lsof -p "$pid" -iTCP -P -n 2>/dev/null | head -n 20; fi' \
+    --preview='pid=$(echo {2} | tr -d " "); p=$(echo {1} | tr -d " "); printf "\033[1;36mhttp://localhost:%s\033[0m\n\n" "$p"; if [ -n "$pid" ] && [ "$pid" != "-" ]; then ps -p "$pid" -o pid,ppid,user,%cpu,%mem,etime,command 2>/dev/null; echo ""; if command -v lsof &>/dev/null; then lsof -p "$pid" -iTCP -P -n 2>/dev/null | head -n 20; elif command -v ss &>/dev/null; then ss -tulpn 2>/dev/null | grep "pid=$pid" | head -n 20; fi; fi' \
     --preview-window='right:55%:wrap')
 
-  [ -z "$selected" ] && return 0
+  local key="" selected_lines=""
+  _fzf_split_expect "$selected" || return 0
+
+  local first_line="${selected_lines%%$'\n'*}"
+  local first_port="${${first_line%%$'\t'*}// /}"
+
+  case "$key" in
+    o)
+      if [ -n "$first_port" ]; then
+        open "http://localhost:${first_port}"
+      fi
+      return 0
+      ;;
+    y)
+      [ -n "$first_port" ] && _copy_or_print "$first_port" "port ${first_port} to clipboard"
+      return 0
+      ;;
+    u)
+      [ -n "$first_port" ] && _copy_or_print "http://localhost:${first_port}" "http://localhost:${first_port} to clipboard"
+      return 0
+      ;;
+  esac
+
+  local sig="-15"
+  local sig_label="SIGTERM (-15)"
+  if [ "$key" = "x" ]; then
+    sig="-9"
+    sig_label="SIGKILL (-9)"
+  fi
 
   local p_clean="" pid_clean=""
   while IFS=$'\t' read -r p_col pid_col proc_col addr_col; do
     p_clean="${p_col// /}"
     pid_clean="${pid_col// /}"
     if [ -n "$pid_clean" ] && [ "$pid_clean" != "-" ]; then
-      if kill -15 "$pid_clean" 2>/dev/null || kill -9 "$pid_clean" 2>/dev/null; then
-        printf "  \033[32m✔\033[0m Killed \033[1m%s\033[0m (PID %s) on port \033[1;36m%s\033[0m\n" "${proc_col// /}" "$pid_clean" "$p_clean"
+      if kill "$sig" "$pid_clean" 2>/dev/null || kill -9 "$pid_clean" 2>/dev/null; then
+        printf "  \033[32m✔\033[0m Sent \033[1m%s\033[0m to \033[1m%s\033[0m (PID %s) on port \033[1;36m%s\033[0m\n" "$sig_label" "${proc_col// /}" "$pid_clean" "$p_clean"
       else
         printf "  \033[31m✖\033[0m Failed to kill PID %s on port %s\n" "$pid_clean" "$p_clean" >&2
       fi
     fi
-  done <<< "$selected"
+  done <<< "$selected_lines"
 }
 
 # Internal helper: list user processes sorted by CPU and memory for `fkill`
@@ -1039,4 +1079,116 @@ for tag, i1, i2, j1, j2 in sm_lines.get_opcodes():
             print(f"  {C_GREEN_FG}+{C_RST} {C_ADD}{fmt_ws(l, True)}{C_RST}")
 PYEOF
 }
+
+# Safe .env File Loader & Unloader (dotenv)
+# Parses .env files in pure Zsh without eval (immune to command substitution injection)
+# Usage:
+#   dotenv [file...]     -> Load .env (or specified files) into current shell session
+#   dotenv -u|--unload   -> Unset all variables loaded by dotenv in this session
+#   dotenv -l|--list     -> List keys currently loaded by dotenv
+typeset -gUa _DOTENV_LOADED_KEYS=()
+dotenv() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "\033[1;38;2;166;227;161mdotenv\033[0m — Safe .env environment loader & unloader (no eval)\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  dotenv               Load ./.env into the current shell session\n"
+    printf "  dotenv <file...>     Load one or more env files (e.g. dotenv .env .env.local)\n"
+    printf "  dotenv -l, --list    List variables loaded by dotenv in this session\n"
+    printf "  dotenv -u, --unload  Unset all variables loaded by dotenv in this session\n"
+    return 0
+  fi
+
+  if [[ "$1" == "-l" || "$1" == "--list" ]]; then
+    if (( ${#_DOTENV_LOADED_KEYS[@]} == 0 )); then
+      printf "\033[33mNo variables currently loaded via dotenv.\033[0m\n"
+      return 0
+    fi
+    local k
+    for k in "${_DOTENV_LOADED_KEYS[@]}"; do
+      if [[ -t 1 ]]; then
+        printf "\033[1;38;2;137;180;250m%s\033[0m=%s\n" "$k" "${(P)k}"
+      else
+        printf "%s=%s\n" "$k" "${(P)k}"
+      fi
+    done
+    return 0
+  fi
+
+  if [[ "$1" == "-u" || "$1" == "--unload" ]]; then
+    local count="${#_DOTENV_LOADED_KEYS[@]}"
+    if (( count == 0 )); then
+      printf "\033[33mNo variables currently loaded via dotenv.\033[0m\n"
+      return 0
+    fi
+    local k
+    for k in "${_DOTENV_LOADED_KEYS[@]}"; do
+      unset "$k"
+    done
+    _DOTENV_LOADED_KEYS=()
+    printf "\033[32m✔ Unloaded %d variable(s) from shell session.\033[0m\n" "$count"
+    return 0
+  fi
+
+  local -a files=("$@")
+  (( ${#files[@]} == 0 )) && files=(".env")
+
+  local f line key val
+  local -a loaded_now=()
+  for f in "${files[@]}"; do
+    if [[ ! -f "$f" ]]; then
+      printf "\033[31m✖ Env file not found: %s\033[0m\n" "$f" >&2
+      return 1
+    fi
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      line="${line%$'\r'}"
+      line="${line#"${line%%[![:space:]]*}"}"
+      [[ -z "$line" || "$line" == \#* ]] && continue
+      if [[ "$line" == export[[:space:]]* ]]; then
+        line="${line#export}"
+        line="${line#"${line%%[![:space:]]*}"}"
+      fi
+      [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || continue
+      key="${line%%=*}"
+      val="${line#*=}"
+      val="${val#"${val%%[![:space:]]*}"}"
+
+      if [[ "$val" == \"*\"* ]]; then
+        # Double-quoted value: strip outer quotes (and any trailing comment after closing quote)
+        val="${val#\"}"
+        val="${val%\"*}"
+        val="${val//\\n/$'\n'}"
+        val="${val//\\t/$'\t'}"
+        val="${val//\\\"/\"}"
+        val="${val//\\\\/\\}"
+      elif [[ "$val" == \'*\'* ]]; then
+        # Single-quoted value: literal string inside quotes
+        val="${val#\'}"
+        val="${val%\'*}"
+      else
+        # Unquoted value: strip inline # comment and trailing whitespace
+        [[ "$val" == *[[:space:]]\#* ]] && val="${val%%[[:space:]]\#*}"
+        val="${val%"${val##*[![:space:]]}"}"
+      fi
+
+      typeset -gx "${key}=${val}"
+      _DOTENV_LOADED_KEYS+=("$key")
+      loaded_now+=("$key")
+    done < "$f"
+  done
+
+  printf "\033[32m✔ Loaded %d variable(s) from %s\033[0m" "${#loaded_now[@]}" "${files[*]}"
+  if (( ${#loaded_now[@]} > 0 )); then
+    printf " \033[2m(%s)\033[0m" "${(j:, :)loaded_now}"
+  fi
+  printf "\n"
+}
+
+_dotenv() {
+  _arguments \
+    '(-l --list)'{-l,--list}'[List variables loaded by dotenv]' \
+    '(-u --unload)'{-u,--unload}'[Unset variables loaded by dotenv]' \
+    '(-h --help)'{-h,--help}'[Show usage help]' \
+    '*:env file:_files -g "(.env*|.env.*|*.env)(-.)"'
+}
+(( $+functions[compdef] )) && compdef _dotenv dotenv || true
 
