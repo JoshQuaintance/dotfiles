@@ -3,12 +3,11 @@ if [[ -z "$LANG" || "$LANG" == (C|POSIX) ]]; then
     source "${${(%):-%x}:A:h}/.zshenv"
 fi
 
-# Mobile / PRoot / Termux / SSH mobile detection: default to fast compact startup
+# Mobile / PRoot / Termux / SSH mobile detection: default to fast compact startup (0 forks)
 if [[ -n "${TERMUX_VERSION:-}" || -d "/data/data/com.termux" || -n "${PROOT_TMP_DIR:-}" ]] || \
-   [[ -n "${SSH_MOBILE:-}" ]] || \
-   [[ "${LC_TERMINAL:-}" == (Blink|Termius) || "${TERM_PROGRAM:-}" == (Blink|Termius) ]] || \
-   [[ -f /proc/version && "$(grep -iE '(android|samsung|qcom)' /proc/version 2>/dev/null)" ]] || \
-   [[ "$(uname -r 2>/dev/null)" =~ (android|Android) ]]; then
+   [[ -n "${SSH_MOBILE:-}" || "$OSTYPE" == *android* ]] || \
+   [[ "${LC_TERMINAL:-}" == (Blink|Termius|blink|termius) || "${TERM_PROGRAM:-}" == (Blink|Termius|blink|termius) ]] || \
+   [[ -r /proc/version && "${$(</proc/version):l}" == *(android|samsung|qcom)* ]]; then
     _IS_MOBILE=true
     ZSH_STARTUP_VERBOSE="${ZSH_STARTUP_VERBOSE:-false}"
 fi
@@ -171,8 +170,7 @@ _load_cached_init() {
     local bin="$1"
     local bin_cmd="$2"
     local cache="$_dot_cache_dir/${bin}.zsh"
-    local bin_path
-    bin_path="$(command -v "$bin" 2>/dev/null || true)"
+    local bin_path="${commands[$bin]:-}"
     [ -z "$bin_path" ] && return 1
 
     if [ ! -s "$cache" ] || [ "$bin_path" -nt "$cache" ]; then
@@ -206,7 +204,7 @@ _step "Shell prompt (${DOTFILES_ACTIVE_PROMPT:-active})"
 
 # NVM (Lazy-loaded fallback when Mise is not installed — saves ~800-1200ms on startup)
 export NVM_DIR="$HOME/.nvm"
-if ! command -v mise &>/dev/null && [ -s "$NVM_DIR/nvm.sh" ]; then
+if (( ! $+commands[mise] )) && [ -s "$NVM_DIR/nvm.sh" ]; then
     nvm() {
         unset -f nvm node npm npx yarn 2>/dev/null
         [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
@@ -240,7 +238,7 @@ _load_cached_init "atuin" "atuin init zsh"
 _load_cached_init "zoxide" "zoxide init zsh"
 
 # FZF (Fuzzy finder integration & Catppuccin Mocha theme)
-if command -v fzf &>/dev/null; then
+if (( $+commands[fzf] )); then
     # Catppuccin Mocha color palette & ergonomics
     export FZF_DEFAULT_OPTS=" \
     --color=bg+:#313244,bg:#1e1e2e,spinner:#f5e0dc,hl:#f38ba8 \
@@ -257,20 +255,20 @@ if command -v fzf &>/dev/null; then
     --bind='ctrl-j:down,ctrl-k:up,ctrl-d:half-page-down,ctrl-u:half-page-up'"
 
     # Fast file discovery via fd (includes hidden files, excludes .git)
-    if command -v fd &>/dev/null; then
+    if (( $+commands[fd] )); then
         export FZF_DEFAULT_COMMAND="fd --hidden --strip-cwd-prefix --exclude .git"
         export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
         export FZF_ALT_C_COMMAND="fd --type=d --hidden --strip-cwd-prefix --exclude .git"
     fi
 
     # Interactive previews for Ctrl-T (files) and Alt-C (directories)
-    if command -v bat &>/dev/null; then
+    if (( $+commands[bat] )); then
         export FZF_CTRL_T_OPTS="--preview 'if [ -d {} ]; then eza --tree --level=2 --color=always {} 2>/dev/null; else bat --style=numbers --color=always --line-range :300 {} 2>/dev/null; fi'"
-    elif command -v eza &>/dev/null; then
+    elif (( $+commands[eza] )); then
         export FZF_CTRL_T_OPTS="--preview 'if [ -d {} ]; then eza --tree --level=2 --color=always {} 2>/dev/null; fi'"
     fi
 
-    if command -v eza &>/dev/null; then
+    if (( $+commands[eza] )); then
         export FZF_ALT_C_OPTS="--preview 'eza --tree --level=2 --color=always {} 2>/dev/null'"
     fi
 
@@ -294,11 +292,11 @@ if command -v fzf &>/dev/null; then
         "${XDG_DATA_HOME:-$HOME/.local/share}/fzf-tab/fzf-tab.zsh"; do
         if [ -f "$_fzf_tab" ]; then
             source "$_fzf_tab"
-            if command -v eza &>/dev/null; then
+            if (( $+commands[eza] )); then
                 zstyle ':fzf-tab:complete:cd:*' fzf-preview 'eza -1 --color=always $realpath 2>/dev/null'
                 zstyle ':fzf-tab:complete:z:*' fzf-preview 'eza -1 --color=always $realpath 2>/dev/null'
             fi
-            if command -v bat &>/dev/null; then
+            if (( $+commands[bat] )); then
                 zstyle ':fzf-tab:complete:*:*' fzf-preview 'if [ -f "$realpath" ]; then bat --style=plain --color=always --line-range :50 "$realpath" 2>/dev/null; elif [ -d "$realpath" ]; then eza -1 --color=always "$realpath" 2>/dev/null; fi'
             fi
             zstyle ':fzf-tab:*' switch-group '<' '>'

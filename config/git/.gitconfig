@@ -33,7 +33,11 @@
     algorithm = histogram
     renames = true
     mnemonicPrefix = true
+    interHunkContext = 3
     submodule = log
+
+[feature]
+    manyFiles = true
 
 [status]
     submoduleSummary = true

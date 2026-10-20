@@ -20,15 +20,13 @@ _dotfiles_detect_prompt() {
     # Evaluated before persistent desktop ~/.config/dotfiles/prompt so remote mobile SSH connections
     # always auto-select native prompt to prevent fork latency, async worker stalls, and battery drain.
     local is_mobile=0
-    if [[ "${_IS_MOBILE:-false}" == true || -n "${SSH_MOBILE:-}" ]]; then
+    if [[ "${_IS_MOBILE:-false}" == true || -n "${SSH_MOBILE:-}" || "$OSTYPE" == *android* ]]; then
         is_mobile=1
     elif [[ "${LC_TERMINAL:-}" == (Blink|Termius|blink|termius) || "${TERM_PROGRAM:-}" == (Blink|Termius|blink|termius) ]]; then
         is_mobile=1
     elif [[ -n "${TERMUX_VERSION:-}" || -d "/data/data/com.termux" || -n "${PROOT_TMP_DIR:-}" ]]; then
         is_mobile=1
-    elif [[ -f /proc/version ]] && grep -qiE '(android|samsung|qcom)' /proc/version 2>/dev/null; then
-        is_mobile=1
-    elif [[ "$(uname -r 2>/dev/null)" =~ (android|Android) ]]; then
+    elif [[ -r /proc/version && "${$(</proc/version):l}" == *(android|samsung|qcom)* ]]; then
         is_mobile=1
     fi
 
@@ -40,9 +38,8 @@ _dotfiles_detect_prompt() {
     # 3. Explicit user preference file (~/.config/dotfiles/prompt) for desktop / standard sessions
     local pref_file="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/prompt"
     if [[ -f "$pref_file" ]]; then
-        local chosen
-        chosen="$(tr -d '[:space:]' < "$pref_file")"
-        if [[ "$chosen" =~ ^(native|spaceship)$ ]]; then
+        local chosen="${$(<"$pref_file")//[[:space:]]/}"
+        if [[ "$chosen" == (native|spaceship) ]]; then
             echo "$chosen"
             return 0
         fi

@@ -4,6 +4,10 @@
 ## Run the selected command immediately instead of placing it on the prompt
 enter_accept = true
 
+## Sync with Zsh Vi-mode cursor (ESC -> j/k navigation) and render a clean compact frame
+keymap_mode = "auto"
+style = "compact"
+
 ## Fuzzy search served by the background daemon (started on demand)
 search_mode = "daemon-fuzzy"
 
