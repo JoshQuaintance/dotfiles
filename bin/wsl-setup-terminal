@@ -68,18 +68,29 @@ if [ ! -f "$TEMPLATE_FILE" ]; then
   exit 1
 fi
 
-# Safely merge canonical template into Windows Terminal settings.json using Python
+# Safely merge canonical template into Windows Terminal settings.json (supports JSONC comments/trailing commas)
 python3 - "$SETTINGS_FILE" "$TEMPLATE_FILE" <<'EOF'
 import json
+import re
 import sys
 
 settings_path, template_path = sys.argv[1], sys.argv[2]
 
+
+def parse_jsonc(raw: str) -> dict:
+    # Strip // line comments and /* */ block comments outside double-quoted strings
+    token_re = re.compile(r'"(?:\\.|[^"\\])*"|//[^\n]*|/\*[\s\S]*?\*/')
+    stripped = token_re.sub(lambda m: m.group(0) if m.group(0).startswith('"') else "", raw)
+    # Strip trailing commas before } or ]
+    cleaned = re.sub(r",(\s*[}\]])", r"\1", stripped)
+    return json.loads(cleaned)
+
+
 try:
     with open(settings_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+        data = parse_jsonc(f.read())
     with open(template_path, "r", encoding="utf-8") as f:
-        template = json.load(f)
+        template = parse_jsonc(f.read())
 except Exception as e:
     print(f"\033[38;2;243;139;168m[ERROR]\033[0m Failed to parse JSON: {e}", file=sys.stderr)
     sys.exit(1)

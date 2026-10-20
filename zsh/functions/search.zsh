@@ -173,19 +173,22 @@ fenv() {
   _fzf_vim_mode "🌎 Environment > " "$hdr" "copy value" "y,n,e" "$query"
 
   local preview_cmd='
-    k=$(echo {1} | sed "s/\x1b\[[0-9;]*m//g" | tr -d " ")
+    k=$(printf "%s" {1} | sed "s/\x1b\[[0-9;]*[a-zA-Z]//g; s/ //g")
     v=$(printenv "$k" 2>/dev/null)
     printf "\033[1;38;2;203;166;247m%s\033[0m \033[2m(%d chars)\033[0m\n" "$k" "${#v}"
     printf "\033[38;2;108;112;134m────────────────────────────────────────────────────────\033[0m\n"
     if [[ "$k" == *PATH* ]] || [[ "$v" == /*:* ]]; then
-      echo "$v" | tr ":" "\n" | awk "{
-        cmd = \"test -e \\\"\" \$0 \"\\\"\"
-        if (system(cmd) == 0) {
-          printf \"%2d. \033[32m✔\033[0m %s\n\", NR, \$0
-        } else {
-          printf \"%2d. \033[31m✖\033[0m \033[2m%s (missing)\033[0m\n\", NR, \$0
-        }
-      }"
+      i=1
+      IFS=":"
+      for entry in $v; do
+        [ -z "$entry" ] && continue
+        if [ -e "$entry" ]; then
+          printf "%2d. \033[32m✔\033[0m %s\n" "$i" "$entry"
+        else
+          printf "%2d. \033[31m✖\033[0m \033[2m%s (missing)\033[0m\n" "$i" "$entry"
+        fi
+        i=$((i + 1))
+      done
     else
       printf "%s\n" "$v"
     fi
@@ -312,6 +315,8 @@ fjq() {
 
   local tmp_json=""
   local json_file=""
+  setopt localoptions localtraps
+  trap '[ -n "$tmp_json" ] && command rm -f -- "$tmp_json"' EXIT INT TERM
   if [ -n "$1" ]; then
     if [ ! -f "$1" ]; then
       printf "\033[31m✖ File not found: %s\033[0m\n" "$1" >&2

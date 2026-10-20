@@ -158,10 +158,10 @@ autoload -Uz add-zsh-hook
 
 _vi_mode_preexec_separator() {
   if (( _vi_mode_used_v )) || [[ "$1" == *$'\n'* ]]; then
-    local cols="${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
+    local cols="${COLUMNS:-80}"
     (( cols < 10 )) && cols=80
-    # Catppuccin Mocha surface1 (#45475a) subtle horizontal rule
-    printf "\033[38;2;69;71;90m%*s\033[0m\n" "$cols" '' | tr ' ' '─'
+    # Catppuccin Mocha surface1 (#45475a) subtle horizontal rule (0-fork pure Zsh UTF-8 repeat)
+    print -r -- $'\e[38;2;69;71;90m'"${(l:$cols::─:):-}"$'\e[0m'
     _vi_mode_used_v=0
   fi
 }
