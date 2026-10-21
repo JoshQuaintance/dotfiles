@@ -26,8 +26,10 @@ alias kp="fkill" # Interactive process & port killer
 alias fport="port" # Interactive listening port inspector & killer
 alias fbrew="fpkg" # Interactive Homebrew, Mise & system package inspector
 alias bigfiles="fsize" # Interactive directory size & large-file hunter
-alias netinfo="fnet" # Cross-platform network, DNS, VPN & latency diagnostic card
-alias hashfile="fhash" # Multi-digest file checksum & integrity verifier
+alias fnet="netinfo" # Cross-platform network, DNS, VPN & latency diagnostic card
+alias hashfile="checksum" # Multi-digest file checksum & integrity verifier
+alias fhash="checksum" # Multi-digest file checksum & integrity verifier
+alias f="," # Interactive Dotfiles Command Palette & comma-prefix launcher
 alias dps="fcon" # Interactive Docker/Podman container manager
 alias cheat="cheath" # Interactive tldr cheat-sheet browser
 if command -v tokei &>/dev/null; then

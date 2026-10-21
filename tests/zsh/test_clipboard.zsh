@@ -100,33 +100,43 @@ test_lastout_captures_to_stdout_and_scratchpad() {
   assert_contains "$(<"$daily_file")" "scratch-line-456"
 }
 
-test_fhash_verifies_checksum_and_detects_clipboard_digest() {
+test_checksum_verifies_digest_and_detects_clipboard_digest() {
   _stub_clipboard
   printf "dotfiles-integrity-check" > "$HOME/sample.bin"
   local expected_sha256
   expected_sha256="$(python3 -c 'import hashlib; print(hashlib.sha256(b"dotfiles-integrity-check").hexdigest())')"
 
   local out
-  out="$(fhash "$HOME/sample.bin" "$expected_sha256" | strip_ansi)"
+  out="$(checksum "$HOME/sample.bin" "$expected_sha256" | strip_ansi)"
   assert_contains "$out" "MATCH"
   assert_contains "$out" "Checksum verified (SHA-256 matched argument)"
 
-  # Auto-match against clipboard when no 2nd argument is passed
+  # Auto-match against clipboard when no 2nd argument is passed (via ,hash shorthand)
   print -rn -- "$expected_sha256" | copy
   local clip_out
-  clip_out="$(fhash "$HOME/sample.bin" | strip_ansi)"
+  clip_out="$(,hash "$HOME/sample.bin" | strip_ansi)"
   assert_contains "$clip_out" "Checksum verified (SHA-256 matched clipboard)"
 
   # Mismatch returns non-zero
   local rc=0
-  fhash "$HOME/sample.bin" "00000000000000000000000000000000" >/dev/null 2>&1 || rc=$?
+  checksum "$HOME/sample.bin" "00000000000000000000000000000000" >/dev/null 2>&1 || rc=$?
   assert_eq 1 $rc
 }
 
-test_fnet_renders_network_diagnostic_card() {
+test_netinfo_and_comma_launcher() {
   local out
-  out="$(fnet --no-ping | strip_ansi)"
-  assert_contains "$out" "Network & Connectivity Diagnostic (fnet)"
+  out="$(,net --no-ping | strip_ansi)"
+  assert_contains "$out" "Network & Connectivity Diagnostic (netinfo)"
   assert_contains "$out" "Local IPv4:"
   assert_contains "$out" "DNS Servers:"
+
+  local list_out
+  list_out="$(, -l)"
+  assert_contains "$list_out" $',net\tnetinfo\t'
+  assert_contains "$list_out" $',hash\tchecksum\t'
+  assert_contains "$list_out" $',pkg\tfpkg\t'
+  assert_contains "$list_out" $',port\tport\t'
+
+  # Direct dispatch via `, <cmd> <args...>`
+  assert_eq "hello-decode" "$(, decode 'aGVsbG8tZGVjb2Rl')"
 }

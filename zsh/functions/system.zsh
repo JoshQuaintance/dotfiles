@@ -2005,18 +2005,18 @@ PYEOF
   fi
 }
 
-# Cross-Platform Network, DNS, Tunnel & Latency Diagnostic Card (fnet / netinfo)
+# Cross-Platform Network, DNS, Tunnel & Latency Diagnostic Card (netinfo / ,net / fnet)
 # Works across macOS, Linux, and WSL
-fnet() {
+netinfo() {
   local fetch_public=false run_ping=true
   while (( $# > 0 )); do
     case "$1" in
       -h|--help)
-        printf "\033[1;38;2;137;180;250mfnet\033[0m (alias: \033[1mnetinfo\033[0m) — Cross-platform network, DNS, VPN & latency diagnostic card\n\n"
+        printf "\033[1;38;2;137;180;250mnetinfo\033[0m (aliases: \033[1m,net\033[0m, \033[1mfnet\033[0m) — Cross-platform network, DNS, VPN & latency diagnostic card\n\n"
         printf "\033[1mUsage:\033[0m\n"
-        printf "  fnet                 Show active interface, LAN IP, gateway, DNS, VPN tunnels & ping\n"
-        printf "  fnet -p, --public    Also query external public IP address\n"
-        printf "  fnet --no-ping       Skip 1.1.1.1 latency probe\n"
+        printf "  netinfo              Show active interface, LAN IP, gateway, DNS, VPN tunnels & ping\n"
+        printf "  netinfo -p, --public Also query external public IP address\n"
+        printf "  netinfo --no-ping    Skip 1.1.1.1 latency probe\n"
         return 0
         ;;
       -p|--public) fetch_public=true; shift ;;
@@ -2065,7 +2065,7 @@ fnet() {
   fi
 
   printf "\n\033[1;38;2;137;180;250m╭────────────────────────────────────────────────────────╮\033[0m\n"
-  printf "\033[1;38;2;137;180;250m│\033[0m  \033[1m🌐 Network & Connectivity Diagnostic (fnet)\033[0m           \033[1;38;2;137;180;250m│\033[0m\n"
+  printf "\033[1;38;2;137;180;250m│\033[0m  \033[1m🌐 Network & Connectivity Diagnostic (netinfo)\033[0m        \033[1;38;2;137;180;250m│\033[0m\n"
   printf "\033[1;38;2;137;180;250m╰────────────────────────────────────────────────────────╯\033[0m\n\n"
   printf "  \033[1;38;2;203;166;247mHostname:\033[0m     %s\n" "${HOST:-$(hostname 2>/dev/null)}"
   printf "  \033[1;38;2;203;166;247mInterface:\033[0m    %s\n" "${iface:-unknown}"
@@ -2086,22 +2086,22 @@ fnet() {
   printf "\n"
 }
 
-# File Checksum & Integrity Verifier (fhash / hashfile)
+# File Checksum & Integrity Verifier (checksum / ,hash / hashfile / fhash)
 # Computes MD5, SHA-1, SHA-256, and SHA-512 in a single pass and compares against an expected
 # hash (or auto-detects a hex digest in the system clipboard).
 # Usage:
-#   fhash <file> [expected_hash]
-#   fhash -c <file>              -> Copy SHA-256 hash to clipboard
-fhash() {
+#   checksum <file> [expected_hash]
+#   checksum -c <file>           -> Copy SHA-256 hash to clipboard
+checksum() {
   local copy_sha256=false
   while (( $# > 0 )); do
     case "$1" in
       -h|--help)
-        printf "\033[1;38;2;249;226;175mfhash\033[0m (alias: \033[1mhashfile\033[0m) — Multi-digest file checksum & integrity verifier\n\n"
+        printf "\033[1;38;2;249;226;175mchecksum\033[0m (aliases: \033[1m,hash\033[0m, \033[1mhashfile\033[0m, \033[1mfhash\033[0m) — Multi-digest file checksum & integrity verifier\n\n"
         printf "\033[1mUsage:\033[0m\n"
-        printf "  fhash <file>                 Compute MD5, SHA-1, SHA-256 & SHA-512 (auto-checks clipboard digest)\n"
-        printf "  fhash <file> <expected_hex>  Verify file against expected checksum\n"
-        printf "  fhash -c, --copy <file>      Also copy SHA-256 digest to clipboard\n"
+        printf "  checksum <file>                 Compute MD5, SHA-1, SHA-256 & SHA-512 (auto-checks clipboard digest)\n"
+        printf "  checksum <file> <expected_hex>  Verify file against expected checksum\n"
+        printf "  checksum -c, --copy <file>      Also copy SHA-256 digest to clipboard\n"
         return 0
         ;;
       -c|--copy)
@@ -2121,7 +2121,7 @@ fhash() {
   local file="$1"
   local expected="${2:-}"
   if [[ -z "$file" ]]; then
-    printf "\033[33mUsage: fhash [-c] <file> [expected_hash]\033[0m\n" >&2
+    printf "\033[33mUsage: checksum [-c] <file> [expected_hash]\033[0m\n" >&2
     return 1
   fi
   if [[ ! -f "$file" ]]; then

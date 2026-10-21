@@ -6,9 +6,10 @@ ZSH_FUNCTIONS_DIR="${0:A:h}/functions"
 # Canonical registry of all user-facing custom dotfiles shell functions
 # Consumed by 'fa' (search.zsh) and the deep runtime test suite (cli/test.py)
 typeset -ga DOTFILES_FUNCTIONS=(
+  ,
   take d up tree lt groot gmain proj wpath wcd
   conf dotbranch clone
-  port fkill fcon fssh dotenv fpkg decode fsize fknown termtest fnet fhash
+  port fkill fcon fssh dotenv fpkg decode fsize fknown termtest netinfo checksum
   wt gwtnew gwtenv gwts gwtdel gwtclean
   gbclean gstash ga gfile gl gco gsearch
   y copy clippaste clip lastout scratch extract pack
@@ -186,4 +187,26 @@ if [ -d "$ZSH_FUNCTIONS_DIR" ]; then
 
   [ "$_aliases_were_active" = true ] && setopt ALIASES
   unset _aliases_were_active
+
+  # Register comma-prefixed (,<cmd>) wrapper functions for all custom dotfiles commands
+  # so typing `,<Tab>` or `,<cmd>` works universally with zero OS binary collisions.
+  local _fn
+  for _fn in "${DOTFILES_FUNCTIONS[@]}"; do
+    [[ "$_fn" == "," ]] && continue
+    if (( $+functions[$_fn] )); then
+      functions[,$_fn]="\"$_fn\" \"\$@\""
+      if [[ "$_fn" == f?* ]]; then
+        functions[,${_fn#f}]="\"$_fn\" \"\$@\""
+      fi
+    fi
+  done
+  unset _fn
+  functions[,net]='netinfo "$@"'
+  functions[,hash]='checksum "$@"'
+  functions[,brew]='fpkg "$@"'
+  functions[,cheat]='cheath "$@"'
+  functions[,branch]='dotbranch "$@"'
+  functions[,autols]='toggle-autols "$@"'
+  functions[,autonotify]='toggle-autonotify "$@"'
+  functions[,dot]='dot "$@"'
 fi
