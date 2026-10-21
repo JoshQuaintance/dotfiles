@@ -1,0 +1,51 @@
+# Lefthook pre-commit configuration (https://github.com/evilmartians/lefthook)
+# Runs fast, parallel static checks on staged files before each commit.
+
+pre-commit:
+  parallel: true
+  commands:
+    ruff:
+      glob: "cli/*.py"
+      env:
+        PATH: "$HOME/.local/share/mise/shims:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+      run: ruff check {staged_files}
+
+    shellcheck:
+      glob: "{bin/*,install/*.sh,install.sh}"
+      env:
+        PATH: "$HOME/.local/share/mise/shims:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+      run: |
+        scripts=()
+        for f in {staged_files}; do
+          head -1 "$f" | grep -qE '^#!.*(bash|/sh)' && scripts+=("$f")
+        done
+        [ "${#scripts[@]}" -eq 0 ] || shellcheck -S warning -e SC1090,SC1091 "${scripts[@]}"
+
+    shfmt:
+      glob: "{bin/*,install/*.sh,install.sh}"
+      env:
+        PATH: "$HOME/.local/share/mise/shims:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+      run: |
+        scripts=()
+        for f in {staged_files}; do
+          head -1 "$f" | grep -qE '^#!.*(bash|/sh)' && scripts+=("$f")
+        done
+        [ "${#scripts[@]}" -eq 0 ] || shfmt -d -i 2 -ci "${scripts[@]}"
+
+    zsh-syntax:
+      glob: "{zsh/*.zsh,zsh/functions/*.zsh,zsh/.zshrc,zsh/.zshenv,zsh/.aliases,tests/zsh/*.zsh}"
+      run: |
+        for f in {staged_files}; do
+          zsh -n "$f" || exit 1
+        done
+
+    typos:
+      env:
+        PATH: "$HOME/.local/share/mise/shims:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+      run: typos {staged_files}
+
+    actionlint:
+      glob: ".github/workflows/*.yml"
+      env:
+        PATH: "$HOME/.local/share/mise/shims:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+      run: actionlint

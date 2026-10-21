@@ -1,0 +1,17 @@
+# Spell-checker configuration for typos-cli (https://github.com/crate-ci/typos)
+# Excludes intentional shell/Neovim commands, ANSI escape sequences, and file-extension tables.
+
+[default.extend-words]
+als = "als"
+ba = "ba"
+cpy = "cpy"
+edn = "edn"
+enew = "enew"
+mport = "mport"
+odf = "odf"
+pn = "pn"
+styl = "styl"
+windo = "windo"
+
+[default.extend-identifiers]
+Pn = "Pn"

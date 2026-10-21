@@ -93,6 +93,9 @@ def get_cli_tool_manifest() -> list[ToolEntry]:
         ToolEntry("shfmt",      "shfmt shell formatter",          ["shfmt", "--version"],      "shfmt"),
         ToolEntry("trash",      "trash (del alias)",              ["sh", "-c", "command -v trash"]),
         ToolEntry("uv",         "uv Astral Python manager",       ["uv", "--version"]),
+        ToolEntry("lefthook",   "lefthook git hooks manager",     ["lefthook", "version"]),
+        ToolEntry("typos",      "typos source spell checker",     ["typos", "--version"]),
+        ToolEntry("actionlint", "actionlint workflow linter",     ["actionlint", "--version"]),
     ]
 
 

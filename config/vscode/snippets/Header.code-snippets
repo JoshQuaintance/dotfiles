@@ -28,7 +28,7 @@
 		"description": "File header"
 	},
 	"File Header JS-Like": {
-		"scope": "javscript, typescript, css",
+		"scope": "javascript, typescript, css",
 		"prefix": "fileHead",
 		"body": [
 			"/**",

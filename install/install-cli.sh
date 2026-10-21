@@ -431,4 +431,9 @@ if [ -d "$DOTFILES_DIR/bin" ]; then
   ln -sf "$DOTFILES_DIR/bin/dottest" "$HOME/.local/bin/.dottest"
 fi
 
+# Register git pre-commit hooks when lefthook is available in a git checkout
+if [ -d "$DOTFILES_DIR/.git" ] && [ -f "$DOTFILES_DIR/lefthook.yml" ] && command -v lefthook &>/dev/null; then
+  (cd "$DOTFILES_DIR" && lefthook install -f >/dev/null 2>&1) || true
+fi
+
 success "All Core CLI utilities & shell tools configured successfully!"

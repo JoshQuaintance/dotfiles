@@ -78,6 +78,16 @@ jobs:
           done
           shfmt -d -i 2 -ci "${scripts[@]}"
 
+      - name: Spell Check Repository (typos)
+        run: |
+          pipx run "typos==1.51.*"
+
+      - name: Lint GitHub Actions Workflows (actionlint)
+        run: |
+          curl -fsSL https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            | sudo tar -xz -C /usr/local/bin actionlint
+          actionlint
+
       - name: Zsh Function Unit Tests
         run: |
           zsh tests/zsh/run.zsh

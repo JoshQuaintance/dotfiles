@@ -6,6 +6,7 @@ line-length = 120
 [lint]
 select = [
     "E4", "E7", "E9", "F",  # pyflakes & pycodestyle errors
+    "W",                    # pycodestyle warnings
     "I",                    # import order
     "UP",                   # pyupgrade (bounded by target-version)
     "B",                    # bugbear
@@ -14,4 +15,15 @@ select = [
     "BLE",                  # blind except
     "PLW1510",              # subprocess.run without explicit check=
     "S110", "S112",         # silent try/except/pass|continue
+    "C90",                  # mccabe cyclomatic complexity
+    "PLR09",                # pylint complexity limits (branches, statements, args)
 ]
+
+[lint.mccabe]
+max-complexity = 26
+
+[lint.pylint]
+max-branches = 36
+max-statements = 100
+max-returns = 8
+max-args = 7

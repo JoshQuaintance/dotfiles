@@ -32,11 +32,14 @@ fi
 # 2. Symlink Mise Configuration
 link_dotfile "config/mise/config.toml" "$HOME/.config/mise/config.toml"
 
-# 3. Install every runtime pinned in config/mise/config.toml (node, python, bun, uv, ruff)
+# 3. Install every runtime pinned in config/mise/config.toml (node, python, bun, uv, ruff, lefthook, typos, actionlint)
 if command -v mise &>/dev/null; then
   log "Installing pinned runtimes via mise..."
   mise install -y
   success "mise runtimes installed: $(mise ls --current 2>/dev/null | awk '{print $1"@"$2}' | tr '\n' ' ')"
+  if [ -d "$DOTFILES_DIR/.git" ] && [ -f "$DOTFILES_DIR/lefthook.yml" ]; then
+    (cd "$DOTFILES_DIR" && mise exec -- lefthook install -f >/dev/null 2>&1) || true
+  fi
 fi
 
 success "Mise setup complete!"
