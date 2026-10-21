@@ -20,10 +20,10 @@ select = [
 ]
 
 [lint.mccabe]
-max-complexity = 26
+max-complexity = 10
 
 [lint.pylint]
-max-branches = 36
-max-statements = 100
-max-returns = 8
+max-branches = 12
+max-statements = 50
+max-returns = 6
 max-args = 7

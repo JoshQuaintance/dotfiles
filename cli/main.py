@@ -123,57 +123,50 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _dispatch_command(args: argparse.Namespace) -> int:
+    """Dispatch parsed CLI arguments to the corresponding subcommand runner."""
+    cmd = args.subcommand or "status"
+    handlers = {
+        "status": lambda a: run_status(),
+        "doctor": lambda a: run_doctor(fix=a.fix),
+        "health": lambda a: run_doctor(fix=a.fix),
+        "link": lambda a: run_doctor(fix=a.fix),
+        "env": lambda a: run_env_audit(show_all_path=a.all),
+        "test": lambda a: run_tests(),
+        "prompt": lambda a: run_prompt_command(subcommand=a.action, value=a.engine),
+        "bench": lambda a: run_bench(
+            iterations=a.iterations,
+            test_prompt=a.prompt,
+            test_tools=a.tools,
+            test_all=a.all,
+        ),
+        "sync": lambda a: run_sync(
+            message=a.message,
+            dry_run=a.dry_run,
+            auto_push=not a.no_push,
+        ),
+        "clean": lambda a: run_clean(dry_run=a.dry_run, clean_all=a.all, clean_builds=a.builds),
+        "prune": lambda a: run_prune(ref=a.ref, dry_run=a.dry_run, orphans=a.orphans),
+        "update": lambda a: run_update(
+            check_only=a.check,
+            auto_apply=a.yes,
+            update_all=a.all,
+            tools_only=a.tools,
+            test_after=a.test,
+            prune=not a.no_prune,
+        ),
+        "backup": lambda a: run_backup(output_path=a.output, dry_run=a.dry_run, list_only=a.list),
+        "restore": lambda a: run_restore(archive_path=a.archive, dry_run=a.dry_run),
+    }
+    handler = handlers.get(cmd, lambda _a: run_status())
+    return handler(args)
+
+
 def main() -> None:
+    """Entry point for the `dot` workstation CLI."""
     parser = build_parser()
     args = parser.parse_args()
-    cmd = args.subcommand or "status"
-
-    if cmd == "status":
-        sys.exit(run_status())
-    elif cmd in ("doctor", "health", "link"):
-        sys.exit(run_doctor(fix=args.fix))
-    elif cmd == "env":
-        sys.exit(run_env_audit(show_all_path=args.all))
-    elif cmd == "test":
-        sys.exit(run_tests())
-    elif cmd == "prompt":
-        sys.exit(run_prompt_command(subcommand=args.action, value=args.engine))
-    elif cmd == "bench":
-        sys.exit(
-            run_bench(
-                iterations=args.iterations,
-                test_prompt=args.prompt,
-                test_tools=args.tools,
-                test_all=args.all,
-            )
-        )
-    elif cmd == "sync":
-        sys.exit(
-            run_sync(
-                message=args.message,
-                dry_run=args.dry_run,
-                auto_push=not args.no_push,
-            )
-        )
-    elif cmd == "clean":
-        sys.exit(run_clean(dry_run=args.dry_run, clean_all=args.all, clean_builds=args.builds))
-    elif cmd == "prune":
-        sys.exit(run_prune(ref=args.ref, dry_run=args.dry_run, orphans=args.orphans))
-    elif cmd == "update":
-        sys.exit(
-            run_update(
-                check_only=args.check,
-                auto_apply=args.yes,
-                update_all=args.all,
-                tools_only=args.tools,
-                test_after=args.test,
-                prune=not args.no_prune,
-            )
-        )
-    elif cmd == "backup":
-        sys.exit(run_backup(output_path=args.output, dry_run=args.dry_run, list_only=args.list))
-    elif cmd == "restore":
-        sys.exit(run_restore(archive_path=args.archive, dry_run=args.dry_run))
+    sys.exit(_dispatch_command(args))
 
 
 if __name__ == "__main__":

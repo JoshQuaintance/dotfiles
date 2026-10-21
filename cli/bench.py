@@ -68,22 +68,11 @@ def benchmark_tools(dotfiles: Path) -> None:
         print(f"  {label:<20} {modern_bin}: {C_CYAN}{avg_mod:5.1f}ms{C_RESET} │ {legacy_bin}: {C_DIM}{avg_leg:5.1f}ms{C_RESET} │ {speedup_str}")
 
 
-def run_bench(
-    iterations: int = 5,
-    test_prompt: bool = False,
-    test_tools: bool = False,
-    test_all: bool = False,
-) -> int:
-    dotfiles = get_dotfiles_dir()
-
-    if not shutil.which("zsh"):
-        print(f"{C_RED}{ICON_FAIL} zsh binary not found in PATH.{C_RESET}")
-        return 1
-
-    iterations = max(1, min(iterations, 25))
-
-    print_header("Dotfiles Unified Benchmark Suite — Profiler & Diagnostics")
-
+def _measure_boot_runs(
+    dotfiles: Path,
+    iterations: int,
+) -> tuple[list[float], list[str], dict[str, list[float]]]:
+    """Run interactive Zsh boot `iterations` times and collect total + per-step timings."""
     env = os.environ.copy()
     env["DOTFILES_DIR"] = str(dotfiles)
     env["ZSH_STARTUP_VERBOSE"] = "true"
@@ -125,6 +114,16 @@ def run_bench(
         color = C_GREEN if elapsed_ms < 250 else (C_YELLOW if elapsed_ms < 350 else C_RED)
         print(f"  {C_DIM}Run #{i:<2}{C_RESET}  {color}{elapsed_ms:6.1f}ms{C_RESET}")
 
+    return run_totals, step_order, step_samples
+
+
+def _render_boot_results(
+    iterations: int,
+    run_totals: list[float],
+    step_order: list[str],
+    step_samples: dict[str, list[float]],
+) -> None:
+    """Render latency summary statistics and per-phase ASCII bar breakdown."""
     min_ms = min(run_totals)
     max_ms = max(run_totals)
     median_ms = statistics.median(run_totals)
@@ -139,19 +138,39 @@ def run_bench(
         f"{C_DIM}\u2502{C_RESET}  {C_BOLD}Max:{C_RESET} {max_ms:.1f}ms"
     )
 
-    if step_order:
-        print(f"\n{C_BOLD}3. Per-Phase Breakdown (Average across {iterations} runs){C_RESET}")
-        step_avgs = {name: statistics.mean(step_samples[name]) for name in step_order}
-        total_step_ms = sum(step_avgs.values()) or 1.0
-        bar_width = 20
+    if not step_order:
+        return
 
-        for name in step_order:
-            avg_ms = step_avgs[name]
-            pct = (avg_ms / total_step_ms) * 100.0
-            filled = round((avg_ms / total_step_ms) * bar_width)
-            filled = max(0, min(bar_width, filled))
-            bar = (f"{C_MAUVE}" + ("\u2588" * filled) + f"{C_DIM}" + ("\u2591" * (bar_width - filled)) + f"{C_RESET}")
-            print(f"  {name:<42} {bar} {C_BLUE}{avg_ms:5.1f}ms{C_RESET} {C_DIM}({pct:4.1f}%){C_RESET}")
+    print(f"\n{C_BOLD}3. Per-Phase Breakdown (Average across {iterations} runs){C_RESET}")
+    step_avgs = {name: statistics.mean(step_samples[name]) for name in step_order}
+    total_step_ms = sum(step_avgs.values()) or 1.0
+    bar_width = 20
+
+    for name in step_order:
+        avg_ms = step_avgs[name]
+        pct = (avg_ms / total_step_ms) * 100.0
+        filled = max(0, min(bar_width, round((avg_ms / total_step_ms) * bar_width)))
+        bar = f"{C_MAUVE}" + ("\u2588" * filled) + f"{C_DIM}" + ("\u2591" * (bar_width - filled)) + f"{C_RESET}"
+        print(f"  {name:<42} {bar} {C_BLUE}{avg_ms:5.1f}ms{C_RESET} {C_DIM}({pct:4.1f}%){C_RESET}")
+
+
+def run_bench(
+    iterations: int = 5,
+    test_prompt: bool = False,
+    test_tools: bool = False,
+    test_all: bool = False,
+) -> int:
+    dotfiles = get_dotfiles_dir()
+
+    if not shutil.which("zsh"):
+        print(f"{C_RED}{ICON_FAIL} zsh binary not found in PATH.{C_RESET}")
+        return 1
+
+    iterations = max(1, min(iterations, 25))
+    print_header("Dotfiles Unified Benchmark Suite — Profiler & Diagnostics")
+
+    run_totals, step_order, step_samples = _measure_boot_runs(dotfiles, iterations)
+    _render_boot_results(iterations, run_totals, step_order, step_samples)
 
     if test_tools or test_all:
         benchmark_tools(dotfiles)

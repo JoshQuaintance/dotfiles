@@ -33,6 +33,12 @@ from cli.ui import (
     run_cmd,
 )
 
+JSONC_TOKEN_RE = re.compile(
+    r'"(?:\\.|[^"\\])*"'  # Double-quoted string literal
+    r"|//[^\n]*"          # Single-line // comment
+    r"|/\*[\s\S]*?\*/",   # Block /* ... */ comment
+)
+
 
 class TestReport:
     def __init__(self):
@@ -53,67 +59,20 @@ class TestReport:
         print(f"  {C_RED}✖{C_RESET} {C_BOLD}{label:<44}{C_RESET} {C_RED}{detail}{C_RESET}")
 
 
+def _strip_jsonc_comments(text: str) -> str:
+    """Strip // and /* */ comments outside JSON string literals and remove trailing commas."""
+    cleaned = JSONC_TOKEN_RE.sub(lambda m: m.group(0) if m.group(0).startswith('"') else "", text)
+    return re.sub(r",(\s*[}\]])", r"\1", cleaned)
+
+
 def parse_jsonc(filepath: Path) -> dict:
     """Parse JSON with comments and trailing commas (standard VS Code JSONC format)."""
     text = filepath.read_text(encoding="utf-8")
-    result = []
-    in_string = False
-    escape = False
-    i = 0
-    n = len(text)
-
-    while i < n:
-        c = text[i]
-        if in_string:
-            result.append(c)
-            if escape:
-                escape = False
-            elif c == "\\":
-                escape = True
-            elif c == '"':
-                in_string = False
-            i += 1
-            continue
-
-        if c == '"':
-            in_string = True
-            result.append(c)
-            i += 1
-            continue
-
-        # Single-line comment //
-        if c == "/" and i + 1 < n and text[i + 1] == "/":
-            i += 2
-            while i < n and text[i] != "\n":
-                i += 1
-            continue
-
-        # Block comment /* ... */
-        if c == "/" and i + 1 < n and text[i + 1] == "*":
-            i += 2
-            while i + 1 < n and not (text[i] == "*" and text[i + 1] == "/"):
-                i += 1
-            i += 2
-            continue
-
-        result.append(c)
-        i += 1
-
-    cleaned = "".join(result)
-    # Strip trailing commas
-    while True:
-        subbed = re.sub(r",(\s*[}\]])", r"\1", cleaned)
-        if subbed == cleaned:
-            break
-        cleaned = subbed
-
-    return json.loads(cleaned)
+    return json.loads(_strip_jsonc_comments(text))
 
 
-def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
-    print(f"\n{C_BOLD}1. Configuration & Runtime Parsers{C_RESET}")
-
-    # VS Code JSONC
+def _check_json_schemas(report: TestReport, dotfiles: Path) -> None:
+    """Validate VS Code JSONC and Windows Terminal JSON settings."""
     vscode_settings = dotfiles / "config" / "vscode" / "settings.json"
     if vscode_settings.exists():
         try:
@@ -125,7 +84,6 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
     else:
         report.warn("VS Code settings (JSONC)", "File missing in repo")
 
-    # Windows Terminal settings.json
     wt_settings = dotfiles / "config" / "windows-terminal" / "settings.json"
     if wt_settings.exists():
         try:
@@ -134,17 +92,18 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
         except (OSError, ValueError) as e:
             report.fail("Windows Terminal configuration", f"Invalid JSON: {e}")
 
-    # Yazi TOML validation
+
+def _check_yazi_schemas(report: TestReport, dotfiles: Path) -> None:
+    """Validate Yazi TOML files (yazi.toml, theme.toml, keymap.toml)."""
     yazi_toml = dotfiles / "config" / "yazi" / "yazi.toml"
     theme_toml = dotfiles / "config" / "yazi" / "theme.toml"
     keymap_toml = dotfiles / "config" / "yazi" / "keymap.toml"
     if yazi_toml.exists() and theme_toml.exists():
         if tomllib:
             try:
-                tomllib.loads(yazi_toml.read_text(encoding="utf-8"))
-                tomllib.loads(theme_toml.read_text(encoding="utf-8"))
-                if keymap_toml.exists():
-                    tomllib.loads(keymap_toml.read_text(encoding="utf-8"))
+                for p in (yazi_toml, theme_toml, keymap_toml):
+                    if p.exists():
+                        tomllib.loads(p.read_text(encoding="utf-8"))
                 report.ok("Yazi configuration", "yazi.toml, theme.toml & keymap.toml valid TOML")
             except (OSError, ValueError) as e:
                 report.fail("Yazi configuration", f"TOML parse error: {e}")
@@ -153,7 +112,9 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
     else:
         report.warn("Yazi configuration", "Configs not found")
 
-    # Ghostty config validation
+
+def _check_ghostty_and_nvim(report: TestReport) -> None:
+    """Validate Ghostty terminal config and Neovim headless initialization."""
     ghostty_bin = shutil.which("ghostty")
     if not ghostty_bin and Path("/Applications/Ghostty.app/Contents/MacOS/ghostty").is_file():
         ghostty_bin = "/Applications/Ghostty.app/Contents/MacOS/ghostty"
@@ -166,51 +127,40 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
     else:
         report.warn("Ghostty terminal configuration", "ghostty not installed (skipped)")
 
-    # Neovim headless init
     if shutil.which("nvim"):
         code, _out, err = run_cmd(["nvim", "--headless", "+qa"])
-        if code == 0 and not err.strip():
-            report.ok("Neovim headless initialization", "Lua config & plugins clean")
-        elif code == 0:
-            report.ok("Neovim headless initialization", "Boots clean (minor warnings)")
+        if code == 0:
+            detail = "Lua config & plugins clean" if not err.strip() else "Boots clean (minor warnings)"
+            report.ok("Neovim headless initialization", detail)
         else:
             report.fail("Neovim headless initialization", err.splitlines()[0] if err else "Exit non-zero")
     else:
         report.warn("Neovim headless initialization", "nvim binary not found (skipped)")
 
-    # Spaceship prompt config validation
-    spaceship_cfg = dotfiles / "config" / "spaceship" / "spaceship.zsh"
-    if spaceship_cfg.exists() and shutil.which("zsh"):
-        code, _out, err = run_cmd(["zsh", "-n", str(spaceship_cfg)])
-        if code == 0:
-            report.ok("Spaceship prompt configuration", "config/spaceship/spaceship.zsh valid Zsh")
-        else:
-            report.fail("Spaceship prompt configuration", err.splitlines()[0] if err else "Syntax error")
 
-    # Unified prompt manager script validation
-    prompt_zsh = dotfiles / "zsh" / "prompt.zsh"
-    if prompt_zsh.exists() and shutil.which("zsh"):
-        code, _out, err = run_cmd(["zsh", "-n", str(prompt_zsh)])
-        if code == 0:
-            report.ok("Unified prompt manager script", "zsh/prompt.zsh valid Zsh")
-        else:
-            report.fail("Unified prompt manager script", err.splitlines()[0] if err else "Syntax error")
+def _check_cli_tool_configs(report: TestReport, dotfiles: Path) -> None:
+    """Validate Spaceship, prompt.zsh, bat, eza, mise, and .gitconfig files."""
+    for label, rel_path in (
+        ("Spaceship prompt configuration", "config/spaceship/spaceship.zsh"),
+        ("Unified prompt manager script", "zsh/prompt.zsh"),
+    ):
+        cfg = dotfiles / rel_path
+        if cfg.exists() and shutil.which("zsh"):
+            code, _out, err = run_cmd(["zsh", "-n", str(cfg)])
+            if code == 0:
+                report.ok(label, f"{rel_path} valid Zsh")
+            else:
+                report.fail(label, err.splitlines()[0] if err else "Syntax error")
 
-    # Bat syntax viewer config
     bat_config = dotfiles / "config" / "bat" / "config"
     if bat_config.exists():
         content = bat_config.read_text(encoding="utf-8")
-        if "Catppuccin Mocha" in content:
-            report.ok("Bat syntax viewer theme", "Catppuccin Mocha active")
-        else:
-            report.ok("Bat syntax viewer theme", "Config present")
+        detail = "Catppuccin Mocha active" if "Catppuccin Mocha" in content else "Config present"
+        report.ok("Bat syntax viewer theme", detail)
 
-    # Eza theme configuration
-    eza_theme = dotfiles / "config" / "eza" / "theme.yml"
-    if eza_theme.exists():
+    if (dotfiles / "config" / "eza" / "theme.yml").exists():
         report.ok("Eza theme configuration", "config/eza/theme.yml present")
 
-    # Mise config validation
     mise_toml = dotfiles / "config" / "mise" / "config.toml"
     if mise_toml.exists() and tomllib:
         try:
@@ -219,60 +169,53 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
         except (OSError, ValueError) as e:
             report.fail("Mise runtime configuration", f"Invalid TOML: {e}")
 
-    # Git config syntax validation
     gitconfig = dotfiles / "config" / "git" / ".gitconfig"
     if gitconfig.exists():
-        code, _out, err = run_cmd(["git", "config", "-f", str(gitconfig), "--list"])
+        code, _out, _err = run_cmd(["git", "config", "-f", str(gitconfig), "--list"])
         if code == 0:
             report.ok("Git configuration", ".gitconfig syntax valid")
         else:
             report.fail("Git configuration", ".gitconfig syntax error")
 
 
-def test_shell_runtime(report: TestReport, dotfiles: Path):
-    print(f"\n{C_BOLD}2. Shell Runtime & Interactive Startup{C_RESET}")
+def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
+    print(f"\n{C_BOLD}1. Configuration & Runtime Parsers{C_RESET}")
+    _check_json_schemas(report, dotfiles)
+    _check_yazi_schemas(report, dotfiles)
+    _check_ghostty_and_nvim(report)
+    _check_cli_tool_configs(report, dotfiles)
 
-    if not shutil.which("zsh"):
-        report.fail("Interactive Zsh startup", "zsh binary not found")
-        report.fail("Custom shell functions", "zsh binary not found")
-        report.fail("Completions engine", "zsh binary not found")
-        return
 
-    zsh_env = {"DOTFILES_DIR": str(dotfiles), "ZSH_STARTUP_VERBOSE": "false", "TERM": "xterm-256color"}
-
-    # Interactive boot test & stderr inspection
-    # If the first run exceeds 350ms (e.g. rebuilding .zcompdump.zwc or tool init caches),
-    # perform one warm run so cold cache generation does not trigger a false-positive warning.
+def _check_zsh_boot_and_latency(report: TestReport, zsh_env: dict[str, str]) -> None:
+    """Measure interactive Zsh boot time and verify zero stderr startup errors."""
     t0 = time.perf_counter()
-    code, out, err = run_cmd(["zsh", "-i", "+m", "-c", "exit"], timeout=10, env=zsh_env)
+    _code, _out, err = run_cmd(["zsh", "-i", "+m", "-c", "exit"], timeout=10, env=zsh_env)
     elapsed_ms = int((time.perf_counter() - t0) * 1000)
     if elapsed_ms >= 350:
         t1 = time.perf_counter()
         _c2, _o2, err2 = run_cmd(["zsh", "-i", "+m", "-c", "exit"], timeout=10, env=zsh_env)
-        warm_ms = int((time.perf_counter() - t1) * 1000)
-        elapsed_ms = min(elapsed_ms, warm_ms)
-        if not err and err2:
-            err = err2
+        elapsed_ms = min(elapsed_ms, int((time.perf_counter() - t1) * 1000))
+        err = err or err2
 
-    # Filter benign terminal warnings in headless CI
-    critical_errors = []
-    for line in err.splitlines():
-        line_clean = line.strip()
-        if re.search(r"command not found|parse error|syntax error|job table full|no such file|compinit: initialization aborted", line_clean, re.IGNORECASE):
-            critical_errors.append(line_clean)
+    err_pattern = re.compile(
+        r"command not found|parse error|syntax error|job table full|no such file|compinit: initialization aborted",
+        re.IGNORECASE,
+    )
+    critical_errors = [line.strip() for line in err.splitlines() if err_pattern.search(line.strip())]
 
     if not critical_errors:
         report.ok("Interactive Zsh startup", f"0 errors on boot ({elapsed_ms}ms)")
     else:
         report.fail("Interactive Zsh startup", critical_errors[0])
 
-    # Startup performance budget (< 350ms)
     if elapsed_ms < 350:
         report.ok("Startup latency budget (<350ms)", f"Fast boot: {elapsed_ms}ms")
     else:
         report.warn("Startup latency budget (<350ms)", f"Exceeded target: {elapsed_ms}ms")
 
-    # Custom functions check (reads canonical DOTFILES_FUNCTIONS from zsh/functions.zsh)
+
+def _check_zsh_registries_and_reload(report: TestReport, zsh_env: dict[str, str]) -> None:
+    """Verify registered functions, completions, clean reload, and namespace separation."""
     func_check_code = """
 if (( ! ${#DOTFILES_FUNCTIONS[@]} )); then
     echo "Missing function: DOTFILES_FUNCTIONS registry is empty"
@@ -284,7 +227,7 @@ for fn in "${DOTFILES_FUNCTIONS[@]}"; do
 done
 echo "COUNT:${#DOTFILES_FUNCTIONS[@]}"
 """
-    code, out, err = run_cmd(["zsh", "-i", "+m", "-c", func_check_code], timeout=5, env=zsh_env)
+    _code, out, _err = run_cmd(["zsh", "-i", "+m", "-c", func_check_code], timeout=5, env=zsh_env)
     missing_funcs = [line.strip() for line in out.splitlines() if line.startswith("Missing function:")]
     count_lines = [line.split(":", 1)[1] for line in out.splitlines() if line.startswith("COUNT:")]
     fn_count = count_lines[0] if count_lines else "all"
@@ -293,7 +236,6 @@ echo "COUNT:${#DOTFILES_FUNCTIONS[@]}"
     else:
         report.fail("Custom shell functions", missing_funcs[0])
 
-    # Completions engine
     comp_check_code = """
 for comp in _git _uv _fzf_complete _dot _conf _up _proj _dotenv _comma _wt _gwtnew _gwtdel _pkg_scripts _fjq _extract _dotbranch; do
     if ! (( $+functions[$comp] )); then
@@ -301,29 +243,24 @@ for comp in _git _uv _fzf_complete _dot _conf _up _proj _dotenv _comma _wt _gwtn
     fi
 done
 """
-    code, out, err = run_cmd(["zsh", "-i", "+m", "-c", comp_check_code], timeout=5, env=zsh_env)
+    _code, out, _err = run_cmd(["zsh", "-i", "+m", "-c", comp_check_code], timeout=5, env=zsh_env)
     missing_comps = [line.strip() for line in out.splitlines() if line.startswith("Missing completion:")]
     if not missing_comps:
-        report.ok("Completions engine", "All completions active (_git, _uv, _fzf, _dot, _conf, _up, _proj, _dotenv, _comma, _wt, _gwtn, _gwtdel, _pkg_scripts, _fjq, _extract, _dotbranch)")
+        report.ok(
+            "Completions engine",
+            "All completions active (_git, _uv, _fzf, _dot, _conf, _up, _proj, _dotenv, _comma, _wt, _gwtn, _gwtdel, _pkg_scripts, _fjq, _extract, _dotbranch)",
+        )
     else:
         report.fail("Completions engine", missing_comps[0])
 
-    # Shell reload / re-source test (guards against alias-function collisions on reload)
-    reload_code = """
-source ~/.zshrc
-"""
-    code, out, err = run_cmd(["zsh", "-i", "+m", "-c", reload_code], timeout=10, env=zsh_env)
-    reload_errors = []
-    for line in err.splitlines():
-        line_clean = line.strip()
-        if re.search(r"command not found|parse error|syntax error|defining function based on alias", line_clean, re.IGNORECASE):
-            reload_errors.append(line_clean)
+    _code, _out, err = run_cmd(["zsh", "-i", "+m", "-c", "source ~/.zshrc"], timeout=10, env=zsh_env)
+    reload_re = re.compile(r"command not found|parse error|syntax error|defining function based on alias", re.IGNORECASE)
+    reload_errors = [line.strip() for line in err.splitlines() if reload_re.search(line.strip())]
     if not reload_errors:
         report.ok("Shell reload / re-source", "0 errors on reload (source ~/.zshrc)")
     else:
         report.fail("Shell reload / re-source", reload_errors[0])
 
-    # Alias & function namespace collision check
     collision_check_code = """
 local -a collisions
 for a in ${(k)aliases}; do
@@ -333,14 +270,16 @@ for a in ${(k)aliases}; do
 done
 print -l "${collisions[@]}"
 """
-    code, out, err = run_cmd(["zsh", "-i", "+m", "-c", collision_check_code], timeout=5, env=zsh_env)
+    _code, out, _err = run_cmd(["zsh", "-i", "+m", "-c", collision_check_code], timeout=5, env=zsh_env)
     collisions = [line.strip() for line in out.splitlines() if line.strip()]
     if not collisions:
         report.ok("Alias & function namespaces", "Clean separation (0 colliding names)")
     else:
         report.fail("Alias & function namespaces", f"Colliding alias/function: {', '.join(collisions)}")
 
-    # Function runtime execution smoke test
+
+def _check_zsh_smoke_and_unit_tests(report: TestReport, dotfiles: Path, zsh_env: dict[str, str]) -> None:
+    """Run interactive CLI function smoke tests and the Zsh unit test harness."""
     smoke_test_code = f"""
 set -e
 # Universal functions
@@ -400,13 +339,12 @@ wcd -h >/dev/null
     gl -n 1 >/dev/null
 )
 """
-    code, out, err = run_cmd(["zsh", "-i", "+m", "-c", smoke_test_code], timeout=10, env=zsh_env)
+    code, _out, err = run_cmd(["zsh", "-i", "+m", "-c", smoke_test_code], timeout=10, env=zsh_env)
     if code == 0:
         report.ok("Function runtime execution", "Core custom functions run cleanly (smoke test)")
     else:
         report.fail("Function runtime execution", f"Smoke test failed (exit {code}): {err.strip()}")
 
-    # Unit tests for zsh/functions (tests/zsh/test_*.zsh)
     runner = dotfiles / "tests" / "zsh" / "run.zsh"
     if runner.is_file():
         code, out, err = run_cmd(["zsh", str(runner)], timeout=120)
@@ -418,30 +356,44 @@ wcd -h >/dev/null
             report.fail("Zsh function unit tests", f"{summary}: {', '.join(failing)[:60] or err.strip()[:60]}")
 
 
-def test_syntax_and_links(report: TestReport, dotfiles: Path):
-    print(f"\n{C_BOLD}3. Script Syntax & Link Integrity{C_RESET}")
+def test_shell_runtime(report: TestReport, dotfiles: Path):
+    print(f"\n{C_BOLD}2. Shell Runtime & Interactive Startup{C_RESET}")
 
-    # Bash scripts syntax (bash -n) & static analysis (shellcheck)
-    bash_scripts = [dotfiles / "install.sh"]
-    bash_scripts.extend((dotfiles / "install").glob("*.sh"))
-    bash_scripts.extend([p for p in (dotfiles / "bin").iterdir() if p.is_file()])
+    if not shutil.which("zsh"):
+        report.fail("Interactive Zsh startup", "zsh binary not found")
+        report.fail("Custom shell functions", "zsh binary not found")
+        report.fail("Completions engine", "zsh binary not found")
+        return
 
-    valid_bash_scripts: list[Path] = []
-    bash_failed = False
-    for script in bash_scripts:
+    zsh_env = {"DOTFILES_DIR": str(dotfiles), "ZSH_STARTUP_VERBOSE": "false", "TERM": "xterm-256color"}
+    _check_zsh_boot_and_latency(report, zsh_env)
+    _check_zsh_registries_and_reload(report, zsh_env)
+    _check_zsh_smoke_and_unit_tests(report, dotfiles, zsh_env)
+
+
+def _collect_bash_scripts(dotfiles: Path) -> list[Path]:
+    """Return all executable/installer files with a bash or sh shebang."""
+    candidates = [dotfiles / "install.sh", *(dotfiles / "install").glob("*.sh")]
+    candidates.extend(p for p in (dotfiles / "bin").iterdir() if p.is_file())
+    valid: list[Path] = []
+    for script in candidates:
         if not script.is_file():
             continue
         try:
             with open(script, encoding="utf-8", errors="ignore") as f:
-                first_line = f.readline()
-                if not re.match(r"^#!.*(bash|sh)", first_line):
-                    continue
+                if re.match(r"^#!.*(bash|sh)", f.readline()):
+                    valid.append(script)
         except (OSError, ValueError):
             continue
+    return valid
 
-        valid_bash_scripts.append(script)
-        code, _out, _err = run_cmd(["bash", "-n", str(script)])
-        if code != 0:
+
+def _check_bash_scripts_syntax_and_lint(report: TestReport, dotfiles: Path) -> None:
+    """Validate Bash syntax, ShellCheck, and shfmt formatting."""
+    valid_bash_scripts = _collect_bash_scripts(dotfiles)
+    bash_failed = False
+    for script in valid_bash_scripts:
+        if run_cmd(["bash", "-n", str(script)])[0] != 0:
             report.fail(f"Bash syntax: {script.name}", "Syntax error")
             bash_failed = True
 
@@ -468,26 +420,32 @@ def test_syntax_and_links(report: TestReport, dotfiles: Path):
         if fmt_code == 0 and not unformatted:
             report.ok("shfmt script formatting", f"All {len(valid_bash_scripts)} bash scripts formatted (-i 2 -ci)")
         else:
-            detail = f"Run 'shfmt -w -i 2 -ci': {', '.join(unformatted[:4])}" if unformatted else (fmt_err[:40] or "Formatting mismatch")
+            detail = (
+                f"Run 'shfmt -w -i 2 -ci': {', '.join(unformatted[:4])}"
+                if unformatted
+                else (fmt_err[:40] or "Formatting mismatch")
+            )
             report.fail("shfmt script formatting", detail)
 
-    # Zsh scripts syntax (zsh -n)
-    if shutil.which("zsh"):
-        zsh_scripts = [dotfiles / "zsh" / ".zshrc", dotfiles / "zsh" / ".zshenv", dotfiles / "zsh" / ".aliases"]
-        zsh_scripts.extend((dotfiles / "zsh").glob("*.zsh"))
-        zsh_scripts.extend((dotfiles / "zsh" / "functions").glob("*.zsh"))
 
-        zsh_failed = False
-        for zscript in zsh_scripts:
-            if zscript.is_file():
-                code, _out, _err = run_cmd(["zsh", "-n", str(zscript)])
-                if code != 0:
-                    report.fail(f"Zsh syntax: {zscript.name}", "Syntax error")
-                    zsh_failed = True
-        if not zsh_failed:
-            report.ok("Zsh scripts syntax", "All zsh/* and functions pass (zsh -n)")
+def _check_zsh_scripts_syntax(report: TestReport, dotfiles: Path) -> None:
+    """Validate Zsh script syntax across zsh/ and zsh/functions/."""
+    if not shutil.which("zsh"):
+        return
+    zsh_scripts = [dotfiles / "zsh" / ".zshrc", dotfiles / "zsh" / ".zshenv", dotfiles / "zsh" / ".aliases"]
+    zsh_scripts.extend((dotfiles / "zsh").glob("*.zsh"))
+    zsh_scripts.extend((dotfiles / "zsh" / "functions").glob("*.zsh"))
+    zsh_failed = False
+    for zscript in zsh_scripts:
+        if zscript.is_file() and run_cmd(["zsh", "-n", str(zscript)])[0] != 0:
+            report.fail(f"Zsh syntax: {zscript.name}", "Syntax error")
+            zsh_failed = True
+    if not zsh_failed:
+        report.ok("Zsh scripts syntax", "All zsh/* and functions pass (zsh -n)")
 
-    # Tool manifest <-> Brewfile consistency check
+
+def _check_brewfile_and_symlinks(report: TestReport, dotfiles: Path) -> None:
+    """Verify Brewfile formula parity with manifest and check for dangling symlinks."""
     brewfile = dotfiles / "Brewfile"
     if brewfile.is_file():
         brew_text = brewfile.read_text(encoding="utf-8")
@@ -502,15 +460,12 @@ def test_syntax_and_links(report: TestReport, dotfiles: Path):
         else:
             report.fail("Tool manifest & Brewfile sync", f"Missing from Brewfile: {', '.join(missing_in_brewfile)}")
 
-    # Declarative symlink integrity & dangling checks (Includes VS Code)
-    manifest = get_symlink_manifest()
     dangling: list[str] = []
-    for entry in manifest:
+    for entry in get_symlink_manifest():
         link = entry.link_path
         if link.is_symlink():
             try:
-                dest = link.resolve()
-                if not dest.exists():
+                if not link.resolve().exists():
                     dangling.append(str(link).replace(str(Path.home()), "~"))
             except (OSError, RuntimeError):
                 dangling.append(str(link).replace(str(Path.home()), "~"))
@@ -521,10 +476,15 @@ def test_syntax_and_links(report: TestReport, dotfiles: Path):
         report.fail("Symlink health", f"Dangling symlinks: {', '.join(dangling)}")
 
 
-def test_cli_architecture(report: TestReport, dotfiles: Path):
-    print(f"\n{C_BOLD}4. Python CLI Subcommands & Architecture{C_RESET}")
+def test_syntax_and_links(report: TestReport, dotfiles: Path):
+    print(f"\n{C_BOLD}3. Script Syntax & Link Integrity{C_RESET}")
+    _check_bash_scripts_syntax_and_lint(report, dotfiles)
+    _check_zsh_scripts_syntax(report, dotfiles)
+    _check_brewfile_and_symlinks(report, dotfiles)
 
-    # 1. Tool Manifest & Multi-Binary Parity (dura & 7-Zip)
+
+def _check_manifest_and_ui_primitives(report: TestReport) -> None:
+    """Verify CLI tool manifest entries and responsive UI box/row clamping."""
     manifest_tools = get_cli_tool_manifest()
     dura_entry = next((t for t in manifest_tools if t.bin_name == "dura"), None)
     sevenzip_entry = next((t for t in manifest_tools if t.brew_formula == "sevenzip"), None)
@@ -537,15 +497,12 @@ def test_cli_architecture(report: TestReport, dotfiles: Path):
     if (
         sevenzip_entry
         and hasattr(sevenzip_entry, "alt_bin_names")
-        and "7z" in sevenzip_entry.alt_bin_names
-        and "7zz" in sevenzip_entry.alt_bin_names
-        and "/usr/bin/7z" in sevenzip_entry.alt_bin_names
+        and {"7z", "7zz", "/usr/bin/7z"}.issubset(set(sevenzip_entry.alt_bin_names))
     ):
         report.ok("CLI manifest tool: 7-Zip alt names", f"Multi-binary parity: {sevenzip_entry.alt_bin_names}")
     else:
         report.fail("CLI manifest tool: 7-Zip alt names", "Missing 7z/7zz/p7zip alt_bin_names")
 
-    # 2. Terminal UI Responsive Rendering & Viewport Clamping
     box_desktop = box("Desktop Title", max_width=80)
     box_narrow = box("Extremely Long Title Designed To Exceed Narrow Terminal Width Clamping", max_width=40)
     box_min = box("Title", max_width=20)
@@ -566,7 +523,9 @@ def test_cli_architecture(report: TestReport, dotfiles: Path):
     else:
         report.fail("CLI UI rendering & viewport clamping", "Unexpected box or row formatting")
 
-    # 3. Mobile Prompt Detection & Precedence Hierarchy
+
+def _check_mobile_and_prune_policies(report: TestReport) -> None:
+    """Verify mobile/PRoot prompt auto-detection and prune cache invalidation rules."""
     clean_env = {
         "SSH_MOBILE": "",
         "_IS_MOBILE": "",
@@ -578,14 +537,15 @@ def test_cli_architecture(report: TestReport, dotfiles: Path):
     }
     mobile_checks_passed = True
     try:
-        with patch.dict(os.environ, {**clean_env, "SSH_MOBILE": "1"}):
-            assert is_mobile_or_proot() is True
-        with patch.dict(os.environ, {**clean_env, "LC_TERMINAL": "Blink"}):
-            assert is_mobile_or_proot() is True
-        with patch.dict(os.environ, {**clean_env, "LC_TERMINAL": "Termius"}):
-            assert is_mobile_or_proot() is True
-        with patch.dict(os.environ, {**clean_env, "TERM_PROGRAM": "blink"}):
-            assert is_mobile_or_proot() is True
+        for env_override in (
+            {"SSH_MOBILE": "1"},
+            {"LC_TERMINAL": "Blink"},
+            {"LC_TERMINAL": "Termius"},
+            {"TERM_PROGRAM": "blink"},
+        ):
+            with patch.dict(os.environ, {**clean_env, **env_override}):
+                assert is_mobile_or_proot() is True
+
         with patch.dict(os.environ, {**clean_env, "DOTFILES_PROMPT": "spaceship", "SSH_MOBILE": "1"}):
             engine, src = get_active_prompt()
             assert engine == "spaceship" and "DOTFILES_PROMPT" in src
@@ -600,34 +560,24 @@ def test_cli_architecture(report: TestReport, dotfiles: Path):
     else:
         report.fail("Mobile prompt detection & precedence", "Assertion failed during mobile detection")
 
-    # 4. Prune Cache Invalidation Logic
     prune_checks_passed = True
     try:
         assert COMPLETIONS_DIR == COMPLETION_DIRS
-        assert "zsh/functions/" in COMPLETION_DIRS
-        assert "zsh/completions/" in COMPLETION_DIRS
-        assert "zsh/custom/completions/" in COMPLETION_DIRS
+        assert {"zsh/functions/", "zsh/completions/", "zsh/custom/completions/"}.issubset(set(COMPLETION_DIRS))
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             zcomp = tmp_path / ".zcompdump-test"
             zcomp.touch()
             with patch.dict(os.environ, {"ZDOTDIR": str(tmp_path)}):
-                c_fn = find_stale_caches(tmp_path, {"zsh/functions/git.zsh"})
-                assert zcomp in c_fn
-                c_comp = find_stale_caches(tmp_path, {"zsh/completions/_foo"})
-                assert zcomp in c_comp
-                c_custom = find_stale_caches(tmp_path, {"zsh/custom/completions/_bar"})
-                assert zcomp in c_custom
-                c_none = find_stale_caches(tmp_path, {"config/git/.gitconfig"})
-                assert zcomp not in c_none
+                for rel_file in ("zsh/functions/git.zsh", "zsh/completions/_foo", "zsh/custom/completions/_bar"):
+                    assert zcomp in find_stale_caches(tmp_path, {rel_file})
+                assert zcomp not in find_stale_caches(tmp_path, {"config/git/.gitconfig"})
 
-                # Stale .zwc file detection
                 zwc_file = tmp_path / "zsh" / "old.zsh.zwc"
                 zwc_file.parent.mkdir(parents=True, exist_ok=True)
                 zwc_file.touch()
-                c_zwc = find_stale_caches(tmp_path, {"zsh/old.zsh"})
-                assert zwc_file in c_zwc
+                assert zwc_file in find_stale_caches(tmp_path, {"zsh/old.zsh"})
     except AssertionError:
         prune_checks_passed = False
 
@@ -636,7 +586,9 @@ def test_cli_architecture(report: TestReport, dotfiles: Path):
     else:
         report.fail("Prune cache invalidation logic", "Assertion failed during prune cache test")
 
-    # 5. CLI Subcommands Smoke Test
+
+def _check_cli_subcommand_smoke(report: TestReport) -> None:
+    """Execute read-only/dry-run smoke tests across CLI subcommands."""
     import cli.main
 
     subcommand_specs = [
@@ -665,19 +617,24 @@ def test_cli_architecture(report: TestReport, dotfiles: Path):
                 stack.enter_context(ctx)
             try:
                 cli.main.main()
-                code = 0
-                err_msg = ""
+                code, err_msg = 0, ""
             except SystemExit as e:
                 code = e.code if isinstance(e.code, int) else 0
                 err_msg = ""
             except (RuntimeError, OSError, ValueError, TypeError) as ex:
-                code = 1
-                err_msg = str(ex)
+                code, err_msg = 1, str(ex)
 
         if code == 0:
             report.ok(label, detail)
         else:
             report.fail(label, err_msg or f"Exit non-zero ({code})")
+
+
+def test_cli_architecture(report: TestReport, _dotfiles: Path):
+    print(f"\n{C_BOLD}4. Python CLI Subcommands & Architecture{C_RESET}")
+    _check_manifest_and_ui_primitives(report)
+    _check_mobile_and_prune_policies(report)
+    _check_cli_subcommand_smoke(report)
 
 
 def run_tests() -> int:
@@ -691,7 +648,10 @@ def run_tests() -> int:
     test_syntax_and_links(report, dotfiles)
     test_cli_architecture(report, dotfiles)
 
-    print(f"\n{C_BOLD}Summary:{C_RESET} {C_GREEN}{report.passed} passed{C_RESET}, {C_YELLOW}{report.warnings} warnings{C_RESET}, {C_RED}{report.failed} failed{C_RESET}\n")
+    print(
+        f"\n{C_BOLD}Summary:{C_RESET} {C_GREEN}{report.passed} passed{C_RESET}, "
+        f"{C_YELLOW}{report.warnings} warnings{C_RESET}, {C_RED}{report.failed} failed{C_RESET}\n"
+    )
 
     if report.failed > 0:
         print(f"{C_RED}✖ Test suite failed! Please review the errors above.{C_RESET}\n")
@@ -699,6 +659,7 @@ def run_tests() -> int:
 
     print(f"{C_GREEN}✔ All deep integration tests passed successfully!{C_RESET}\n")
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(run_tests())

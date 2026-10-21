@@ -43,6 +43,22 @@ def get_prompt_config_path() -> Path:
     return base / "dotfiles" / "prompt"
 
 
+def _has_android_or_proot_kernel() -> bool:
+    """Inspect /proc/version and uname release for Android or PRoot markers."""
+    try:
+        proc_ver = Path("/proc/version")
+        if proc_ver.is_file():
+            content = proc_ver.read_text(encoding="utf-8", errors="ignore").lower()
+            if any(k in content for k in ("android", "samsung", "qcom", "proot")):
+                return True
+    except OSError:
+        pass
+    try:
+        return "android" in os.uname().release.lower()
+    except AttributeError:
+        return False
+
+
 def is_mobile_or_proot() -> bool:
     """Detect mobile terminal, PRoot, Android, or mobile SSH session."""
     if os.environ.get("SSH_MOBILE") or os.environ.get("_IS_MOBILE", "").strip().lower() in ("true", "1"):
@@ -53,25 +69,14 @@ def is_mobile_or_proot() -> bool:
     if lc_term in ("blink", "termius") or term_prog in ("blink", "termius"):
         return True
 
-    if os.environ.get("TERMUX_VERSION") or Path("/data/data/com.termux").is_dir():
+    if (
+        os.environ.get("TERMUX_VERSION")
+        or os.environ.get("PROOT_TMP_DIR")
+        or Path("/data/data/com.termux").is_dir()
+    ):
         return True
-    if os.environ.get("PROOT_TMP_DIR"):
-        return True
-    try:
-        proc_ver = Path("/proc/version")
-        if proc_ver.is_file():
-            content = proc_ver.read_text(encoding="utf-8", errors="ignore").lower()
-            if any(k in content for k in ("android", "samsung", "qcom", "proot")):
-                return True
-    except OSError:
-        pass
-    try:
-        uname_r = os.uname().release.lower()
-        if "android" in uname_r:
-            return True
-    except AttributeError:
-        pass
-    return False
+
+    return _has_android_or_proot_kernel()
 
 
 def get_active_prompt() -> tuple[str, str]:
