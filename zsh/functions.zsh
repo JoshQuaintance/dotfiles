@@ -1,20 +1,42 @@
-# Interactive shell functions loader
-# Loads modular function suites from ~/.dotfiles/zsh/functions/*.zsh
+# ==============================================================================
+# Interactive Shell Functions Loader & Shared Helpers (zsh/functions.zsh)
+# ==============================================================================
+# Loads modular function suites from ~/.dotfiles/zsh/functions/*.zsh and
+# registers comma-prefixed (,<cmd>) shorthands via `zsh/functions/comma.zsh`.
 
 ZSH_FUNCTIONS_DIR="${0:A:h}/functions"
 
-# Canonical registry of all user-facing custom dotfiles shell functions
-# Consumed by 'fa' (search.zsh) and the deep runtime test suite (cli/test.py)
+# Canonical registry of all user-facing custom dotfiles shell functions.
+# Consumed by `,` (comma.zsh), `fa` (search.zsh), and the deep runtime test suite (cli/test.py).
 typeset -ga DOTFILES_FUNCTIONS=(
+  # Comma Command Palette Launcher
   ,
+
+  # Navigation, Directory Tree & WSL Path Bridge
   take d up tree lt groot gmain proj wpath wcd
+
+  # Configuration & Repository Management
   conf dotbranch clone
+
+  # System, Process, Network, Package & Diagnostic Tools
   port fkill fcon fssh dotenv fpkg decode fsize fknown termtest netinfo checksum
+
+  # Git Worktree Workflow
   wt gwtnew gwtenv gwts gwtdel gwtclean
+
+  # Interactive Git Pickers
   gbclean gstash ga gfile gl gco gsearch
+
+  # File Manager, Clipboard, Scratchpad & Archives
   y copy clippaste clip lastout scratch extract pack
+
+  # Node / Bun / pnpm Script Runners
   npmr bunr pnpmr
+
+  # Search, Environment, Cheat Sheets, Data Explorer & Snippets
   fa fenv cheath fjq snip
+
+  # Shell Hooks & Diff Utilities
   toggle-autols toggle-autonotify notify strdiff
 )
 
@@ -188,25 +210,6 @@ if [ -d "$ZSH_FUNCTIONS_DIR" ]; then
   [ "$_aliases_were_active" = true ] && setopt ALIASES
   unset _aliases_were_active
 
-  # Register comma-prefixed (,<cmd>) wrapper functions for all custom dotfiles commands
-  # so typing `,<Tab>` or `,<cmd>` works universally with zero OS binary collisions.
-  local _fn
-  for _fn in "${DOTFILES_FUNCTIONS[@]}"; do
-    [[ "$_fn" == "," ]] && continue
-    if (( $+functions[$_fn] )); then
-      functions[,$_fn]="\"$_fn\" \"\$@\""
-      if [[ "$_fn" == f?* ]]; then
-        functions[,${_fn#f}]="\"$_fn\" \"\$@\""
-      fi
-    fi
-  done
-  unset _fn
-  functions[,net]='netinfo "$@"'
-  functions[,hash]='checksum "$@"'
-  functions[,brew]='fpkg "$@"'
-  functions[,cheat]='cheath "$@"'
-  functions[,branch]='dotbranch "$@"'
-  functions[,autols]='toggle-autols "$@"'
-  functions[,autonotify]='toggle-autonotify "$@"'
-  functions[,dot]='dot "$@"'
+  # Register all comma-prefixed (,<cmd>) wrapper functions defined in zsh/functions/comma.zsh
+  (( $+functions[_comma_register_wrappers] )) && _comma_register_wrappers
 fi

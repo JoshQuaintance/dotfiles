@@ -1,12 +1,16 @@
-# Zsh Vi-Mode Configuration & Ergonomics
+# ==============================================================================
+# Zsh Vi-Mode Configuration & ZLE Ergonomics (zsh/vi-mode.zsh)
+# ==============================================================================
 
-# 1. Enable Vi keybindings for ZLE (Zsh Line Editor)
+# ------------------------------------------------------------------------------
+# 1. Core Vi Keymap & Instant Escape Response
+# ------------------------------------------------------------------------------
 bindkey -v
+export KEYTIMEOUT=1               # Reduce Esc timeout from default 400ms to 10ms
 
-# 2. Instant Esc response (reduce key timeout from default 400ms to 10ms)
-export KEYTIMEOUT=1
-
-# 3. Allow editing command line in Neovim via 'v' in Normal Mode
+# ------------------------------------------------------------------------------
+# 2. Edit Command Line in Neovim ('v' in Normal Mode)
+# ------------------------------------------------------------------------------
 autoload -Uz edit-command-line
 zle -N edit-command-line
 
@@ -19,22 +23,26 @@ _vi_mode_edit_cmd() {
 zle -N edit-command-line-wrapper _vi_mode_edit_cmd
 bindkey -M vicmd 'v' edit-command-line-wrapper
 
-# 4. Natural backspace and delete behavior across modes
+# ------------------------------------------------------------------------------
+# 3. Natural Backspace & Hybrid Insert-Mode Conveniences
+# ------------------------------------------------------------------------------
 bindkey -M viins '^?' backward-delete-char
 bindkey -M viins '^H' backward-delete-char
 bindkey -M vicmd '^?' backward-delete-char
 
-# 5. Hybrid Insert Mode Conveniences (standard editing muscle memory)
 bindkey -M viins '^A' beginning-of-line
 bindkey -M viins '^E' end-of-line
 bindkey -M viins '^K' kill-line
 bindkey -M viins '^U' backward-kill-line
 bindkey -M viins '^W' backward-kill-word
 
-# 5b. Native Vim Text-Objects (ci", da', ci(, da{) & Surround (cs, ds, ys, visual S)
+# ------------------------------------------------------------------------------
+# 4. Native Vim Text-Objects (ci", da', ci(, da{) & Surround (cs, ds, ys, S)
+# ------------------------------------------------------------------------------
 autoload -Uz select-quoted select-bracketed surround
 zle -N select-quoted
 zle -N select-bracketed
+
 for _km in visual viopp; do
   for _c in {a,i}{\',\",\`}; do
     bindkey -M $_km $_c select-quoted
@@ -44,15 +52,19 @@ for _km in visual viopp; do
   done
 done
 unset _km _c
-zle -N delete-surround surround
-zle -N add-surround surround
-zle -N change-surround surround
-bindkey -M vicmd 'cs' change-surround
-bindkey -M vicmd 'ds' delete-surround
-bindkey -M vicmd 'ys' add-surround
-bindkey -M visual 'S' add-surround
 
-# 5c. Sudo Prefix Toggle (double-Esc or Alt-s toggles 'sudo ' at start of command)
+zle -N delete-surround surround
+zle -N add-surround    surround
+zle -N change-surround surround
+
+bindkey -M vicmd  'cs' change-surround
+bindkey -M vicmd  'ds' delete-surround
+bindkey -M vicmd  'ys' add-surround
+bindkey -M visual 'S'  add-surround
+
+# ------------------------------------------------------------------------------
+# 5. Sudo Prefix Toggle (Double-Esc or Alt-s)
+# ------------------------------------------------------------------------------
 zmodload zsh/datetime 2>/dev/null || true
 typeset -gF _vi_last_esc_time=0
 
@@ -81,7 +93,9 @@ _vi_vicmd_esc() {
 zle -N _vi_vicmd_esc
 bindkey -M vicmd '\e' _vi_vicmd_esc
 
-# 5d. Inline Path & Glob Expansion (Alt-e or Ctrl-X p expands ~, $VAR, ../, symlinks, or globs to canonical path)
+# ------------------------------------------------------------------------------
+# 6. Inline Path & Glob Expansion (Alt-e or Ctrl-X p)
+# ------------------------------------------------------------------------------
 _vi_expand_path_under_cursor() {
   if [[ -z "${LBUFFER}${RBUFFER}" && -n "$BUFFER" ]]; then
     local idx="${CURSOR:-${#BUFFER}}"
@@ -132,7 +146,9 @@ bindkey -M vicmd '^[e' _vi_expand_path_under_cursor
 bindkey -M viins '^Xp' _vi_expand_path_under_cursor
 bindkey -M vicmd '^Xp' _vi_expand_path_under_cursor
 
-# 5e. Yank Command Buffer to System Clipboard (Ctrl-Y in Insert Mode, Y in Normal Mode)
+# ------------------------------------------------------------------------------
+# 7. Yank Command Buffer to System Clipboard (Ctrl-Y in Insert, Y in Normal)
+# ------------------------------------------------------------------------------
 _vi_yank_buffer_to_clipboard() {
   local buf="${BUFFER:-${LBUFFER}${RBUFFER}}"
   [[ -z "$buf" ]] && return 0
@@ -143,11 +159,12 @@ _vi_yank_buffer_to_clipboard() {
 }
 zle -N _vi_yank_buffer_to_clipboard
 bindkey -M viins '^Y' _vi_yank_buffer_to_clipboard
-bindkey -M vicmd 'Y' _vi_yank_buffer_to_clipboard
+bindkey -M vicmd 'Y'  _vi_yank_buffer_to_clipboard
 
-# 6. Re-bind Atuin or FZF interactive history search in viins
-# bindkey -v above resets the viins keymap, wiping all bindings registered by
-# atuin init zsh — restore them explicitly here.
+# ------------------------------------------------------------------------------
+# 8. Atuin / FZF Interactive History Search Bindings
+# ------------------------------------------------------------------------------
+# `bindkey -v` resets the viins keymap, wiping bindings registered by `atuin init zsh`.
 if (( $+widgets[atuin-search-viins] )); then
   bindkey -M viins '^r'    atuin-search-viins
   bindkey -M viins '^[[A'  atuin-up-search-viins
@@ -157,16 +174,18 @@ if (( $+widgets[atuin-search-viins] )); then
   bindkey -M vicmd '^[OA'  atuin-up-search-vicmd
   bindkey -M vicmd 'k'     atuin-up-search-vicmd
 elif (( $+widgets[fzf-history-widget] )); then
-  bindkey -M viins '^r'   fzf-history-widget
-  bindkey -M vicmd '/'    fzf-history-widget
+  bindkey -M viins '^r'    fzf-history-widget
+  bindkey -M vicmd '/'     fzf-history-widget
 fi
 
-# 7. Dynamic cursor shape & prompt char symbol for modern terminals (beam in insert, block in normal)
+# ------------------------------------------------------------------------------
+# 9. Dynamic Cursor Shape & Prompt Mode Indicator (Beam = Insert, Block = Normal)
+# ------------------------------------------------------------------------------
 function _vi_mode_sync_prompt_char() {
   local sym="❯ "
   [[ "$KEYMAP" == "vicmd" ]] && sym="❮ "
 
-  # Spaceship integration
+  # Spaceship prompt integration
   if (( $+functions[spaceship::core::refresh_section] )); then
     if [[ "$SPACESHIP_CHAR_SYMBOL_SUCCESS" != "$sym" ]]; then
       SPACESHIP_CHAR_SYMBOL="$sym"
@@ -215,9 +234,9 @@ function _vi_mode_line_finish() {
 }
 zle -N zle-line-finish _vi_mode_line_finish
 
-# 8. Script Execution Separation (between script input and output)
-# When executing a multi-line script or a command edited via 'v' mode, renders a
-# subtle horizontal divider between the script input lines and the start of its output.
+# ------------------------------------------------------------------------------
+# 10. Multi-Line Script Execution Visual Separator
+# ------------------------------------------------------------------------------
 autoload -Uz add-zsh-hook
 
 _vi_mode_preexec_separator() {
@@ -231,4 +250,3 @@ _vi_mode_preexec_separator() {
 }
 
 add-zsh-hook preexec _vi_mode_preexec_separator
-

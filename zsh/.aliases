@@ -1,119 +1,135 @@
-# General and system aliases
+# ==============================================================================
+# General, Workstation & Git Shell Aliases (zsh/.aliases)
+# ==============================================================================
 
-# Editor & CLI tools
+# ------------------------------------------------------------------------------
+# Editor & Core CLI Tools
+# ------------------------------------------------------------------------------
 alias v="nvim"
 alias vi="nvim"
 alias vim="nvim"
-alias gi="genignore" # Interactive .gitignore generator
+alias gi="genignore"              # Interactive .gitignore generator
 alias phcpy="scrcpy --turn-screen-off --no-audio" # Mirror Android phone screen via scrcpy
-alias lg="lazygit" # Terminal UI for Git
-if command -v btop &>/dev/null; then
-  alias top="btop" # Modern system resource monitor
-  alias htop="btop" # Modern system resource monitor
-fi
-alias del="trash" # Move files to system Trash instead of permanent rm
+alias lg="lazygit"                # Terminal UI for Git
+alias del="trash"                 # Move files to system Trash instead of permanent rm
 
-# Navigation & Directories
+if command -v btop &>/dev/null; then
+  alias top="btop"                # Modern system resource monitor
+  alias htop="btop"               # Modern system resource monitor
+fi
+
+# ------------------------------------------------------------------------------
+# Navigation, Discovery & Interactive Pickers
+# ------------------------------------------------------------------------------
 alias cd..="cd .."
 alias ..="cd .."
 alias ...="cd ../.."
 alias ....="cd ../../.."
-alias codes="cd ~/Codes/" # Jump to ~/Codes workspace
-alias fp="proj" # Interactive Git project & repository switcher
+alias codes="cd ~/Codes/"         # Jump to ~/Codes workspace
 alias path="echo \$PATH | tr ':' '\n'" # Print each PATH entry on its own line
-alias x="extract" # Universal archive extractor
-alias kp="fkill" # Interactive process & port killer
-alias fport="port" # Interactive listening port inspector & killer
-alias fbrew="fpkg" # Interactive Homebrew, Mise & system package inspector
-alias bigfiles="fsize" # Interactive directory size & large-file hunter
-alias fnet="netinfo" # Cross-platform network, DNS, VPN & latency diagnostic card
-alias hashfile="checksum" # Multi-digest file checksum & integrity verifier
-alias fhash="checksum" # Multi-digest file checksum & integrity verifier
-alias f="," # Interactive Dotfiles Command Palette & comma-prefix launcher
-alias dps="fcon" # Interactive Docker/Podman container manager
-alias cheat="cheath" # Interactive tldr cheat-sheet browser
+
+alias f=","                       # Interactive Dotfiles Command Palette & comma-prefix launcher
+alias fp="proj"                   # Interactive Git project & repository switcher
+alias x="extract"                 # Universal archive extractor
+alias kp="fkill"                  # Interactive process & port killer
+alias fport="port"                # Interactive listening port inspector & killer
+alias fbrew="fpkg"                # Interactive Homebrew, Mise & system package inspector
+alias bigfiles="fsize"            # Interactive directory size & large-file hunter
+alias fnet="netinfo"              # Cross-platform network, DNS, VPN & latency diagnostic card
+alias hashfile="checksum"         # Multi-digest file checksum & integrity verifier
+alias fhash="checksum"            # Multi-digest file checksum & integrity verifier
+alias dps="fcon"                  # Interactive Docker/Podman container manager
+alias cheat="cheath"              # Interactive tldr cheat-sheet browser
+alias aliases="fa"                # Fuzzy search all aliases, functions & tools
+alias falias="fa"                 # Fuzzy search all aliases, functions & tools
+
 if command -v tokei &>/dev/null; then
-  alias loc="tokei" # Count lines of code by language
-  alias cloc="tokei" # Count lines of code by language
+  alias loc="tokei"               # Count lines of code by language
+  alias cloc="tokei"              # Count lines of code by language
 fi
+
 if command -v dust &>/dev/null; then
-  alias diskuse="dust" # Visual disk usage analyzer
+  alias diskuse="dust"            # Visual disk usage analyzer
 else
   alias diskuse="du -sh * 2>/dev/null | sort -h" # Disk usage sorted by size
 fi
 
-# Safety Defaults
+# ------------------------------------------------------------------------------
+# Safety Defaults & Directory Listing (eza)
+# ------------------------------------------------------------------------------
 alias cp="cp -i"
 alias mv="mv -i"
 alias df="df -h"
 
-# Modern Directory Listing (eza) — smart 'tree' & 'lt' live in zsh/functions/navigation.zsh
 if command -v eza &>/dev/null; then
   alias l="eza --icons --group-directories-first"
   alias ll="eza -la --icons --octal-permissions --group-directories-first --git"
 fi
-alias als="toggle-autols" # Toggle automatic directory listing after cd
-alias autols="toggle-autols" # Toggle automatic directory listing after cd
+
+alias als="toggle-autols"         # Toggle automatic directory listing after cd
+alias autols="toggle-autols"      # Toggle automatic directory listing after cd
 alias autonotify="toggle-autonotify" # Toggle desktop notifications for long commands (>15s)
-alias aliases="fa" # Fuzzy search all aliases, functions & tools
-alias falias="fa" # Fuzzy search all aliases, functions & tools
 
-# Python virtual environment (detects .venv or venv)
+# ------------------------------------------------------------------------------
+# Python & Node Runtimes
+# ------------------------------------------------------------------------------
 alias pyactivate='[ -f "./.venv/bin/activate" ] && source ./.venv/bin/activate || { [ -f "./venv/bin/activate" ] && source ./venv/bin/activate || echo "No .venv or venv found in current directory"; }' # Activate .venv or venv in current directory
-
-# Node & Package Managers
-alias npmv="npm i --verbose" # Install npm packages with verbose output
+alias npmv="npm i --verbose"      # Install npm packages with verbose output
 alias npmi-clean="rm -rf node_modules package-lock.json && npm install" # Wipe node_modules + lockfile and reinstall
 
-# Shell Reload & Network Info
-alias sz="reload" # Replace current shell with a fresh login Zsh process
+# ------------------------------------------------------------------------------
+# Shell Reload, Notifications & Network Info
+# ------------------------------------------------------------------------------
+alias sz="reload"                 # Replace current shell with a fresh login Zsh process
 alias src="source ~/.zshrc && echo '✔ ~/.zshrc sourced!'" # Reload ~/.zshrc in current shell
-alias reload="exec zsh -l" # Replace current shell with a fresh login Zsh process
-alias alert="notify" # Send persistent desktop alert notification
+alias reload="exec zsh -l"        # Replace current shell with a fresh login Zsh process
+alias alert="notify"              # Send persistent desktop alert notification
 alias myip="curl -s https://icanhazip.com" # Print public external IP address
 alias localip="ipconfig getifaddr \$(route -n get default 2>/dev/null | awk '/interface:/{print \$2}') 2>/dev/null || ipconfig getifaddr en0 2>/dev/null || ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if(\$i==\"src\" && i<NF){print \$(i+1); found=1; exit}} END{if(!found) exit 1}' || hostname -I 2>/dev/null | awk 'NF{print \$1; found=1; exit} END{if(!found) exit 1}'" # Print local LAN IP address
 
-# Dotfiles Maintenance Shortcuts
-alias .status="dot status" # Quick workstation & dotfiles overview
-alias .s="dot status" # Quick workstation & dotfiles overview
-alias .doctor="dotdoctor" # Full system & symlink health check
-alias .health="dotdoctor" # Full system & symlink health check (alias for .doctor)
-alias .test="dottest" # Run complete dotfiles integration test suite
-alias .check="dotcheck" # Check if dotfiles repo has upstream updates
-alias .update="dotupdate" # Pull dotfiles & upgrade Brew / Mise packages
-alias .bench="dot bench" # Profile interactive Zsh startup latency
-alias .clean="dot clean" # Prune stale caches, completion dumps & scratch files
-alias .prune="dot prune" # Remove links, caches & packages deleted from the dotfiles since the last pull
-alias .sync="dot sync" # Commit, rebase & push local dotfiles changes
-alias .backup="dot backup" # Snapshot untracked local machine overrides & state
-alias .restore="dot restore" # Restore local machine overrides & state from snapshot
-alias .env="dot env" # Audit environment variables, PATH precedence & shadowed binaries
-alias .prompt="dot prompt" # Benchmark & select shell prompt (native, spaceship)
-alias .branch="dotbranch" # Switch active ~/.dotfiles branch & reload shell
-alias .b="dotbranch" # Switch active ~/.dotfiles branch & reload shell
+# ------------------------------------------------------------------------------
+# Dotfiles Maintenance Shortcuts (dot CLI)
+# ------------------------------------------------------------------------------
+alias .status="dot status"        # Quick workstation & dotfiles overview
+alias .s="dot status"             # Quick workstation & dotfiles overview
+alias .doctor="dotdoctor"         # Full system & symlink health check
+alias .health="dotdoctor"         # Full system & symlink health check (alias for .doctor)
+alias .test="dottest"             # Run complete dotfiles integration test suite
+alias .check="dotcheck"           # Check if dotfiles repo has upstream updates
+alias .update="dotupdate"         # Pull dotfiles & upgrade Brew / Mise packages
+alias .bench="dot bench"          # Profile interactive Zsh startup latency
+alias .clean="dot clean"          # Prune stale caches, completion dumps & scratch files
+alias .prune="dot prune"          # Remove links, caches & packages deleted from the dotfiles since the last pull
+alias .sync="dot sync"            # Commit, rebase & push local dotfiles changes
+alias .backup="dot backup"        # Snapshot untracked local machine overrides & state
+alias .restore="dot restore"      # Restore local machine overrides & state from snapshot
+alias .env="dot env"              # Audit environment variables, PATH precedence & shadowed binaries
+alias .prompt="dot prompt"        # Benchmark & select shell prompt (native, spaceship)
+alias .branch="dotbranch"         # Switch active ~/.dotfiles branch & reload shell
+alias .b="dotbranch"              # Switch active ~/.dotfiles branch & reload shell
 
-# ==========================================
+# ==============================================================================
 # Git Shortcuts
-# ==========================================
+# ==============================================================================
 
-# Status & Inspection
+# Status & Diff Inspection
 alias gs="git status -sb"
 alias gss="git status"
 alias gd="git diff"
-alias gds="git diff --staged" # Diff staged changes
-alias gdw="git diff --word-diff" # Word-level git diff
+alias gds="git diff --staged"     # Diff staged changes
+alias gdw="git diff --word-diff"  # Word-level git diff
 alias gdc="git diff --word-diff-regex=." # Character-level git diff
 alias gdside="git -c delta.side-by-side=true diff" # Side-by-side git diff via delta
 alias gshow="git show --stat"
 
-# Add & Commit
+# Stage & Commit
 unalias ga 2>/dev/null || true
-alias gadd="ga" # Interactive FZF git staging & hunk reviewer
+alias gadd="ga"                   # Interactive FZF git staging & hunk reviewer
 alias gaa="git add --all"
-alias gap="git add --patch" # Interactively stage hunks
+alias gap="git add --patch"       # Interactively stage hunks
 alias gc="git commit"
 alias gcm="git commit -m"
-alias gca="git commit --amend" # Amend previous commit
+alias gca="git commit --amend"    # Amend previous commit
 alias gcan="git commit --amend --no-edit" # Amend previous commit without changing message
 
 # Branch & Switch
@@ -126,23 +142,24 @@ alias gcb="git checkout -b"
 alias gsw="git switch"
 alias gswc="git switch -c"
 
-# Push & Pull
+# Push, Pull & Fetch
 alias gp="git push"
 alias gpf="git push --force-with-lease" # Safe force-push with lease check
 alias gpu='git push -u origin $(git branch --show-current 2>/dev/null)' # Push current branch and set upstream
 alias gpl="git pull"
-alias gpr="git pull --rebase" # Pull with rebase
+alias gpr="git pull --rebase"     # Pull with rebase
+alias gprune="git fetch --prune"  # Fetch and prune deleted remote branches
 
 # History & Log
 unalias gl 2>/dev/null || true
-alias gfh="gfile" # Interactive FZF git history for a single file
+alias gfh="gfile"                 # Interactive FZF git history for a single file
 alias glo="git log --oneline --graph --decorate -n 20"
 alias glog="git log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
 
 # Stash
 alias gst="git stash"
 alias gstp="git stash pop"
-alias gstl="gstash" # Interactive FZF git stash manager
+alias gstl="gstash"               # Interactive FZF git stash manager
 alias gstd="git stash drop"
 
 # Rebase & Cherry-Pick
@@ -160,20 +177,15 @@ alias guncommit="git reset --soft HEAD~1" # Undo last commit keeping changes sta
 alias grs="git restore"
 alias grss="git restore --staged" # Unstage files without discarding changes
 
-# Branch Maintenance
-alias gprune="git fetch --prune" # Fetch and prune deleted remote branches
-
 # Git Worktrees
 alias gwt="git worktree"
 alias gwtl="git worktree list"
-alias gwtstatus="gwts" # Fleet status dashboard across all worktrees
+alias gwtstatus="gwts"            # Fleet status dashboard across all worktrees
 alias gwta="git worktree add"
 alias gwtb="git worktree add -b"
 alias gwtr="git worktree remove"
-alias gwtrm="gwtdel" # Interactive FZF worktree & branch remover
+alias gwtrm="gwtdel"              # Interactive FZF worktree & branch remover
 alias gwtp="git worktree prune"
-alias gwtc="gwtclean" # Prune worktrees whose remote branch was merged/deleted
-alias gwtprune="gwtclean" # Prune worktrees whose remote branch was merged/deleted
-alias gwtn="gwtnew" # Create or checkout a branch in a new worktree
-
-
+alias gwtc="gwtclean"             # Prune worktrees whose remote branch was merged/deleted
+alias gwtprune="gwtclean"         # Prune worktrees whose remote branch was merged/deleted
+alias gwtn="gwtnew"               # Create or checkout a branch in a new worktree
