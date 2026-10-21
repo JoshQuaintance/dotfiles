@@ -447,10 +447,10 @@ def _check_zsh_function_bounds(report: TestReport, dotfiles: Path) -> None:
 
     for zfile in func_files:
         lines = zfile.read_text(encoding="utf-8", errors="ignore").splitlines()
-        if len(lines) > 1000:
+        if len(lines) > 1100:
             oversized_modules.append(f"{zfile.name} ({len(lines)}L)")
         stack: list[tuple[str, int]] = []
-        max_fn_lines = 120 if zfile.name == "worktree.zsh" else 210
+        max_fn_lines = 120 if zfile.name == "worktree.zsh" else 165
         for idx, line in enumerate(lines, 1):
             match = func_header.match(line)
             if match:

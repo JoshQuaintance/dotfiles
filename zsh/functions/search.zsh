@@ -52,7 +52,7 @@ _fa_gen_list() {
   for fn in "${DOTFILES_FUNCTIONS[@]}"; do
     if (( $+functions[$fn] )); then
       desc="${func_docs[$fn]:-(shell function)}"
-      printf "function\t%-18s\t%s\n" "$fn" "$desc"
+      printf "%-8s\t%-20s\t%s\n" "function" "$fn" "$desc"
     fi
   done
 
@@ -64,7 +64,7 @@ _fa_gen_list() {
         # :t = tail (basename) without forking a subshell
         bname="${b:t}"
         bdesc=$(awk '/^#[[:space:]]*Description:[[:space:]]*/ { sub(/^#[[:space:]]*Description:[[:space:]]*/, ""); print; exit } NR > 15 { exit }' "$b" 2>/dev/null)
-        printf "tool\t%-18s\t%s\n" "$bname" "${bdesc:-(CLI utility in ~/.local/bin)}"
+        printf "%-8s\t%-20s\t%s\n" "tool" "$bname" "${bdesc:-(CLI utility in ~/.local/bin)}"
       fi
     done
   fi
@@ -74,9 +74,9 @@ _fa_gen_list() {
   alias | while IFS='=' read -r name val; do
     cmt="${alias_docs[$name]}"
     if [ -n "$cmt" ]; then
-      printf "alias\t%-18s\t%s  # %s\n" "$name" "$val" "$cmt"
+      printf "%-8s\t%-20s\t%s  # %s\n" "alias" "$name" "$val" "$cmt"
     else
-      printf "alias\t%-18s\t%s\n" "$name" "$val"
+      printf "%-8s\t%-20s\t%s\n" "alias" "$name" "$val"
     fi
   done
 }
@@ -103,9 +103,10 @@ fa() {
     # Text-filtered output for pipes or when -p is specified
     if [ -n "$query" ]; then
       _fa_gen_list "$dot_dir" | awk -F'\t' -v q="$query" 'tolower($2) ~ tolower(q) || tolower($3) ~ tolower(q) {
-        if ($1 == "alias")    printf "\033[38;2;137;180;250m[%s]\033[0m \033[1;38;2;203;166;247m%-18s\033[0m %s\n", $1, $2, $3
-        if ($1 == "function") printf "\033[38;2;166;227;161m[%s]\033[0m \033[1;38;2;203;166;247m%-18s\033[0m %s\n", $1, $2, $3
-        if ($1 == "tool")     printf "\033[38;2;249;226;175m[%s]\033[0m \033[1;38;2;203;166;247m%-18s\033[0m %s\n", $1, $2, $3
+        kind = $1; gsub(/[[:space:]]+$/, "", kind);
+        if (kind == "alias")    printf "\033[38;2;137;180;250m%-10s\033[0m \033[1;38;2;203;166;247m%-20s\033[0m %s\n", "[alias]", $2, $3
+        if (kind == "function") printf "\033[38;2;166;227;161m%-10s\033[0m \033[1;38;2;203;166;247m%-20s\033[0m %s\n", "[function]", $2, $3
+        if (kind == "tool")     printf "\033[38;2;249;226;175m%-10s\033[0m \033[1;38;2;203;166;247m%-20s\033[0m %s\n", "[tool]", $2, $3
       }'
     else
       _fa_gen_list "$dot_dir"
@@ -147,7 +148,19 @@ _fenv_list_vars() {
       val = substr($0, length(name) + 2);
       gsub(/\n/, " ", val);
       if (length(val) > 75) val = substr(val, 1, 72) "...";
-      printf "\033[1;38;2;137;180;250m%-28s\033[0m\t%s\n", name, val
+      n_count++;
+      names[n_count] = name;
+      vals[n_count] = val;
+      if (length(name) > w_name) w_name = length(name);
+    }
+    END {
+      if (w_name < 24) w_name = 24;
+      if (w_name > 36) w_name = 36;
+      for (i = 1; i <= n_count; i++) {
+        disp = names[i];
+        if (length(disp) > w_name) disp = substr(disp, 1, w_name - 3) "...";
+        printf "\033[1;38;2;137;180;250m%-*s\033[0m\t%s\t%s\n", w_name, disp, vals[i], names[i]
+      }
     }
   '
 }
@@ -185,7 +198,7 @@ fenv() {
   _fzf_vim_mode "🌎 Environment > " "$hdr" "copy value" "y,n,e" "$query"
 
   local preview_cmd='
-    k=$(printf "%s" {1} | sed "s/\x1b\[[0-9;]*[a-zA-Z]//g; s/ //g")
+    k=$(printf "%s" {3} | tr -d " ")
     v=$(printenv "$k" 2>/dev/null)
     printf "\033[1;38;2;203;166;247m%s\033[0m \033[2m(%d chars)\033[0m\n" "$k" "${#v}"
     printf "\033[38;2;108;112;134m────────────────────────────────────────────────────────\033[0m\n"
@@ -210,6 +223,7 @@ fenv() {
   selection=$(_fenv_list_vars | fzf \
     --ansi \
     --delimiter='\t' \
+    --with-nth=1,2 \
     --height=~55% \
     "${fzf_mode_flags[@]}" \
     --color="header:italic:dim,prompt:bold:blue,pointer:bold:magenta" \
@@ -221,7 +235,7 @@ fenv() {
   selected_line="${selected_lines%%$'\n'*}"
 
   local var_name
-  var_name=$(printf "%s" "$selected_line" | awk -F'\t' '{print $1}' | sed $'s/\x1b\\[[0-9;]*m//g' | tr -d ' ')
+  var_name=$(printf "%s" "$selected_line" | awk -F'\t' '{print $3}' | tr -d ' ')
   [ -z "$var_name" ] && return 0
   local var_val="${(P)var_name}"
 
@@ -545,9 +559,24 @@ snip() {
   fi
 
   local formatted
-  formatted=$(printf "%s\n" "$rows" | awk -F'\t' '{
-    printf "\033[1;38;2;203;166;247m%-26s\033[0m\t\033[38;2;137;180;250m%-46s\033[0m\t\033[2m%s\033[0m\t%s\n", $1, $2, $3, $2
-  }')
+  formatted=$(printf "%s\n" "$rows" | awk -F'\t' '
+    {
+      t = $1; c = $2; d = $3;
+      if (length(t) > 28) t = substr(t, 1, 25) "...";
+      c_disp = c;
+      if (length(c_disp) > 46) c_disp = substr(c_disp, 1, 43) "...";
+      titles[NR] = t; c_disps[NR] = c_disp; descs[NR] = d; cmds[NR] = c;
+      if (length(t) > w1) w1 = length(t);
+      if (length(c_disp) > w2) w2 = length(c_disp);
+    }
+    END {
+      if (w1 < 20) w1 = 20;
+      if (w2 < 30) w2 = 30;
+      for (i = 1; i <= NR; i++) {
+        printf "\033[1;38;2;203;166;247m%-*s\033[0m\t\033[38;2;137;180;250m%-*s\033[0m\t\033[2m%s\033[0m\t%s\n", w1, titles[i], w2, c_disps[i], descs[i], cmds[i]
+      }
+    }
+  ')
 
   local hdr="  j/k: navigate │ /: search │ enter: fill & paste │ y: copy cmd │ e: edit user snippets │ q: quit"
   local -a fzf_mode_flags

@@ -173,3 +173,29 @@ test_gwtdel_aborts_when_deletion_declined() {
 
   assert_file "${HOME:A}/feat-abort/.git"
 }
+
+test_gwts_aligns_columns_with_long_worktree_names_and_mixed_sync_states() {
+  git_test init -q origin_repo
+  git_test -C origin_repo checkout -q -b main
+  git_test -C origin_repo commit -q --allow-empty -m "initial commit"
+
+  git_test clone -q "$PWD/origin_repo" qa
+  cd qa
+  git_test worktree add -q ../submittal-index-sections -b feat/submittal-index-sections
+
+  local out
+  out="$(gwts | strip_ansi)"
+
+  # Verify WORKING TREE column starts at the exact same character index on header, synced row, and no-upstream row
+  local hdr_line qa_line long_line
+  hdr_line="$(print -r -- "$out" | grep 'WORKTREE')"
+  qa_line="$(print -r -- "$out" | grep '➜ qa')"
+  long_line="$(print -r -- "$out" | grep 'submittal-index-sections')"
+
+  local hdr_col="${#${hdr_line%%WORKING TREE*}}"
+  local qa_col="${#${qa_line%%✔ clean*}}"
+  local long_col="${#${long_line%%✔ clean*}}"
+
+  assert_eq "$hdr_col" "$qa_col"
+  assert_eq "$hdr_col" "$long_col"
+}

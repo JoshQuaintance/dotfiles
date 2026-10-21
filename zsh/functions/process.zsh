@@ -10,9 +10,12 @@ _port_list_listening() {
     lsof -iTCP -sTCP:LISTEN -P -n 2>/dev/null | awk 'NR>1 {
       split($9, a, ":");
       p = a[length(a)];
+      proc = $1;
+      gsub(/\\x20/, " ", proc);
+      if (length(proc) > 18) proc = substr(proc, 1, 15) "...";
       key = p ":" $2;
       if (!seen[key]++) {
-        printf "%-8s\t%-8s\t%-18s\t%s\n", p, $2, $1, $9
+        printf "%-8s\t%-8s\t%-18s\t%s\n", p, $2, proc, $9
       }
     }' | sort -n -k1,1
   elif command -v ss &>/dev/null; then
@@ -26,6 +29,7 @@ _port_list_listening() {
       if (match($0, /\("[^"]+"/)) {
         proc = substr($0, RSTART+2, RLENGTH-3);
       }
+      if (length(proc) > 18) proc = substr(proc, 1, 15) "...";
       key = p ":" pid;
       if (!seen[key]++) {
         printf "%-8s\t%-8s\t%-18s\t%s\n", p, pid, proc, $4
@@ -411,7 +415,14 @@ fssh() {
   rows=$(awk '
     function flush_host() {
       if (host != "" && host !~ /\*/) {
-        printf "\033[1;36m%-24s\033[0m\t%-30s\t%-16s\t%s\n", host, (hostname != "" ? hostname : "-"), (user != "" ? user : "-"), (port != "" ? port : "22")
+        h_disp = host;
+        if (length(h_disp) > 24) h_disp = substr(h_disp, 1, 21) "...";
+        hn = (hostname != "" ? hostname : "-");
+        if (length(hn) > 30) hn = substr(hn, 1, 27) "...";
+        u = (user != "" ? user : "-");
+        if (length(u) > 16) u = substr(u, 1, 13) "...";
+        p = (port != "" ? port : "22");
+        printf "\033[1;36m%-24s\033[0m\t%-30s\t%-16s\t%s\n", h_disp, hn, u, p
       }
     }
     tolower($1) == "host" {

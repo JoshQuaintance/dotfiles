@@ -347,12 +347,24 @@ fknown() {
   fi
 
   local formatted
-  formatted=$(printf "%s\n" "$rows" | awk -F'\t' '{
-    kind = $1; target = $2; meta = $3;
-    if (kind == "socket") k_col = sprintf("\033[38;2;166;227;161m%-12s\033[0m", "⚡ socket");
-    else                  k_col = sprintf("\033[38;2;137;180;250m%-12s\033[0m", "🔑 host");
-    printf "%s\t\033[1m%-32s\033[0m\t\033[2m%s\033[0m\t%s\t%s\n", k_col, target, meta, kind, target
-  }')
+  formatted=$(printf "%s\n" "$rows" | awk -F'\t' '
+    {
+      kind = $1; target = $2; meta = $3;
+      t_disp = target;
+      if (length(t_disp) > 36) t_disp = substr(t_disp, 1, 33) "...";
+      kinds[NR] = kind; tdisps[NR] = t_disp; metas[NR] = meta; targets[NR] = target;
+      if (length(t_disp) > w_target) w_target = length(t_disp);
+    }
+    END {
+      if (w_target < 24) w_target = 24;
+      for (i = 1; i <= NR; i++) {
+        kind = kinds[i];
+        if (kind == "socket") k_col = sprintf("\033[38;2;166;227;161m⚡ %-8s\033[0m", "socket");
+        else                  k_col = sprintf("\033[38;2;137;180;250m🔑 %-8s\033[0m", "host");
+        printf "%s\t\033[1m%-*s\033[0m\t\033[2m%s\033[0m\t%s\t%s\n", k_col, w_target, tdisps[i], metas[i], kind, targets[i]
+      }
+    }
+  ')
 
   local hdr="  j/k: move │ space: select │ /: search │ enter/y: copy host │ x: remove key / close socket │ q: quit"
   local -a fzf_mode_flags
@@ -573,62 +585,7 @@ checksum() {
   fi
 
   local out rc=0
-  out="$(python3 - "$file" "$expected" "$expected_source" <<'PYEOF'
-import hashlib
-import os
-import sys
-
-filepath, expected, source = sys.argv[1], sys.argv[2].strip().lower(), sys.argv[3]
-# Allow "sha256:..." prefix in expected hash
-if ":" in expected:
-    expected = expected.split(":", 1)[1].strip()
-
-h_md5 = hashlib.md5()
-h_sha1 = hashlib.sha1()
-h_sha256 = hashlib.sha256()
-h_sha512 = hashlib.sha512()
-
-with open(filepath, "rb") as f:
-    while chunk := f.read(1024 * 1024):
-        h_md5.update(chunk)
-        h_sha1.update(chunk)
-        h_sha256.update(chunk)
-        h_sha512.update(chunk)
-
-digests = [
-    ("MD5", h_md5.hexdigest()),
-    ("SHA-1", h_sha1.hexdigest()),
-    ("SHA-256", h_sha256.hexdigest()),
-    ("SHA-512", h_sha512.hexdigest()),
-]
-
-C_MAUVE = "\033[1;38;2;203;166;247m"
-C_BLUE  = "\033[1;38;2;137;180;250m"
-C_GREEN = "\033[1;38;2;166;227;161m"
-C_RED   = "\033[1;38;2;243;139;168m"
-C_DIM   = "\033[2m"
-C_RST   = "\033[0m"
-
-sz = os.path.getsize(filepath)
-print(f"{C_MAUVE}📄 {os.path.basename(filepath)}{C_RST} {C_DIM}({sz:,} bytes){C_RST}")
-matched_algo = None
-for name, d in digests:
-    mark = ""
-    if expected and d == expected:
-        matched_algo = name
-        mark = f" {C_GREEN}✔ MATCH{C_RST}"
-    print(f"  {C_BLUE}{name:<8}{C_RST} {d}{mark}")
-
-print(f"__SHA256__:{h_sha256.hexdigest()}")
-if expected:
-    if matched_algo:
-        print(f"\n{C_GREEN}✔ Checksum verified ({matched_algo} matched {source}){C_RST}")
-        sys.exit(0)
-    else:
-        print(f"\n{C_RED}✖ Checksum MISMATCH against {source}: {expected}{C_RST}")
-        sys.exit(1)
-PYEOF
-  )" || rc=$?
+  out="$("${DOTFILES_DIR:-$HOME/.dotfiles}/libexec/checksum.py" "$file" "$expected" "$expected_source")" || rc=$?
 
   local sha256_val=""
   local display_lines=()

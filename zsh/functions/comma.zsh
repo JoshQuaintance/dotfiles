@@ -170,10 +170,21 @@ _comma_gen_list() {
   fi
 
   local formatted
-  formatted=$(printf "%s\n" "$rows" | awk -F'\t' '{
-    c_name = $1; orig = $2; desc = $3;
-    printf "\033[1;38;2;203;166;247m%-14s\033[0m\t\033[38;2;137;180;250m%-18s\033[0m\t%s\t%s\t%s\n", c_name, orig, desc, c_name, orig
-  }')
+  formatted=$(printf "%s\n" "$rows" | awk -F'\t' '
+    {
+      c_name = $1; orig = $2; desc = $3;
+      c_names[NR] = c_name; origs[NR] = orig; descs[NR] = desc;
+      if (length(c_name) > w1) w1 = length(c_name);
+      if (length(orig) > w2) w2 = length(orig);
+    }
+    END {
+      if (w1 < 14) w1 = 14;
+      if (w2 < 18) w2 = 18;
+      for (i = 1; i <= NR; i++) {
+        printf "\033[1;38;2;203;166;247m%-*s\033[0m\t\033[38;2;137;180;250m%-*s\033[0m\t%s\t%s\t%s\n", w1, c_names[i], w2, origs[i], descs[i], c_names[i], origs[i]
+      }
+    }
+  ')
 
   local hdr="  j/k: move │ /: search │ enter: run │ e: insert on prompt │ h: help │ y: copy │ q: quit"
   local -a fzf_mode_flags

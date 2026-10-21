@@ -71,14 +71,26 @@ fpkg() {
   fi
 
   local formatted
-  formatted=$(printf "%s\n" "$rows" | awk -F'\t' '{
-    mgr = $1; pkg = $2; ver = $3;
-    if (mgr == "brew")      m_col = sprintf("\033[38;2;249;226;175m%-8s\033[0m", mgr);
-    else if (mgr == "cask") m_col = sprintf("\033[38;2;245;194;231m%-8s\033[0m", mgr);
-    else if (mgr == "mise") m_col = sprintf("\033[38;2;203;166;247m%-8s\033[0m", mgr);
-    else                    m_col = sprintf("\033[38;2;137;180;250m%-8s\033[0m", mgr);
-    printf "%s\t\033[1m%-28s\033[0m\t\033[38;2;166;227;161m%s\033[0m\t%s\t%s\n", m_col, pkg, ver, mgr, pkg
-  }')
+  formatted=$(printf "%s\n" "$rows" | awk -F'\t' '
+    {
+      mgr = $1; pkg = $2; ver = $3;
+      pkg_disp = pkg;
+      if (length(pkg_disp) > 34) pkg_disp = substr(pkg_disp, 1, 31) "...";
+      mgrs[NR] = mgr; pdisps[NR] = pkg_disp; vers[NR] = ver; pkgs[NR] = pkg;
+      if (length(pkg_disp) > w_pkg) w_pkg = length(pkg_disp);
+    }
+    END {
+      if (w_pkg < 24) w_pkg = 24;
+      for (i = 1; i <= NR; i++) {
+        mgr = mgrs[i];
+        if (mgr == "brew")      m_col = sprintf("\033[38;2;249;226;175m%-8s\033[0m", mgr);
+        else if (mgr == "cask") m_col = sprintf("\033[38;2;245;194;231m%-8s\033[0m", mgr);
+        else if (mgr == "mise") m_col = sprintf("\033[38;2;203;166;247m%-8s\033[0m", mgr);
+        else                    m_col = sprintf("\033[38;2;137;180;250m%-8s\033[0m", mgr);
+        printf "%s\t\033[1m%-*s\033[0m\t\033[38;2;166;227;161m%s\033[0m\t%s\t%s\n", m_col, w_pkg, pdisps[i], vers[i], mgr, pkgs[i]
+      }
+    }
+  ')
 
   local hdr="  j/k: move │ space: select │ /: search │ enter: info │ u: upgrade │ x: uninstall │ o: home │ y: copy │ q: quit"
   local -a fzf_mode_flags

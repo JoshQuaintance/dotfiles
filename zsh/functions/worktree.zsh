@@ -20,7 +20,7 @@ wt() {
   _require_git_repo || return 1
 
   local worktrees
-  worktrees=$(git worktree list 2>/dev/null)
+  worktrees=$(git worktree list 2>/dev/null | awk '$3 != "(bare)"')
 
   if [ -z "$worktrees" ]; then
     printf "\033[33m⚠ No worktrees found.\033[0m\n" >&2
@@ -40,15 +40,42 @@ wt() {
   fi
 
   if command -v fzf &>/dev/null; then
+    local formatted
+    formatted=$(printf "%s\n" "$worktrees" | awk -v home="$HOME" '
+      {
+        p = $1;
+        n = split(p, parts, "/");
+        bname = parts[n];
+        if (length(bname) > 28) bname = substr(bname, 1, 25) "...";
+        br = $3;
+        if (length(br) > 38) br = substr(br, 1, 34) "...]";
+        disp = p;
+        if (index(disp, home) == 1) disp = "~" substr(disp, length(home) + 1);
+        rows_b[NR] = bname; rows_br[NR] = br; rows_d[NR] = disp; rows_p[NR] = p;
+        if (length(bname) > w1) w1 = length(bname);
+        if (length(br) > w2) w2 = length(br);
+      }
+      END {
+        if (w1 < 14) w1 = 14;
+        if (w2 < 18) w2 = 18;
+        for (i = 1; i <= NR; i++) {
+          printf "\033[1;36m%-*s\033[0m\t\033[38;2;166;227;161m%-*s\033[0m\t\033[2m%s\033[0m\t%s\n", w1, rows_b[i], w2, rows_br[i], rows_d[i], rows_p[i]
+        }
+      }
+    ')
+
     local -a fzf_mode_flags
-    _fzf_vim_mode "🌿 Worktree > " "  j/k: navigate │ /: search │ enter: cd │ e: edit │ y: copy path │ d/x: delete │ q: quit" "cd" "e,y,d,x" "" ""
+    _fzf_vim_mode "🌿 Worktree > " "  j/k: navigate │ /: search │ enter: cd │ e: edit │ y: copy path │ d/x: delete │ q: quit" "cd" "e,y,d,x" "$query" ""
 
     local selected
-    selected=$(echo "$worktrees" | fzf \
+    selected=$(printf "%s\n" "$formatted" | fzf \
+      --ansi \
+      --delimiter=$'\t' \
+      --with-nth=1,2,3 \
       --height=~45% \
       "${fzf_mode_flags[@]}" \
       --color="header:italic:dim,prompt:bold:cyan,pointer:bold:green" \
-      --preview='git -C {1} status -sb 2>/dev/null' \
+      --preview='git -C {4} status -sb 2>/dev/null' \
       --preview-window='right:50%:wrap')
 
     [ -z "$selected" ] && return 0
@@ -57,9 +84,7 @@ wt() {
     _fzf_split_expect "$selected" || return 0
     selected_line="${selected_lines%%$'\n'*}"
     local target_dir
-    target_dir=$(echo "$selected_line" | awk '{print $1}')
-    local target_branch
-    target_branch=$(echo "$selected_line" | grep -oE '\[.*\]' | tr -d '[]')
+    target_dir=$(echo "$selected_line" | awk -F'\t' '{print $4}')
 
     [ -z "$target_dir" ] && return 0
 
@@ -419,19 +444,17 @@ gwtnew() {
   fi
 }
 
-# Internal helper: render a single worktree row for gwts (uses caller scope variables)
-_render_gwts_entry() {
+# Internal helper: collect a single worktree row and update max column widths for gwts
+_collect_gwts_entry() {
   [[ "$is_bare" = true || -z "$wt_path" ]] && return 0
   if [[ "$is_detached" = true && -z "$wt_branch" ]]; then
     wt_branch="(detached HEAD)"
   fi
   [[ -z "$wt_branch" ]] && return 0
 
-  marker="  "
-  is_active=false
+  is_active="0"
   if [[ "$wt_path" == "$active_wt" || "${wt_path:A}" == "${active_wt:A}" ]]; then
-    marker="\033[1;32m➜ \033[0m"
-    is_active=true
+    is_active="1"
   fi
 
   status_out=$(git -C "$wt_path" status --porcelain 2>/dev/null)
@@ -449,36 +472,44 @@ _render_gwts_entry() {
     status_str="\033[1;33m●\033[0m \033[33m${(j:, :)parts}\033[0m"
   fi
 
-  sync_str=""
+  local sync_plain="" sync_color=""
   upstream_count=$(git -C "$wt_path" rev-list --left-right --count HEAD...@{u} 2>/dev/null || true)
   if [ -n "$upstream_count" ]; then
     ahead=$(echo "$upstream_count" | awk '{print $1}')
     behind=$(echo "$upstream_count" | awk '{print $2}')
     if (( ahead > 0 && behind > 0 )); then
-      sync_str="\033[33m↑${ahead} ↓${behind}\033[0m"
+      sync_plain="↑${ahead} ↓${behind}"
+      sync_color="\033[33m"
     elif (( ahead > 0 )); then
-      sync_str="\033[32m↑${ahead}\033[0m"
+      sync_plain="↑${ahead}"
+      sync_color="\033[32m"
     elif (( behind > 0 )); then
-      sync_str="\033[31m↓${behind}\033[0m"
+      sync_plain="↓${behind}"
+      sync_color="\033[31m"
     else
-      sync_str="\033[32m✔ synced\033[0m"
+      sync_plain="✔ synced"
+      sync_color="\033[32m"
     fi
   else
-    sync_str="\033[38;2;108;112;134m(no upstream)\033[0m"
+    sync_plain="(no upstream)"
+    sync_color="\033[38;2;108;112;134m"
   fi
 
   # :t = tail (basename) without forking a subshell
   wt_name="${wt_path:t}"
+  if (( ${#wt_name} > 28 )); then
+    wt_name="${wt_name[1,25]}..."
+  fi
   wt_display_branch="$wt_branch"
-  if [ "${#wt_display_branch}" -gt 36 ]; then
-    wt_display_branch="${wt_display_branch:0:33}..."
+  if (( ${#wt_display_branch} > 40 )); then
+    wt_display_branch="${wt_display_branch[1,37]}..."
   fi
 
-  if [ "$is_active" = true ]; then
-    printf "%b\033[1;32m%-14s\033[0m \033[1;36m%-38s\033[0m %-26b %b\n" "$marker" "$wt_name" "$wt_display_branch" "$sync_str" "$status_str"
-  else
-    printf "%b%-14s \033[2m%-38s\033[0m %-26b %b\n" "$marker" "$wt_name" "$wt_display_branch" "$sync_str" "$status_str"
-  fi
+  (( ${#wt_name} > wt_w )) && wt_w=${#wt_name}
+  (( ${#wt_display_branch} > br_w )) && br_w=${#wt_display_branch}
+  (( ${#sync_plain} > sync_w )) && sync_w=${#sync_plain}
+
+  gwts_rows+=("${is_active}|${wt_name}|${wt_display_branch}|${sync_plain}|${sync_color}|${status_str}")
 }
 
 # Git Worktree Fleet Status Dashboard (gwts / gwtstatus)
@@ -488,19 +519,17 @@ gwts() {
 
   local active_wt
   active_wt="$(git rev-parse --show-toplevel 2>/dev/null)"
-  local wt_path="" wt_branch="" marker="" is_active=false status_out="" status_str=""
-  local staged=0 unstaged=0 untracked=0 ahead=0 behind=0 upstream_count="" sync_str=""
+  local wt_path="" wt_branch="" is_active="0" status_out="" status_str=""
+  local staged=0 unstaged=0 untracked=0 ahead=0 behind=0 upstream_count=""
   local wt_name="" wt_display_branch=""
-  local -a parts
+  local -a parts gwts_rows=()
   local is_bare=false is_detached=false line=""
-
-  printf "\n\033[1;38;2;203;166;247m%-3s %-14s %-38s %-16s %s\033[0m\n" "" "WORKTREE" "BRANCH" "SYNC" "WORKING TREE"
-  printf "\033[38;2;108;112;134m%s\033[0m\n" "────────────────────────────────────────────────────────────────────────────────────────"
+  local wt_w=14 br_w=24 sync_w=13
 
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       worktree\ *)
-        _render_gwts_entry
+        _collect_gwts_entry
         wt_path="${line#worktree }"
         wt_branch=""
         is_bare=false
@@ -519,7 +548,7 @@ gwts() {
         wt_branch="${line#branch }"
         ;;
       "")
-        _render_gwts_entry
+        _collect_gwts_entry
         wt_path=""
         wt_branch=""
         is_bare=false
@@ -527,7 +556,28 @@ gwts() {
         ;;
     esac
   done < <(git worktree list --porcelain 2>/dev/null)
-  _render_gwts_entry
+  _collect_gwts_entry
+
+  local total_w=$(( 2 + wt_w + 2 + br_w + 2 + sync_w + 2 + 24 ))
+  printf "\n\033[1;38;2;203;166;247m  %-*s  %-*s  %-*s  %s\033[0m\n" \
+    "$wt_w" "WORKTREE" "$br_w" "BRANCH" "$sync_w" "SYNC" "WORKING TREE"
+  printf "\033[38;2;108;112;134m%s\033[0m\n" "${(l:$total_w::─:):-}"
+
+  local row="" r_act="" r_name="" r_br="" r_sp="" r_sc="" r_st="" marker="" pad_len=0 sync_pad=""
+  for row in "${gwts_rows[@]}"; do
+    IFS="|" read -r r_act r_name r_br r_sp r_sc r_st <<< "$row"
+    pad_len=$(( sync_w - ${#r_sp} ))
+    sync_pad="${(l:$pad_len:: :):-}"
+    if [[ "$r_act" == "1" ]]; then
+      marker="\033[1;32m➜ \033[0m"
+      printf "%b\033[1;32m%-*s\033[0m  \033[1;36m%-*s\033[0m  %b%s\033[0m%s  %b\n" \
+        "$marker" "$wt_w" "$r_name" "$br_w" "$r_br" "$r_sc" "$r_sp" "$sync_pad" "$r_st"
+    else
+      marker="  "
+      printf "%s%-*s  \033[2m%-*s\033[0m  %b%s\033[0m%s  %b\n" \
+        "$marker" "$wt_w" "$r_name" "$br_w" "$r_br" "$r_sc" "$r_sp" "$sync_pad" "$r_st"
+    fi
+  done
   printf "\n"
 }
 
@@ -585,13 +635,41 @@ _gwtdel_collect_eligible() {
   _flush_gwtdel_entry
 }
 
+# Format "path|branch" items into aligned tab-delimited FZF rows:
+#   <worktree-name>\t<[branch] *dirty*>\t<~/short-path>\t<full-path>
+_gwt_format_fzf_rows() {
+  local w_name=14 w_br=20 item="" p="" br="" bname="" dirty_flag="" br_col=""
+  local -a raw_rows=()
+  for item in "$@"; do
+    p="${item%%|*}"
+    br="${item##*|}"
+    bname="${p:t}"
+    (( ${#bname} > 28 )) && bname="${bname[1,25]}..."
+    (( ${#br} > 36 )) && br="${br[1,33]}..."
+    dirty_flag=""
+    [ -n "$(git -C "$p" status --porcelain 2>/dev/null)" ] && dirty_flag=" *dirty*"
+    br_col="[${br}]${dirty_flag}"
+    (( ${#bname} > w_name )) && w_name=${#bname}
+    (( ${#br_col} > w_br )) && w_br=${#br_col}
+    raw_rows+=("${bname}|${br_col}|${p}")
+  done
+  for item in "${raw_rows[@]}"; do
+    bname="${item%%|*}"
+    local rest="${item#*|}"
+    br_col="${rest%%|*}"
+    p="${rest#*|}"
+    printf "\033[1;36m%-*s\033[0m\t%-*s\t\033[2m%s\033[0m\t%s\n" \
+      "$w_name" "$bname" "$w_br" "$br_col" "${p/#$HOME/~}" "$p"
+  done
+}
+
 # Git Worktree Delete (gwtdel / gwtrm)
 # Safely removes an individual worktree and optionally deletes its local branch
 gwtdel() {
   _require_git_repo || return 1
 
   local active_wt target_input="$1" target_wt="" target_branch=""
-  local p br bname item fzf_lines="" selected wt_name is_dirty=false
+  local p br bname item selected wt_name is_dirty=false
   local confirm_del confirm_br
   local -a eligible rm_opts
   active_wt="$(git rev-parse --show-toplevel 2>/dev/null)"
@@ -629,29 +707,21 @@ gwtdel() {
       return 1
     fi
 
-    for item in "${eligible[@]}"; do
-      p="${item%%|*}"
-      br="${item##*|}"
-      bname="${p:t}"
-      local dirty_flag=""
-      [ -n "$(git -C "$p" status --porcelain 2>/dev/null)" ] && dirty_flag=" *dirty*"
-      fzf_lines+="${bname}\t[${br}]${dirty_flag}\t${p}\n"
-    done
-
     local -a fzf_mode_flags
     _fzf_vim_mode "🗑 Delete Worktree > " "  j/k: navigate │ /: search │ enter: select to delete │ q: quit" "select"
 
-    selected=$(printf "%b" "$fzf_lines" | fzf \
+    selected=$(_gwt_format_fzf_rows "${eligible[@]}" | fzf \
+      --ansi \
       --delimiter=$'\t' \
-      --with-nth=1,2 \
+      --with-nth=1,2,3 \
       --height=~40% \
       "${fzf_mode_flags[@]}" \
       --color="header:italic:dim,prompt:bold:red,pointer:bold:red" \
-      --preview='git -C {3} status -sb 2>/dev/null' \
+      --preview='git -C {4} status -sb 2>/dev/null' \
       --preview-window='right:55%:wrap')
 
     [ -z "$selected" ] && return 0
-    target_wt=$(echo "$selected" | awk -F'\t' '{print $3}')
+    target_wt=$(echo "$selected" | awk -F'\t' '{print $4}')
     for item in "${eligible[@]}"; do
       if [ "${item%%|*}" = "$target_wt" ]; then
         target_branch="${item##*|}"
@@ -735,28 +805,20 @@ _gwtclean_select_candidates() {
   fi
 
   if command -v fzf &>/dev/null && [ -t 1 ]; then
-    local fzf_input=""
-    for item in "${candidates[@]}"; do
-      wt_path="${item%%|*}"
-      wt_branch="${item##*|}"
-      dirty_tag=""
-      if [ -n "$(git -C "$wt_path" status --porcelain 2>/dev/null)" ]; then
-        dirty_tag=" *dirty*"
-      fi
-      fzf_input+="${wt_path}\t[${wt_branch}]${dirty_tag}\n"
-    done
-
     local -a fzf_mode_flags
     _fzf_vim_mode "🗑 Select Worktrees to Prune > " "  j/k: navigate │ space/tab: toggle │ a: toggle all │ /: search │ enter: confirm │ q: abort" "confirm" "space,a" "" "space:toggle+down,tab:toggle+down,btab:toggle+up,a:toggle-all"
 
     local fzf_output
-    fzf_output=$(printf "%b" "$fzf_input" | fzf \
+    fzf_output=$(_gwt_format_fzf_rows "${candidates[@]}" | fzf \
+      --ansi \
+      --delimiter=$'\t' \
+      --with-nth=1,2,3 \
       --multi \
       --height=~45% \
       --marker="✔ " \
       "${fzf_mode_flags[@]}" \
       --color="header:italic:dim,prompt:bold:red,pointer:bold:red,marker:bold:green" \
-      --preview='git -C {1} status -sb 2>/dev/null; echo ""; git -C {1} log -n 5 --oneline --color=always 2>/dev/null' \
+      --preview='git -C {4} status -sb 2>/dev/null; echo ""; git -C {4} log -n 5 --oneline --color=always 2>/dev/null' \
       --preview-window='right:55%:wrap')
 
     if [ -z "$fzf_output" ]; then
@@ -766,7 +828,7 @@ _gwtclean_select_candidates() {
 
     local sel_line="" sel_path=""
     while IFS= read -r sel_line || [ -n "$sel_line" ]; do
-      sel_path=$(echo "$sel_line" | awk -F'\t' '{print $1}')
+      sel_path=$(echo "$sel_line" | awk -F'\t' '{print $4}')
       for item in "${candidates[@]}"; do
         if [ "${item%%|*}" = "$sel_path" ]; then
           selected_candidates+=("$item")

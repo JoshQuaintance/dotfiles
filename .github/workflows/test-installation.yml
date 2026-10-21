@@ -56,11 +56,11 @@ jobs:
 
       - name: Validate Python CLI Syntax (3.9)
         run: |
-          python3 -m py_compile cli/*.py
+          python3 -m py_compile cli/*.py libexec/*.py
 
       - name: Lint Python CLI (ruff, pinned to config/mise/config.toml)
         run: |
-          pipx run "ruff==0.16.*" check cli/
+          pipx run "ruff==0.16.*" check cli/ libexec/
 
       - name: Shellcheck All Shell Scripts
         run: |
