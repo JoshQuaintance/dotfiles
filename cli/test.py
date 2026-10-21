@@ -323,8 +323,10 @@ clip -h >/dev/null
 , -l >/dev/null
 netinfo -h >/dev/null
 checksum -h >/dev/null
+hashc -h >/dev/null
 ,net -h >/dev/null
 ,hash -h >/dev/null
+,hashc -h >/dev/null
 decode -h >/dev/null
 snip -h >/dev/null
 fpkg -h >/dev/null

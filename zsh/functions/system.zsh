@@ -532,75 +532,131 @@ netinfo() {
 }
 
 # File Checksum & Integrity Verifier (checksum / ,hash / hashfile / fhash)
-# Computes MD5, SHA-1, SHA-256, and SHA-512 in a single pass and compares against an expected
-# hash (or auto-detects a hex digest in the system clipboard).
-# Usage:
-#   checksum <file> [expected_hash]
-#   checksum -c <file>           -> Copy SHA-256 hash to clipboard
-checksum() {
+# Internal runner shared by `checksum` (,hash) and `hashc` (,hashc / hashcompare).
+_checksum_run() {
+  local mode="$1"
+  shift
   local copy_sha256=false
+  local expected=""
+  local expected_source="argument"
+  local -a args=()
+
   while (( $# > 0 )); do
     case "$1" in
-      -h|--help)
-        printf "\033[1;38;2;249;226;175mchecksum\033[0m (aliases: \033[1m,hash\033[0m, \033[1mhashfile\033[0m, \033[1mfhash\033[0m) — Multi-digest file checksum & integrity verifier\n\n"
-        printf "\033[1mUsage:\033[0m\n"
-        printf "  checksum <file>                 Compute MD5, SHA-1, SHA-256 & SHA-512 (auto-checks clipboard digest)\n"
-        printf "  checksum <file> <expected_hex>  Verify file against expected checksum\n"
-        printf "  checksum -c, --copy <file>      Also copy SHA-256 digest to clipboard\n"
-        return 0
-        ;;
       -c|--copy)
         copy_sha256=true
         shift
         ;;
+      -e|--expect)
+        expected="${2:-}"
+        shift 2 || shift
+        ;;
       --)
         shift
+        args+=("$@")
         break
         ;;
       *)
-        break
+        args+=("$1")
+        shift
         ;;
     esac
   done
 
-  local file="$1"
-  local expected="${2:-}"
-  if [[ -z "$file" ]]; then
-    printf "\033[33mUsage: checksum [-c] <file> [expected_hash]\033[0m\n" >&2
-    return 1
-  fi
-  if [[ ! -f "$file" ]]; then
-    printf "\033[31m✖ File not found: %s\033[0m\n" "$file" >&2
+  if (( ${#args[@]} == 0 )); then
+    if [[ "$mode" == "compare" ]]; then
+      printf "\033[33mUsage: hashc [-c] [-e <expected_hash>] <file_or_dir...> [expected_hash]\033[0m\n" >&2
+    else
+      printf "\033[33mUsage: checksum [-c] <file_or_dir...> [expected_hash]\033[0m\n" >&2
+    fi
     return 1
   fi
 
-  local expected_source="argument"
-  if [[ -z "$expected" ]]; then
+  # If 2+ positional args and the last arg is not a path on disk but matches a hex digest, treat it as expected_hash
+  if [[ -z "$expected" ]] && (( ${#args[@]} >= 2 )); then
+    local last_arg="${args[-1]}"
+    local stripped_hex="${last_arg#*:}"
+    if [[ ! -e "$last_arg" && "$stripped_hex" =~ ^[0-9a-fA-F]{32,128}$ ]]; then
+      expected="$last_arg"
+      args=("${args[1,-2]}")
+    fi
+  fi
+
+  local p
+  for p in "${args[@]}"; do
+    if [[ ! -f "$p" && ! -d "$p" ]]; then
+      printf "\033[31m✖ File or directory not found: %s\033[0m\n" "$p" >&2
+      return 1
+    fi
+  done
+
+  if [[ -z "$expected" ]] && (( ${#args[@]} == 1 )); then
     local clip_val
     clip_val="$(clippaste 2>/dev/null | tr -d '[:space:]')"
     if [[ "$clip_val" =~ ^[0-9a-fA-F]{32}$ || "$clip_val" =~ ^[0-9a-fA-F]{40}$ || "$clip_val" =~ ^[0-9a-fA-F]{64}$ || "$clip_val" =~ ^[0-9a-fA-F]{128}$ ]]; then
       expected="$clip_val"
       expected_source="clipboard"
+    elif [[ "$mode" == "compare" ]]; then
+      printf "\033[33m✖ hashc requires 2+ files/folders to compare, or an expected hash (via argument, -e, or clipboard)\033[0m\n" >&2
+      return 1
     fi
   fi
 
-  local out rc=0
-  out="$("${DOTFILES_DIR:-$HOME/.dotfiles}/libexec/checksum.py" "$file" "$expected" "$expected_source")" || rc=$?
+  local -a py_flags=("-e" "$expected" "-s" "$expected_source")
+  [[ "$mode" == "compare" ]] && py_flags+=("--compare")
 
-  local sha256_val=""
-  local display_lines=()
+  local out rc=0
+  out="$("${DOTFILES_DIR:-$HOME/.dotfiles}/libexec/checksum.py" "${py_flags[@]}" -- "${args[@]}")" || rc=$?
+
+  local -a sha256_lines=()
+  local -a display_lines=()
   local line
   for line in "${(@f)out}"; do
     if [[ "$line" == __SHA256__:* ]]; then
-      sha256_val="${line#__SHA256__:}"
+      sha256_lines+=("${line#__SHA256__:}")
     else
       display_lines+=("$line")
     fi
   done
 
   printf "%s\n" "${(F)display_lines}"
-  if [[ "$copy_sha256" == true && -n "$sha256_val" ]]; then
-    _copy_or_print "$sha256_val" "SHA-256: $sha256_val"
+  if [[ "$copy_sha256" == true ]] && (( ${#sha256_lines[@]} > 0 )); then
+    local joined="${(F)sha256_lines}"
+    _copy_or_print "$joined" "SHA-256 (${#sha256_lines[@]} target(s))"
   fi
   return $rc
+}
+
+# Multi-digest file & directory checksum calculator (MD5, SHA-1, SHA-256, SHA-512)
+# Usage:
+#   checksum <file_or_dir...>    -> Compute MD5, SHA-1, SHA-256 & SHA-512 for each file or folder
+#   checksum -c <file_or_dir...> -> Copy SHA-256 hash(es) to clipboard
+checksum() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "\033[1;38;2;249;226;175mchecksum\033[0m (aliases: \033[1m,hash\033[0m, \033[1mhashfile\033[0m, \033[1mfhash\033[0m) — Multi-digest file & directory checksum calculator\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  checksum <file_or_dir...>         Compute MD5, SHA-1, SHA-256 & SHA-512 for files or folders\n"
+    printf "  checksum -c, --copy <path...>     Also copy SHA-256 digest(s) to clipboard\n"
+    printf "  checksum <path> <expected_hex>    Verify target against expected checksum (or use \033[1mhashc\033[0m)\n"
+    return 0
+  fi
+  _checksum_run "hash" "$@"
+}
+
+# Compare files/folders by cryptographic digest or verify against an expected hash
+# Usage:
+#   hashc <file_or_dir_1> <file_or_dir_2> [...] -> Compare 2+ files or folders for byte-for-byte identity
+#   hashc <file_or_dir> <expected_hex>          -> Verify against expected hash
+#   hashc -e <expected_hex> <file_or_dir...>    -> Verify multiple files/folders against expected hash
+hashc() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "\033[1;38;2;249;226;175mhashc\033[0m (aliases: \033[1m,hashc\033[0m, \033[1m,hashcompare\033[0m, \033[1mhashcompare\033[0m) — Compare file/folder hashes or verify checksum\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  hashc <path1> <path2> [path3...]  Compare 2+ files or folders for byte-for-byte identity\n"
+    printf "  hashc <path> <expected_hex>       Verify file or folder against expected checksum\n"
+    printf "  hashc -e <hex> <path...>          Verify one or more files/folders against expected checksum\n"
+    printf "  hashc -c, --copy <path...>        Also copy SHA-256 digest(s) to clipboard\n"
+    return 0
+  fi
+  _checksum_run "compare" "$@"
 }

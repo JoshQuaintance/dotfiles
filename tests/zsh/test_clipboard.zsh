@@ -121,6 +121,34 @@ test_checksum_verifies_digest_and_detects_clipboard_digest() {
   local rc=0
   checksum "$HOME/sample.bin" "00000000000000000000000000000000" >/dev/null 2>&1 || rc=$?
   assert_eq 1 $rc
+
+  # Multi-file & directory hashing via checksum (,hash) simply prints digests without comparing
+  cp "$HOME/sample.bin" "$HOME/sample_copy.bin"
+  printf "different-content" > "$HOME/sample_diff.bin"
+  mkdir -p "$HOME/hashdir_a" "$HOME/hashdir_b"
+  cp "$HOME/sample.bin" "$HOME/hashdir_a/item.bin"
+  cp "$HOME/sample.bin" "$HOME/hashdir_b/item.bin"
+
+  local multi_hash
+  multi_hash="$(,hash "$HOME/sample.bin" "$HOME/sample_diff.bin" "$HOME/hashdir_a" | strip_ansi)"
+  assert_contains "$multi_hash" "sample.bin"
+  assert_contains "$multi_hash" "sample_diff.bin"
+  assert_contains "$multi_hash" "hashdir_a/ (1 files,"
+
+  # Explicit comparison via hashc (,hashc / ,hashcompare)
+  local cmp_same
+  cmp_same="$(,hashc "$HOME/sample.bin" "$HOME/sample_copy.bin" | strip_ansi)"
+  assert_contains "$cmp_same" "All 2 targets are byte-for-byte identical"
+
+  local cmp_dirs
+  cmp_dirs="$(,hashcompare "$HOME/hashdir_a" "$HOME/hashdir_b" | strip_ansi)"
+  assert_contains "$cmp_dirs" "All 2 targets are byte-for-byte identical"
+
+  local cmp_diff rc_diff=0
+  cmp_diff="$(hashc "$HOME/sample.bin" "$HOME/sample_diff.bin")" || rc_diff=$?
+  cmp_diff="$(print -r -- "$cmp_diff" | strip_ansi)"
+  assert_eq 1 $rc_diff
+  assert_contains "$cmp_diff" "2 distinct SHA-256 digests across 2 targets"
 }
 
 test_netinfo_and_comma_launcher() {
@@ -137,6 +165,34 @@ test_netinfo_and_comma_launcher() {
   assert_contains "$list_out" $',pkg\tfpkg\t'
   assert_contains "$list_out" $',port\tport\t'
 
-  # Direct dispatch via `, <cmd> <args...>`
+  # Direct dispatch via `, <cmd>` (single token after space) and `, <cmd> <args...>`
   assert_eq "hello-decode" "$(, decode 'aGVsbG8tZGVjb2Rl')"
+  assert_contains "$(print 'aGVsbG8tZGVjb2Rl' | , decode)" "hello-decode"
+
+  # Fish-like autosuggestions for `, <cmd>` and `, <cmd> <arg2>`
+  local suggestion=""
+  _zsh_autosuggest_strategy_comma ", pk"
+  assert_eq ", pkg" "$suggestion"
+
+  suggestion=""
+  _zsh_autosuggest_strategy_comma ", gwtc"
+  assert_eq ", gwtclean" "$suggestion"
+
+  suggestion=""
+  _zsh_autosuggest_strategy_comma ", dot doc"
+  assert_eq ", dot doctor" "$suggestion"
+
+  # Syntax highlighting for `, <cmd>` and `, <cmd> <arg2>`
+  local BUFFER=", dot doctor --fix"
+  local -a region_highlight=()
+  _zsh_highlight_highlighter_comma_paint
+  assert_contains "${(j: :)region_highlight}" "0 1 fg=green,underline"
+  assert_contains "${(j: :)region_highlight}" "2 5 fg=green"
+  assert_contains "${(j: :)region_highlight}" "6 12 fg=green"
+  assert_contains "${(j: :)region_highlight}" "13 18 fg=cyan"
+
+  BUFFER=", notacommand"
+  region_highlight=()
+  _zsh_highlight_highlighter_comma_paint
+  assert_contains "${(j: :)region_highlight}" "2 13 fg=red,bold"
 }

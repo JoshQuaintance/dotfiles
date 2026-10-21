@@ -362,7 +362,7 @@ for _zsh_autosug in \
             zcompile -R -- "${_zsh_autosug}.zwc" "$_zsh_autosug" 2>/dev/null || true
         fi
         ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#6c7086"
-        ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+        ZSH_AUTOSUGGEST_STRATEGY=(history comma completion)
         ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=20
         source "$_zsh_autosug"
         break
@@ -382,7 +382,7 @@ for _zsh_synhl in \
         if [ ! "${_zsh_synhl}.zwc" -nt "$_zsh_synhl" ]; then
             zcompile -R -- "${_zsh_synhl}.zwc" "$_zsh_synhl" 2>/dev/null || true
         fi
-        ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets)
+        ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets comma)
         source "$_zsh_synhl"
         break
     fi

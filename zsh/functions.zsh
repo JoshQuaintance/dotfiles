@@ -19,7 +19,7 @@ typeset -ga DOTFILES_FUNCTIONS=(
   conf dotbranch clone
 
   # System, Process, Network, Package & Diagnostic Tools
-  port fkill fcon fssh dotenv fpkg decode fsize fknown termtest netinfo checksum
+  port fkill fcon fssh dotenv fpkg decode fsize fknown termtest netinfo checksum hashc
 
   # Git Worktree Workflow
   wt gwtnew gwtenv gwts gwtdel gwtclean
