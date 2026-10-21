@@ -246,6 +246,59 @@ _gwtnew_available_branches() {
   )
 }
 
+# Interactive FZF picker for gwtnew when no branch/ticket argument is provided.
+# Populates caller's `target_input` variable or returns non-zero to abort.
+_gwtnew_prompt_branch() {
+  if ! command -v fzf &>/dev/null; then
+    printf "Usage: gwtnew [-e|--env] <branch-name-or-ticket>\n" >&2
+    return 1
+  fi
+
+  printf "\033[1;34m==>\033[0m Fetching remote branches...\n"
+  git fetch --prune 2>/dev/null || true
+
+  local -a remote_branches
+  local b
+  while IFS= read -r b; do
+    [ -n "$b" ] && remote_branches+=("$b")
+  done < <(_gwtnew_available_branches)
+
+  if [ "${#remote_branches[@]}" -eq 0 ]; then
+    printf "\033[33mNo unattached branches found. Provide a branch name to create a new one.\033[0m\n"
+    printf "Usage: gwtnew [-e|--env] <new-branch-name>\n"
+    return 2
+  fi
+
+  local -a fzf_mode_flags
+  _fzf_vim_mode "🌱 New Worktree from Branch > " "  j/k: navigate │ /: search / type new branch │ enter: select or create │ q: quit" "select or create"
+
+  local fzf_raw
+  fzf_raw=$(printf "%s\n" "${remote_branches[@]}" | fzf \
+    --print-query \
+    --height=~45% \
+    "${fzf_mode_flags[@]}" \
+    --color="header:italic:dim,prompt:bold:green,pointer:bold:green" \
+    --preview='git log -n 10 --oneline --color=always "origin/{}" 2>/dev/null || git log -n 10 --oneline --color=always "{}" 2>/dev/null' \
+    --preview-window='right:55%:wrap')
+
+  local query_line selected_line
+  query_line=$(echo "$fzf_raw" | sed -n '1p')
+  selected_line=$(echo "$fzf_raw" | sed -n '2p')
+
+  if [ -n "$selected_line" ]; then
+    target_input="$selected_line"
+  elif [ -n "$query_line" ]; then
+    target_input="$query_line"
+  else
+    return 2
+  fi
+
+  target_input="${target_input#"${target_input%%[![:space:]]*}"}"
+  target_input="${target_input%"${target_input##*[![:space:]]}"}"
+  [ -n "$target_input" ] || return 2
+  return 0
+}
+
 # Git Worktree New / Create (gwtnew / gwtn)
 # Creates a new worktree from an existing remote/local branch or a new branch
 gwtnew() {
@@ -279,60 +332,11 @@ gwtnew() {
   target_input="${target_input#"${target_input%%[![:space:]]*}"}"
   target_input="${target_input%"${target_input##*[![:space:]]}"}"
 
-  # If no argument given, offer interactive FZF selection of remote & unattached local branches
   if [ -z "$target_input" ]; then
-    if ! command -v fzf &>/dev/null; then
-      printf "Usage: gwtnew [-e|--env] <branch-name-or-ticket>\n" >&2
-      return 1
-    fi
-
-    printf "\033[1;34m==>\033[0m Fetching remote branches...\n"
-    git fetch --prune 2>/dev/null || true
-
-    local -a remote_branches
-    local b
-    while IFS= read -r b; do
-      [ -n "$b" ] && remote_branches+=("$b")
-    done < <(_gwtnew_available_branches)
-
-    if [ "${#remote_branches[@]}" -eq 0 ]; then
-      printf "\033[33mNo unattached branches found. Provide a branch name to create a new one.\033[0m\n"
-      printf "Usage: gwtnew [-e|--env] <new-branch-name>\n"
-      return 0
-    fi
-
-    local -a fzf_mode_flags
-    _fzf_vim_mode "🌱 New Worktree from Branch > " "  j/k: navigate │ /: search / type new branch │ enter: select or create │ q: quit" "select or create"
-
-    local fzf_raw
-    fzf_raw=$(printf "%s\n" "${remote_branches[@]}" | fzf \
-      --print-query \
-      --height=~45% \
-      "${fzf_mode_flags[@]}" \
-      --color="header:italic:dim,prompt:bold:green,pointer:bold:green" \
-      --preview='git log -n 10 --oneline --color=always "origin/{}" 2>/dev/null || git log -n 10 --oneline --color=always "{}" 2>/dev/null' \
-      --preview-window='right:55%:wrap')
-
-    local query_line selected_line
-    query_line=$(echo "$fzf_raw" | sed -n '1p')
-    selected_line=$(echo "$fzf_raw" | sed -n '2p')
-
-    # If an existing branch was selected from the list, use it; otherwise use the typed new branch name
-    if [ -n "$selected_line" ]; then
-      target_input="$selected_line"
-    elif [ -n "$query_line" ]; then
-      target_input="$query_line"
-    else
-      return 0
-    fi
-
-    # Strip leading and trailing whitespace
-    target_input="${target_input#"${target_input%%[![:space:]]*}"}"
-    target_input="${target_input%"${target_input##*[![:space:]]}"}"
-
-    if [ -z "$target_input" ]; then
-      return 0
-    fi
+    _gwtnew_prompt_branch
+    local prompt_rc=$?
+    [ "$prompt_rc" -eq 2 ] && return 0
+    [ "$prompt_rc" -ne 0 ] && return "$prompt_rc"
   fi
 
   # Resolve branch and directory name
@@ -415,6 +419,68 @@ gwtnew() {
   fi
 }
 
+# Internal helper: render a single worktree row for gwts (uses caller scope variables)
+_render_gwts_entry() {
+  [[ "$is_bare" = true || -z "$wt_path" ]] && return 0
+  if [[ "$is_detached" = true && -z "$wt_branch" ]]; then
+    wt_branch="(detached HEAD)"
+  fi
+  [[ -z "$wt_branch" ]] && return 0
+
+  marker="  "
+  is_active=false
+  if [[ "$wt_path" == "$active_wt" || "${wt_path:A}" == "${active_wt:A}" ]]; then
+    marker="\033[1;32m➜ \033[0m"
+    is_active=true
+  fi
+
+  status_out=$(git -C "$wt_path" status --porcelain 2>/dev/null)
+  status_str=""
+  if [ -z "$status_out" ]; then
+    status_str="\033[32m✔ clean\033[0m"
+  else
+    staged=$(echo "$status_out" | grep -c '^[MADRC]' || true)
+    unstaged=$(echo "$status_out" | grep -c '^.[MD]' || true)
+    untracked=$(echo "$status_out" | grep -c '^\?\?' || true)
+    parts=()
+    (( staged > 0 )) && parts+=("${staged} staged")
+    (( unstaged > 0 )) && parts+=("${unstaged} modified")
+    (( untracked > 0 )) && parts+=("${untracked} untracked")
+    status_str="\033[1;33m●\033[0m \033[33m${(j:, :)parts}\033[0m"
+  fi
+
+  sync_str=""
+  upstream_count=$(git -C "$wt_path" rev-list --left-right --count HEAD...@{u} 2>/dev/null || true)
+  if [ -n "$upstream_count" ]; then
+    ahead=$(echo "$upstream_count" | awk '{print $1}')
+    behind=$(echo "$upstream_count" | awk '{print $2}')
+    if (( ahead > 0 && behind > 0 )); then
+      sync_str="\033[33m↑${ahead} ↓${behind}\033[0m"
+    elif (( ahead > 0 )); then
+      sync_str="\033[32m↑${ahead}\033[0m"
+    elif (( behind > 0 )); then
+      sync_str="\033[31m↓${behind}\033[0m"
+    else
+      sync_str="\033[32m✔ synced\033[0m"
+    fi
+  else
+    sync_str="\033[38;2;108;112;134m(no upstream)\033[0m"
+  fi
+
+  # :t = tail (basename) without forking a subshell
+  wt_name="${wt_path:t}"
+  wt_display_branch="$wt_branch"
+  if [ "${#wt_display_branch}" -gt 36 ]; then
+    wt_display_branch="${wt_display_branch:0:33}..."
+  fi
+
+  if [ "$is_active" = true ]; then
+    printf "%b\033[1;32m%-14s\033[0m \033[1;36m%-38s\033[0m %-26b %b\n" "$marker" "$wt_name" "$wt_display_branch" "$sync_str" "$status_str"
+  else
+    printf "%b%-14s \033[2m%-38s\033[0m %-26b %b\n" "$marker" "$wt_name" "$wt_display_branch" "$sync_str" "$status_str"
+  fi
+}
+
 # Git Worktree Fleet Status Dashboard (gwts / gwtstatus)
 # Scans all worktrees in the current repo and prints aligned status, branch, and sync state
 gwts() {
@@ -430,67 +496,6 @@ gwts() {
 
   printf "\n\033[1;38;2;203;166;247m%-3s %-14s %-38s %-16s %s\033[0m\n" "" "WORKTREE" "BRANCH" "SYNC" "WORKING TREE"
   printf "\033[38;2;108;112;134m%s\033[0m\n" "────────────────────────────────────────────────────────────────────────────────────────"
-
-  _render_gwts_entry() {
-    [[ "$is_bare" = true || -z "$wt_path" ]] && return 0
-    if [[ "$is_detached" = true && -z "$wt_branch" ]]; then
-      wt_branch="(detached HEAD)"
-    fi
-    [[ -z "$wt_branch" ]] && return 0
-
-    marker="  "
-    is_active=false
-    if [[ "$wt_path" == "$active_wt" || "${wt_path:A}" == "${active_wt:A}" ]]; then
-      marker="\033[1;32m➜ \033[0m"
-      is_active=true
-    fi
-
-    status_out=$(git -C "$wt_path" status --porcelain 2>/dev/null)
-    status_str=""
-    if [ -z "$status_out" ]; then
-      status_str="\033[32m✔ clean\033[0m"
-    else
-      staged=$(echo "$status_out" | grep -c '^[MADRC]' || true)
-      unstaged=$(echo "$status_out" | grep -c '^.[MD]' || true)
-      untracked=$(echo "$status_out" | grep -c '^\?\?' || true)
-      parts=()
-      (( staged > 0 )) && parts+=("${staged} staged")
-      (( unstaged > 0 )) && parts+=("${unstaged} modified")
-      (( untracked > 0 )) && parts+=("${untracked} untracked")
-      status_str="\033[1;33m●\033[0m \033[33m${(j:, :)parts}\033[0m"
-    fi
-
-    sync_str=""
-    upstream_count=$(git -C "$wt_path" rev-list --left-right --count HEAD...@{u} 2>/dev/null || true)
-    if [ -n "$upstream_count" ]; then
-      ahead=$(echo "$upstream_count" | awk '{print $1}')
-      behind=$(echo "$upstream_count" | awk '{print $2}')
-      if (( ahead > 0 && behind > 0 )); then
-        sync_str="\033[33m↑${ahead} ↓${behind}\033[0m"
-      elif (( ahead > 0 )); then
-        sync_str="\033[32m↑${ahead}\033[0m"
-      elif (( behind > 0 )); then
-        sync_str="\033[31m↓${behind}\033[0m"
-      else
-        sync_str="\033[32m✔ synced\033[0m"
-      fi
-    else
-      sync_str="\033[38;2;108;112;134m(no upstream)\033[0m"
-    fi
-
-    # :t = tail (basename) without forking a subshell
-    wt_name="${wt_path:t}"
-    wt_display_branch="$wt_branch"
-    if [ "${#wt_display_branch}" -gt 36 ]; then
-      wt_display_branch="${wt_display_branch:0:33}..."
-    fi
-
-    if [ "$is_active" = true ]; then
-      printf "%b\033[1;32m%-14s\033[0m \033[1;36m%-38s\033[0m %-26b %b\n" "$marker" "$wt_name" "$wt_display_branch" "$sync_str" "$status_str"
-    else
-      printf "%b%-14s \033[2m%-38s\033[0m %-26b %b\n" "$marker" "$wt_name" "$wt_display_branch" "$sync_str" "$status_str"
-    fi
-  }
 
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
@@ -526,34 +531,31 @@ gwts() {
   printf "\n"
 }
 
-# Git Worktree Delete (gwtdel / gwtrm)
-# Safely removes an individual worktree and optionally deletes its local branch
-gwtdel() {
-  _require_git_repo || return 1
+# Return 0 if the branch name is a protected long-lived branch
+_gwt_is_protected_branch() {
+  [[ "$1" =~ ^(main|master|develop|qa|stage|staging)$ ]]
+}
 
-  local active_wt target_input="$1" target_wt="" target_branch=""
-  local p b br bname item fzf_lines="" selected wt_name is_dirty=false
-  local confirm_del confirm_br
-  local -a eligible rm_opts
-  active_wt="$(git rev-parse --show-toplevel 2>/dev/null)"
+# Populate caller's `eligible` array with "path|branch" entries for disposable worktrees
+_gwtdel_collect_eligible() {
+  local active_wt="$1"
+  local line="" _p="" _b="" _is_bare=false _is_detached=false
 
-  # Collect eligible worktrees (exclude active worktree, bare repo, and protected branches)
-  local _p="" _b="" _is_bare=false _is_detached=false
-  _collect_gwtdel_entry() {
+  _flush_gwtdel_entry() {
     [[ "$_is_bare" = true || -z "$_p" ]] && return 0
     if [[ "$_is_detached" = true && -z "$_b" ]]; then
       _b="(detached HEAD)"
     fi
     [[ -z "$_b" ]] && return 0
     [[ "$_p" == "$active_wt" || "${_p:A}" == "${active_wt:A}" ]] && return 0
-    [[ "$_b" =~ ^(main|master|develop|qa|stage|staging)$ ]] && return 0
+    _gwt_is_protected_branch "$_b" && return 0
     eligible+=("${_p}|${_b}")
   }
 
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       worktree\ *)
-        _collect_gwtdel_entry
+        _flush_gwtdel_entry
         _p="${line#worktree }"
         _b=""
         _is_bare=false
@@ -572,7 +574,7 @@ gwtdel() {
         _b="${line#branch }"
         ;;
       "")
-        _collect_gwtdel_entry
+        _flush_gwtdel_entry
         _p=""
         _b=""
         _is_bare=false
@@ -580,7 +582,21 @@ gwtdel() {
         ;;
     esac
   done < <(git worktree list --porcelain 2>/dev/null)
-  _collect_gwtdel_entry
+  _flush_gwtdel_entry
+}
+
+# Git Worktree Delete (gwtdel / gwtrm)
+# Safely removes an individual worktree and optionally deletes its local branch
+gwtdel() {
+  _require_git_repo || return 1
+
+  local active_wt target_input="$1" target_wt="" target_branch=""
+  local p br bname item fzf_lines="" selected wt_name is_dirty=false
+  local confirm_del confirm_br
+  local -a eligible rm_opts
+  active_wt="$(git rev-parse --show-toplevel 2>/dev/null)"
+
+  _gwtdel_collect_eligible "$active_wt"
 
   if [ "${#eligible[@]}" -eq 0 ]; then
     printf "\033[33mNo disposable worktrees found (excluding active worktree and protected branches).\033[0m\n"
@@ -590,7 +606,6 @@ gwtdel() {
   if [ -n "$target_input" ]; then
     for item in "${eligible[@]}"; do
       p="${item%%|*}"
-      # :t = tail (basename) without forking a subshell
       bname="${p:t}"
       br="${item##*|}"
       if [[ "${bname:l}" == *"${target_input:l}"* ]] || [[ "${br:l}" == *"${target_input:l}"* ]]; then
@@ -708,6 +723,114 @@ _gwtclean_is_gone() {
   return 1
 }
 
+# Interactive selection helper for gwtclean (populates caller's `selected_candidates` array)
+_gwtclean_select_candidates() {
+  local force="$1"
+  local count="${#candidates[@]}"
+  local item="" wt_path="" wt_branch="" dirty_tag=""
+
+  if [ "$force" = true ]; then
+    selected_candidates=("${candidates[@]}")
+    return 0
+  fi
+
+  if command -v fzf &>/dev/null && [ -t 1 ]; then
+    local fzf_input=""
+    for item in "${candidates[@]}"; do
+      wt_path="${item%%|*}"
+      wt_branch="${item##*|}"
+      dirty_tag=""
+      if [ -n "$(git -C "$wt_path" status --porcelain 2>/dev/null)" ]; then
+        dirty_tag=" *dirty*"
+      fi
+      fzf_input+="${wt_path}\t[${wt_branch}]${dirty_tag}\n"
+    done
+
+    local -a fzf_mode_flags
+    _fzf_vim_mode "🗑 Select Worktrees to Prune > " "  j/k: navigate │ space/tab: toggle │ a: toggle all │ /: search │ enter: confirm │ q: abort" "confirm" "space,a" "" "space:toggle+down,tab:toggle+down,btab:toggle+up,a:toggle-all"
+
+    local fzf_output
+    fzf_output=$(printf "%b" "$fzf_input" | fzf \
+      --multi \
+      --height=~45% \
+      --marker="✔ " \
+      "${fzf_mode_flags[@]}" \
+      --color="header:italic:dim,prompt:bold:red,pointer:bold:red,marker:bold:green" \
+      --preview='git -C {1} status -sb 2>/dev/null; echo ""; git -C {1} log -n 5 --oneline --color=always 2>/dev/null' \
+      --preview-window='right:55%:wrap')
+
+    if [ -z "$fzf_output" ]; then
+      printf "No worktrees selected. Aborted.\n"
+      return 1
+    fi
+
+    local sel_line="" sel_path=""
+    while IFS= read -r sel_line || [ -n "$sel_line" ]; do
+      sel_path=$(echo "$sel_line" | awk -F'\t' '{print $1}')
+      for item in "${candidates[@]}"; do
+        if [ "${item%%|*}" = "$sel_path" ]; then
+          selected_candidates+=("$item")
+          break
+        fi
+      done
+    done <<< "$fzf_output"
+    return 0
+  fi
+
+  if [ "$count" -eq 1 ]; then
+    item="${candidates[1]}"
+    wt_path="${item%%|*}"
+    wt_branch="${item##*|}"
+    printf "\n\033[1;33mFound 1 worktree whose remote tracking branch is gone:\033[0m\n"
+    printf "  \033[1;36m•\033[0m %-40s \033[2m[%s]\033[0m\n" "$wt_path" "$wt_branch"
+    printf "\nPrune this worktree? [y/N]: "
+    local confirm_single
+    read -r confirm_single
+    case "$confirm_single" in
+      [yY]|[yY][eE][sS]) selected_candidates+=("$item") ;;
+      *)
+        printf "Aborted. No worktrees were removed.\n"
+        return 1
+        ;;
+    esac
+    return 0
+  fi
+
+  printf "\n\033[1;33mFound %d worktrees whose remote tracking branches are gone:\033[0m\n" "$count"
+  local idx=1
+  for item in "${candidates[@]}"; do
+    wt_path="${item%%|*}"
+    wt_branch="${item##*|}"
+    dirty_tag=""
+    if [ -n "$(git -C "$wt_path" status --porcelain 2>/dev/null)" ]; then
+      dirty_tag=" \033[31m(DIRTY: uncommitted changes)\033[0m"
+    fi
+    printf "  %2d) %-40s \033[2m[%s]\033[0m%b\n" "$idx" "$wt_path" "$wt_branch" "$dirty_tag"
+    ((idx++))
+  done
+
+  printf "\nEnter numbers to prune (e.g. 1,2 or 'a' for all, Enter to cancel): "
+  local input_choice
+  read -r input_choice
+  if [ -z "$input_choice" ]; then
+    printf "Aborted. No worktrees were removed.\n"
+    return 1
+  fi
+
+  if [[ "$input_choice" == "a" || "$input_choice" == "all" ]]; then
+    selected_candidates=("${candidates[@]}")
+  else
+    local clean_choices num
+    clean_choices=$(echo "$input_choice" | tr ',' ' ')
+    for num in $clean_choices; do
+      if [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "$count" ]; then
+        selected_candidates+=("${candidates[$num]}")
+      fi
+    done
+  fi
+  return 0
+}
+
 # Git Worktree Clean / Prune (gwtclean / gwtprune / gwtc)
 # Prunes worktrees whose remote upstream branch has been deleted on the remote
 gwtclean() {
@@ -727,9 +850,8 @@ gwtclean() {
     printf "\033[33m⚠ Warning: git fetch --prune failed; checking local tracking state...\033[0m\n"
   }
 
-  local candidates=()
-  local _wt_path=""
-  local _wt_branch=""
+  local -a candidates=()
+  local _wt_path="" _wt_branch="" line=""
 
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
@@ -756,111 +878,14 @@ gwtclean() {
     candidates+=("${_wt_path}|${_wt_branch}")
   fi
 
-  local count="${#candidates[@]}"
-  if [ "$count" -eq 0 ]; then
+  if [ "${#candidates[@]}" -eq 0 ]; then
     printf "\033[32m✔ No worktrees with deleted remote branches found.\033[0m\n"
     git worktree prune
     return 0
   fi
 
-  local selected_candidates=()
-
-  # If force mode, select all candidates automatically
-  if [ "$force" = true ]; then
-    selected_candidates=("${candidates[@]}")
-  elif command -v fzf &>/dev/null && [ -t 1 ]; then
-    local fzf_input=""
-    local item="" wt_path="" wt_branch="" dirty_tag=""
-    for item in "${candidates[@]}"; do
-      wt_path="${item%%|*}"
-      wt_branch="${item##*|}"
-      dirty_tag=""
-      if [ -n "$(git -C "$wt_path" status --porcelain 2>/dev/null)" ]; then
-        dirty_tag=" *dirty*"
-      fi
-      fzf_input+="${wt_path}\t[${wt_branch}]${dirty_tag}\n"
-    done
-
-    local -a fzf_mode_flags
-    _fzf_vim_mode "🗑 Select Worktrees to Prune > " "  j/k: navigate │ space/tab: toggle │ a: toggle all │ /: search │ enter: confirm │ q: abort" "confirm" "space,a" "" "space:toggle+down,tab:toggle+down,btab:toggle+up,a:toggle-all"
-
-    local fzf_output
-    fzf_output=$(printf "%b" "$fzf_input" | fzf \
-      --multi \
-      --height=~45% \
-      --marker="✔ " \
-      "${fzf_mode_flags[@]}" \
-      --color="header:italic:dim,prompt:bold:red,pointer:bold:red,marker:bold:green" \
-      --preview='git -C {1} status -sb 2>/dev/null; echo ""; git -C {1} log -n 5 --oneline --color=always 2>/dev/null' \
-      --preview-window='right:55%:wrap')
-
-    if [ -z "$fzf_output" ]; then
-      printf "No worktrees selected. Aborted.\n"
-      return 0
-    fi
-
-    local sel_line="" sel_path=""
-    while IFS= read -r sel_line || [ -n "$sel_line" ]; do
-      sel_path=$(echo "$sel_line" | awk -F'\t' '{print $1}')
-      for item in "${candidates[@]}"; do
-        if [ "${item%%|*}" = "$sel_path" ]; then
-          selected_candidates+=("$item")
-          break
-        fi
-      done
-    done <<< "$fzf_output"
-  elif [ "$count" -eq 1 ]; then
-    # Fallback for single candidate without fzf/TTY
-    local item="${candidates[1]}"
-    local wt_path="${item%%|*}"
-    local wt_branch="${item##*|}"
-    printf "\n\033[1;33mFound 1 worktree whose remote tracking branch is gone:\033[0m\n"
-    printf "  \033[1;36m•\033[0m %-40s \033[2m[%s]\033[0m\n" "$wt_path" "$wt_branch"
-    printf "\nPrune this worktree? [y/N]: "
-    local confirm_single
-    read -r confirm_single
-    case "$confirm_single" in
-      [yY]|[yY][eE][sS]) selected_candidates+=("$item") ;;
-      *)
-        printf "Aborted. No worktrees were removed.\n"
-        return 0
-        ;;
-    esac
-  else
-    # Fallback text multi-select menu without fzf/TTY
-    printf "\n\033[1;33mFound %d worktrees whose remote tracking branches are gone:\033[0m\n" "$count"
-    local idx=1
-    for item in "${candidates[@]}"; do
-      local wt_path="${item%%|*}"
-      local wt_branch="${item##*|}"
-      local dirty_tag=""
-      if [ -n "$(git -C "$wt_path" status --porcelain 2>/dev/null)" ]; then
-        dirty_tag=" \033[31m(DIRTY: uncommitted changes)\033[0m"
-      fi
-      printf "  %2d) %-40s \033[2m[%s]\033[0m%b\n" "$idx" "$wt_path" "$wt_branch" "$dirty_tag"
-      ((idx++))
-    done
-
-    printf "\nEnter numbers to prune (e.g. 1,2 or 'a' for all, Enter to cancel): "
-    local input_choice
-    read -r input_choice
-    if [ -z "$input_choice" ]; then
-      printf "Aborted. No worktrees were removed.\n"
-      return 0
-    fi
-
-    if [[ "$input_choice" == "a" || "$input_choice" == "all" ]]; then
-      selected_candidates=("${candidates[@]}")
-    else
-      local clean_choices
-      clean_choices=$(echo "$input_choice" | tr ',' ' ')
-      for num in $clean_choices; do
-        if [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "$count" ]; then
-          selected_candidates+=("${candidates[$num]}")
-        fi
-      done
-    fi
-  fi
+  local -a selected_candidates=()
+  _gwtclean_select_candidates "$force" || return 0
 
   local num_selected="${#selected_candidates[@]}"
   if [ "$num_selected" -eq 0 ]; then
@@ -870,7 +895,7 @@ gwtclean() {
 
   printf "\n\033[1;34m==>\033[0m Processing %d selected worktree(s)...\n" "$num_selected"
 
-  local is_dirty=false
+  local is_dirty=false item="" wt_path="" wt_branch=""
   local -a rm_opts
   for item in "${selected_candidates[@]}"; do
     wt_path="${item%%|*}"
@@ -953,7 +978,7 @@ _gwtdel() {
     b="${p:t}"
     br="$(echo "$line" | awk '{print $3}' | tr -d '[]')"
     [[ "$b" == ".bare" || "$b" == ".git" || "$p" == "$active_wt" ]] && continue
-    [[ "$br" =~ ^(main|master|develop|qa|stage|staging)$ ]] && continue
+    _gwt_is_protected_branch "$br" && continue
     wts+=("$b")
   done < <(git worktree list 2>/dev/null)
   _describe 'worktree to delete' wts

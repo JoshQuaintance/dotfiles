@@ -438,8 +438,41 @@ def _check_bash_scripts_syntax_and_lint(report: TestReport, dotfiles: Path) -> N
             report.fail("shfmt script formatting", detail)
 
 
+def _check_zsh_function_bounds(report: TestReport, dotfiles: Path) -> None:
+    """Verify zsh/functions/*.zsh modules and functions remain within size bounds."""
+    func_files = sorted((dotfiles / "zsh" / "functions").glob("*.zsh"))
+    oversized_modules: list[str] = []
+    oversized_funcs: list[str] = []
+    func_header = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*)\s*\(\)\s*\{")
+
+    for zfile in func_files:
+        lines = zfile.read_text(encoding="utf-8", errors="ignore").splitlines()
+        if len(lines) > 1000:
+            oversized_modules.append(f"{zfile.name} ({len(lines)}L)")
+        stack: list[tuple[str, int]] = []
+        max_fn_lines = 120 if zfile.name == "worktree.zsh" else 210
+        for idx, line in enumerate(lines, 1):
+            match = func_header.match(line)
+            if match:
+                stack.append((match.group(1), idx))
+            elif line == "}" and stack:
+                fn_name, start_line = stack.pop()
+                fn_len = idx - start_line + 1
+                if fn_len > max_fn_lines:
+                    oversized_funcs.append(f"{fn_name} ({fn_len}L in {zfile.name})")
+
+    if oversized_modules or oversized_funcs:
+        issues = ", ".join((oversized_modules + oversized_funcs)[:3])
+        report.warn("Zsh module & function bounds", f"Oversized: {issues}")
+    else:
+        report.ok(
+            "Zsh module & function bounds",
+            f"All {len(func_files)} zsh/functions/*.zsh modules within size limits",
+        )
+
+
 def _check_zsh_scripts_syntax(report: TestReport, dotfiles: Path) -> None:
-    """Validate Zsh script syntax across zsh/ and zsh/functions/."""
+    """Validate Zsh script syntax and size bounds across zsh/ and zsh/functions/."""
     if not shutil.which("zsh"):
         return
     zsh_scripts = [dotfiles / "zsh" / ".zshrc", dotfiles / "zsh" / ".zshenv", dotfiles / "zsh" / ".aliases"]
@@ -452,6 +485,7 @@ def _check_zsh_scripts_syntax(report: TestReport, dotfiles: Path) -> None:
             zsh_failed = True
     if not zsh_failed:
         report.ok("Zsh scripts syntax", "All zsh/* and functions pass (zsh -n)")
+    _check_zsh_function_bounds(report, dotfiles)
 
 
 def _check_brewfile_and_symlinks(report: TestReport, dotfiles: Path) -> None:
