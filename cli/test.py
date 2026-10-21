@@ -52,6 +52,7 @@ class TestReport:
         self.failed += 1
         print(f"  {C_RED}✖{C_RESET} {C_BOLD}{label:<44}{C_RESET} {C_RED}{detail}{C_RESET}")
 
+
 def parse_jsonc(filepath: Path) -> dict:
     """Parse JSON with comments and trailing commas (standard VS Code JSONC format)."""
     text = filepath.read_text(encoding="utf-8")
@@ -107,6 +108,7 @@ def parse_jsonc(filepath: Path) -> dict:
         cleaned = subbed
 
     return json.loads(cleaned)
+
 
 def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
     print(f"\n{C_BOLD}1. Configuration & Runtime Parsers{C_RESET}")
@@ -225,6 +227,7 @@ def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
             report.ok("Git configuration", ".gitconfig syntax valid")
         else:
             report.fail("Git configuration", ".gitconfig syntax error")
+
 
 def test_shell_runtime(report: TestReport, dotfiles: Path):
     print(f"\n{C_BOLD}2. Shell Runtime & Interactive Startup{C_RESET}")
@@ -414,6 +417,7 @@ wcd -h >/dev/null
             failing = [line.strip().lstrip("✖ ") for line in out.splitlines() if "✖" in line]
             report.fail("Zsh function unit tests", f"{summary}: {', '.join(failing)[:60] or err.strip()[:60]}")
 
+
 def test_syntax_and_links(report: TestReport, dotfiles: Path):
     print(f"\n{C_BOLD}3. Script Syntax & Link Integrity{C_RESET}")
 
@@ -515,6 +519,7 @@ def test_syntax_and_links(report: TestReport, dotfiles: Path):
         report.ok("Symlink health", "All configuration symlinks point to valid targets")
     else:
         report.fail("Symlink health", f"Dangling symlinks: {', '.join(dangling)}")
+
 
 def test_cli_architecture(report: TestReport, dotfiles: Path):
     print(f"\n{C_BOLD}4. Python CLI Subcommands & Architecture{C_RESET}")
@@ -673,6 +678,7 @@ def test_cli_architecture(report: TestReport, dotfiles: Path):
             report.ok(label, detail)
         else:
             report.fail(label, err_msg or f"Exit non-zero ({code})")
+
 
 def run_tests() -> int:
     dotfiles = get_dotfiles_dir()

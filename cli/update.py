@@ -1,6 +1,7 @@
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 from cli.doctor import DoctorReport, check_and_heal_symlinks, check_cli_tools, compile_zsh_sources
 from cli.manifest import get_dotfiles_dir
@@ -17,33 +18,68 @@ from cli.ui import (
     run_cmd,
 )
 
+GIT_LOG_FMT = "--format=  %C(yellow)%h%Creset %C(cyan)%cr%Creset %C(bold)%s%Creset %C(dim)(%an)%Creset"
 
-def update_brew(auto_apply: bool = False):
-    if shutil.which("brew"):
-        print(f"\n{C_BLUE}==>{C_RESET} Updating Homebrew formulas and packages...")
-        subprocess.run(["brew", "update"], check=False)
-        subprocess.run(["brew", "upgrade"], check=False)
-        print(f"{C_GREEN}✔{C_RESET} Homebrew packages updated successfully!")
 
-        # Check for missing binaries and offer to install them
-        print(f"\n{C_BLUE}==>{C_RESET} Auditing workstation CLI tools...")
-        report = DoctorReport()
-        check_cli_tools(report, fix=auto_apply)
+def update_brew(auto_apply: bool = False) -> None:
+    """Update Homebrew formulas and audit missing CLI tools."""
+    if not shutil.which("brew"):
+        return
+    print(f"\n{C_BLUE}==>{C_RESET} Updating Homebrew formulas and packages...")
+    subprocess.run(["brew", "update"], check=False)
+    subprocess.run(["brew", "upgrade"], check=False)
+    print(f"{C_GREEN}✔{C_RESET} Homebrew packages updated successfully!")
 
-def update_mise():
-    if shutil.which("mise"):
-        print(f"\n{C_BLUE}==>{C_RESET} Upgrading Mise tools and runtimes...")
-        subprocess.run(["mise", "upgrade"], check=False)
-        print(f"{C_GREEN}✔{C_RESET} Mise tools upgraded successfully!")
+    print(f"\n{C_BLUE}==>{C_RESET} Auditing workstation CLI tools...")
+    report = DoctorReport()
+    check_cli_tools(report, fix=auto_apply)
+
+
+def update_mise() -> None:
+    """Upgrade Mise-managed tools and runtimes."""
+    if not shutil.which("mise"):
+        return
+    print(f"\n{C_BLUE}==>{C_RESET} Upgrading Mise tools and runtimes...")
+    subprocess.run(["mise", "upgrade"], check=False)
+    print(f"{C_GREEN}✔{C_RESET} Mise tools upgraded successfully!")
+
 
 def prompt_user(prompt: str, default: str = "y") -> str:
+    """Prompt the user on stdin with a fallback default on EOF/interrupt."""
     try:
         res = input(prompt)
         return res.strip() or default
     except (EOFError, KeyboardInterrupt):
         return default
 
-def run_update(check_only: bool = False, auto_apply: bool = False, update_all: bool = False, tools_only: bool = False, test_after: bool = False, prune: bool = True) -> int:
+
+def _pull_and_reconcile(dotfiles: Path, current_branch: str, prune: bool) -> bool:
+    """Pull remote changes with rebase, heal symlinks, compile Zsh, and prune deleted upstream items."""
+    print(f"{C_BLUE}==>{C_RESET} Pulling updates via git pull --rebase...")
+    _, old_head, _ = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "HEAD"])
+    code, _, _ = run_cmd(["git", "-C", str(dotfiles), "pull", "--rebase", "origin", current_branch], timeout=120)
+    if code != 0:
+        print(f"{C_RED}✖ Git pull failed. Please check {dotfiles}{C_RESET}", file=sys.stderr)
+        return False
+
+    _, new_head, _ = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "--short", "HEAD"])
+    print(f"{C_GREEN}✔{C_RESET} Dotfiles successfully updated to {C_CYAN}{new_head}{C_RESET}!")
+
+    check_and_heal_symlinks(DoctorReport(), dotfiles, fix=True)
+    compile_zsh_sources(dotfiles)
+    if prune:
+        apply_prune(dotfiles, plan_prune(dotfiles, old_head, "HEAD"))
+    return True
+
+
+def run_update(
+    check_only: bool = False,
+    auto_apply: bool = False,
+    update_all: bool = False,
+    tools_only: bool = False,
+    test_after: bool = False,
+    prune: bool = True,
+) -> int:
     dotfiles = get_dotfiles_dir()
 
     if tools_only:
@@ -55,31 +91,28 @@ def run_update(check_only: bool = False, auto_apply: bool = False, update_all: b
 
     print(f"{C_BLUE}==>{C_RESET} Checking for dotfiles updates in {C_BOLD}{dotfiles}{C_RESET}...")
 
-    # Fetch from origin
     code, _, _ = run_cmd(["git", "-C", str(dotfiles), "fetch", "--quiet", "origin"], timeout=120)
     if code != 0:
         print(f"{C_YELLOW}⚠ Warning: Failed to fetch from origin. Check network or credentials.{C_RESET}", file=sys.stderr)
         return 1
 
-    code, current_branch, _ = run_cmd(["git", "-C", str(dotfiles), "branch", "--show-current"])
+    _, current_branch, _ = run_cmd(["git", "-C", str(dotfiles), "branch", "--show-current"])
     current_branch = current_branch or "main"
 
-    code, upstream, _ = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "--abbrev-ref", "@{u}"])
+    _, upstream, _ = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "--abbrev-ref", "@{u}"])
     upstream = upstream or f"origin/{current_branch}"
 
-    code, behind_str, _ = run_cmd(["git", "-C", str(dotfiles), "rev-list", "--count", f"HEAD..{upstream}"])
-    code, ahead_str, _ = run_cmd(["git", "-C", str(dotfiles), "rev-list", "--count", f"{upstream}..HEAD"])
-
+    _, behind_str, _ = run_cmd(["git", "-C", str(dotfiles), "rev-list", "--count", f"HEAD..{upstream}"])
+    _, ahead_str, _ = run_cmd(["git", "-C", str(dotfiles), "rev-list", "--count", f"{upstream}..HEAD"])
     behind = int(behind_str) if behind_str.isdigit() else 0
     ahead = int(ahead_str) if ahead_str.isdigit() else 0
 
-    code, status, _ = run_cmd(["git", "-C", str(dotfiles), "status", "--porcelain"])
+    _, status, _ = run_cmd(["git", "-C", str(dotfiles), "status", "--porcelain"])
     is_dirty = bool(status)
-
     updated_git = False
 
     if behind == 0 and ahead == 0:
-        code, head_short, _ = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "--short", "HEAD"])
+        _, head_short, _ = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "--short", "HEAD"])
         print(f"{C_GREEN}✔{C_RESET} Dotfiles are up to date with {C_BOLD}{upstream}{C_RESET} (commit {C_CYAN}{head_short}{C_RESET}).")
         if is_dirty:
             print(f"{C_YELLOW}⚠ Note: You have local uncommitted changes in {dotfiles}{C_RESET}")
@@ -91,12 +124,12 @@ def run_update(check_only: bool = False, auto_apply: bool = False, update_all: b
         print(f"{C_GREEN}✔{C_RESET} Local dotfiles are ahead of {C_BOLD}{upstream}{C_RESET} by {ahead} commit(s) (unpushed).")
     else:
         print(f"{C_YELLOW}⬇ {behind} update(s) available for your dotfiles from {upstream}:{C_RESET}\n")
-        subprocess.run(["git", "-C", str(dotfiles), "log", "--format=  %C(yellow)%h%Creset %C(cyan)%cr%Creset %C(bold)%s%Creset %C(dim)(%an)%Creset", f"HEAD..{upstream}"], check=False)
+        subprocess.run(["git", "-C", str(dotfiles), "log", GIT_LOG_FMT, f"HEAD..{upstream}"], check=False)
         print()
 
         if check_only:
             if prune:
-                code, old_head, _ = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "HEAD"])
+                _, old_head, _ = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "HEAD"])
                 preview_prune(dotfiles, old_head, upstream)
             print("Run 'dot update' to pull and apply these updates.")
             return 0
@@ -114,22 +147,9 @@ def run_update(check_only: bool = False, auto_apply: bool = False, update_all: b
                 do_apply = False
 
         if do_apply:
-            print(f"{C_BLUE}==>{C_RESET} Pulling updates via git pull --rebase...")
-            code, old_head, _ = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "HEAD"])
-            code, _, _ = run_cmd(["git", "-C", str(dotfiles), "pull", "--rebase", "origin", current_branch], timeout=120)
-            if code == 0:
-                code, new_head, _ = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "--short", "HEAD"])
-                print(f"{C_GREEN}✔{C_RESET} Dotfiles successfully updated to {C_CYAN}{new_head}{C_RESET}!")
-                # Automatically repair any configuration symlinks that moved in the pulled commit
-                check_and_heal_symlinks(DoctorReport(), dotfiles, fix=True)
-                compile_zsh_sources(dotfiles)
-                # Remove links, caches and packages whose source was deleted between the old and new commit
-                if prune:
-                    apply_prune(dotfiles, plan_prune(dotfiles, old_head, "HEAD"))
-                updated_git = True
-            else:
-                print(f"{C_RED}✖ Git pull failed. Please check {dotfiles}{C_RESET}", file=sys.stderr)
+            if not _pull_and_reconcile(dotfiles, current_branch, prune):
                 return 1
+            updated_git = True
 
     if check_only:
         return 0

@@ -21,45 +21,15 @@ from cli.ui import (
     ICON_BULLET as ICON_INFO,
 )
 
-
-def clean_stale_builds(dry_run: bool, max_age_days: int = 30) -> tuple[int, int]:
-    """Scan common code directories for stale project build artifacts older than max_age_days."""
-    home = Path.home()
-    candidate_roots = [
-        home / "Codes",
-        home / "code",
-        home / "Projects",
-        home / "Developer",
-        home / "src",
-        home / "workspace",
-    ]
-    search_roots = [d for d in candidate_roots if d.is_dir()]
-    if not search_roots:
-        return 0, 0
-
-    target_names = {"target", ".next", ".turbo", "dist", ".angular", "build"}
-    cutoff_time = time.time() - (max_age_days * 86400)
-
-    total_bytes = 0
-    total_count = 0
-
-    for root_dir in search_roots:
-        for root, dirs, _ in os.walk(root_dir):
-            dirs[:] = [d for d in dirs if d not in {".git", ".bare", "node_modules", ".venv", "venv"}]
-            matches = [d for d in dirs if d in target_names]
-            for d in matches:
-                dirs.remove(d)
-                target_dir = Path(root) / d
-                try:
-                    mtime = target_dir.stat().st_mtime
-                    if mtime < cutoff_time:
-                        sz = remove_target(target_dir, dry_run)
-                        total_bytes += sz
-                        total_count += 1
-                except OSError:
-                    continue
-
-    return total_count, total_bytes
+TEMP_SCRATCH_PATTERNS: tuple[str, ...] = (
+    "strdiff-left.*",
+    "strdiff-right.*",
+    "sdiff-left.*",
+    "sdiff-right.*",
+    "yazi-cwd.*",
+    "fjq-*",
+    "test-smoke-*",
+)
 
 
 def path_size(path: Path) -> int:
@@ -107,26 +77,63 @@ def remove_target(target: Path, dry_run: bool) -> int:
 
 
 def get_active_zsh_version() -> str:
+    """Return the active Zsh version string (e.g. '5.9'), or empty string if unavailable."""
     if not shutil.which("zsh"):
         return ""
     try:
-        res = subprocess.run(["zsh", "-c", "printf '%s' $ZSH_VERSION"], capture_output=True, text=True, timeout=3, check=False)
+        res = subprocess.run(
+            ["zsh", "-c", "printf '%s' $ZSH_VERSION"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
         return res.stdout.strip()
     except (OSError, subprocess.SubprocessError):
         return ""
 
 
-def run_clean(dry_run: bool = False, clean_all: bool = False, clean_builds: bool = False) -> int:
-    dotfiles = get_dotfiles_dir()
+def clean_stale_builds(dry_run: bool, max_age_days: int = 30) -> tuple[int, int]:
+    """Scan common code directories for stale project build artifacts older than max_age_days."""
     home = Path.home()
-    reclaimed_total = 0
-    cleaned_items: list[tuple[str, str]] = []
+    candidate_roots = [
+        home / "Codes",
+        home / "code",
+        home / "Projects",
+        home / "Developer",
+        home / "src",
+        home / "workspace",
+    ]
+    search_roots = [d for d in candidate_roots if d.is_dir()]
+    if not search_roots:
+        return 0, 0
 
-    mode_tag = " [DRY RUN]" if dry_run else ""
-    print_header(f"Dotfiles Cleaner \u2014 Cache & State Pruner{mode_tag}")
-    print()
+    target_names = {"target", ".next", ".turbo", "dist", ".angular", "build"}
+    ignored_dirs = {".git", ".bare", "node_modules", ".venv", "venv"}
+    cutoff_time = time.time() - (max_age_days * 86400)
 
-    # 1. Stale ~/.zcompdump* files (keep active host + zsh version dump & its .zwc)
+    total_bytes = 0
+    total_count = 0
+
+    for root_dir in search_roots:
+        for root, dirs, _ in os.walk(root_dir):
+            dirs[:] = [d for d in dirs if d not in ignored_dirs]
+            matches = [d for d in dirs if d in target_names]
+            for d in matches:
+                dirs.remove(d)
+                target_dir = Path(root) / d
+                try:
+                    if target_dir.stat().st_mtime < cutoff_time:
+                        total_bytes += remove_target(target_dir, dry_run)
+                        total_count += 1
+                except OSError:
+                    continue
+
+    return total_count, total_bytes
+
+
+def _clean_zcompdumps(home: Path, dry_run: bool, cleaned_items: list[tuple[str, str]]) -> int:
+    """Remove stale ~/.zcompdump* files while keeping the active host + Zsh version dump."""
     short_host = socket.gethostname().split(".")[0]
     zsh_ver = get_active_zsh_version()
     active_dump = f".zcompdump-{short_host}-{zsh_ver}" if zsh_ver else ""
@@ -141,20 +148,23 @@ def run_clean(dry_run: bool = False, clean_all: bool = False, clean_builds: bool
         zcomp_count += 1
 
     if zcomp_count > 0:
-        reclaimed_total += zcomp_bytes
         cleaned_items.append(("Stale Zsh completion dumps", f"{zcomp_count} file(s) ({fmt_bytes(zcomp_bytes)})"))
     else:
         print(f"  {C_GREEN}{ICON_OK}{C_RESET} {'Zsh completion dumps':<42} {C_DIM}Clean (only active dump present){C_RESET}")
+    return zcomp_bytes
 
-    # 2. Cached completion & init directories (zcompcache, ng completion, compiled tool init scripts)
+
+def _clean_completion_caches(dotfiles: Path, home: Path, dry_run: bool, cleaned_items: list[tuple[str, str]]) -> int:
+    """Remove cached completion directories and stale .zwc bytecode."""
     cache_home = Path(os.environ.get("XDG_CACHE_HOME", str(home / ".cache")))
     comp_caches = [
         cache_home / "zsh" / "zcompcache",
         cache_home / "ng_completion.zsh",
         cache_home / "dotfiles" / "init",
         cache_home / "dotfiles" / "completions",
+        *[src.with_name(f"{src.name}.zwc") for src in stale_zsh_bytecode(dotfiles)],
     ]
-    comp_caches += [src.with_name(f"{src.name}.zwc") for src in stale_zsh_bytecode(dotfiles)]
+
     cache_bytes = 0
     cache_count = 0
     for cpath in comp_caches:
@@ -163,15 +173,18 @@ def run_clean(dry_run: bool = False, clean_all: bool = False, clean_builds: bool
             cache_count += 1
 
     if cache_count > 0:
-        reclaimed_total += cache_bytes
         cleaned_items.append(("Shell completion & init cache", f"{cache_count} item(s) ({fmt_bytes(cache_bytes)})"))
     else:
         print(f"  {C_GREEN}{ICON_OK}{C_RESET} {'Shell completion & init cache':<42} {C_DIM}Clean{C_RESET}")
+    return cache_bytes
 
-    # 3. Oversized Neovim state logs (> 5 MB) & unused empty site/pack/core directory
+
+def _clean_nvim_logs(home: Path, dry_run: bool, cleaned_items: list[tuple[str, str]]) -> int:
+    """Remove oversized Neovim state logs (> 5 MB) and empty site/pack/core directories."""
     nvim_state = Path(os.environ.get("XDG_STATE_HOME", str(home / ".local" / "state"))) / "nvim"
     nvim_data = Path(os.environ.get("XDG_DATA_HOME", str(home / ".local" / "share"))) / "nvim"
     pack_core = nvim_data / "site" / "pack" / "core"
+
     if not dry_run and pack_core.is_dir():
         with contextlib.suppress(OSError):
             for sub in (pack_core / "opt", pack_core / "start", pack_core, pack_core.parent):
@@ -182,18 +195,19 @@ def run_clean(dry_run: bool = False, clean_all: bool = False, clean_builds: bool
     nvim_logs = 0
     if nvim_state.is_dir():
         for log_file in nvim_state.glob("*.log"):
-            sz = path_size(log_file)
-            if sz > 5 * 1024 * 1024:
+            if path_size(log_file) > 5 * 1024 * 1024:
                 nvim_bytes += remove_target(log_file, dry_run)
                 nvim_logs += 1
 
     if nvim_logs > 0:
-        reclaimed_total += nvim_bytes
         cleaned_items.append(("Oversized Neovim state logs (>5MB)", f"{nvim_logs} log(s) ({fmt_bytes(nvim_bytes)})"))
     else:
         print(f"  {C_GREEN}{ICON_OK}{C_RESET} {'Neovim state logs':<42} {C_DIM}All logs under 5 MB{C_RESET}")
+    return nvim_bytes
 
-    # 4. Temporary scratch/diff files in /tmp and $TMPDIR
+
+def _clean_temp_scratch(dry_run: bool, cleaned_items: list[tuple[str, str]]) -> int:
+    """Remove temporary scratch/diff buffers in /tmp and $TMPDIR."""
     tmp_dirs = {Path("/tmp")}
     env_tmp = os.environ.get("TMPDIR")
     if env_tmp:
@@ -204,16 +218,51 @@ def run_clean(dry_run: bool = False, clean_all: bool = False, clean_builds: bool
     for tdir in tmp_dirs:
         if not tdir.is_dir():
             continue
-        for pattern in ("strdiff-left.*", "strdiff-right.*", "sdiff-left.*", "sdiff-right.*", "yazi-cwd.*", "fjq-*", "test-smoke-*"):
+        for pattern in TEMP_SCRATCH_PATTERNS:
             for match in tdir.glob(pattern):
                 tmp_bytes += remove_target(match, dry_run)
                 tmp_count += 1
 
     if tmp_count > 0:
-        reclaimed_total += tmp_bytes
         cleaned_items.append(("Orphaned temp scratch buffers", f"{tmp_count} item(s) ({fmt_bytes(tmp_bytes)})"))
     else:
         print(f"  {C_GREEN}{ICON_OK}{C_RESET} {'Temporary scratch files':<42} {C_DIM}Clean{C_RESET}")
+    return tmp_bytes
+
+
+def _clean_package_caches(dry_run: bool, cleaned_items: list[tuple[str, str]]) -> None:
+    """Prune Astral uv, Mise, and Homebrew package manager caches when --all is active."""
+    cache_specs = [
+        ("uv",   "Astral uv cache",   ["uv", "cache", "prune"],         "uv cache prune"),
+        ("mise", "Mise runtime cache", ["mise", "cache", "clear"],       "mise cache clear"),
+        ("brew", "Homebrew cache",     ["brew", "cleanup", "--prune=7"], "brew cleanup --prune=7"),
+    ]
+    for bin_name, label, cmd, cmd_str in cache_specs:
+        if not shutil.which(bin_name):
+            continue
+        if dry_run:
+            cleaned_items.append((label, f"Would run '{cmd_str}'"))
+        else:
+            res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            if res.returncode == 0:
+                cleaned_items.append((label, f"Pruned via '{cmd_str}'"))
+
+
+def run_clean(dry_run: bool = False, clean_all: bool = False, clean_builds: bool = False) -> int:
+    dotfiles = get_dotfiles_dir()
+    home = Path.home()
+    reclaimed_total = 0
+    cleaned_items: list[tuple[str, str]] = []
+
+    mode_tag = " [DRY RUN]" if dry_run else ""
+    print_header(f"Dotfiles Cleaner \u2014 Cache & State Pruner{mode_tag}")
+    print()
+
+    # 1-4. Core Zsh dumps, completion caches, Neovim logs & temp buffers
+    reclaimed_total += _clean_zcompdumps(home, dry_run, cleaned_items)
+    reclaimed_total += _clean_completion_caches(dotfiles, home, dry_run, cleaned_items)
+    reclaimed_total += _clean_nvim_logs(home, dry_run, cleaned_items)
+    reclaimed_total += _clean_temp_scratch(dry_run, cleaned_items)
 
     # 5. Legacy ~/.oh-my-zsh directory
     omz_dir = home / ".oh-my-zsh"
@@ -230,29 +279,7 @@ def run_clean(dry_run: bool = False, clean_all: bool = False, clean_builds: bool
 
     # 6. Package manager cache pruning (--all)
     if clean_all:
-        if shutil.which("uv"):
-            if dry_run:
-                cleaned_items.append(("Astral uv cache", "Would run 'uv cache prune'"))
-            else:
-                res = subprocess.run(["uv", "cache", "prune"], capture_output=True, text=True, check=False)
-                if res.returncode == 0:
-                    cleaned_items.append(("Astral uv cache", "Pruned via 'uv cache prune'"))
-
-        if shutil.which("mise"):
-            if dry_run:
-                cleaned_items.append(("Mise runtime cache", "Would run 'mise cache clear'"))
-            else:
-                res = subprocess.run(["mise", "cache", "clear"], capture_output=True, text=True, check=False)
-                if res.returncode == 0:
-                    cleaned_items.append(("Mise runtime cache", "Pruned via 'mise cache clear'"))
-
-        if shutil.which("brew"):
-            if dry_run:
-                cleaned_items.append(("Homebrew cache", "Would run 'brew cleanup --prune=7'"))
-            else:
-                res = subprocess.run(["brew", "cleanup", "--prune=7"], capture_output=True, text=True, check=False)
-                if res.returncode == 0:
-                    cleaned_items.append(("Homebrew cache", "Pruned via 'brew cleanup --prune=7'"))
+        _clean_package_caches(dry_run, cleaned_items)
 
     # 7. Project build artifacts (--builds or --all)
     if clean_builds or clean_all:
