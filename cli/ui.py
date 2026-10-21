@@ -1,3 +1,5 @@
+"""Shared terminal UI primitives, Catppuccin Mocha palette constants, and subprocess runner."""
+
 import os
 import shutil
 import subprocess

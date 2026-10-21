@@ -1,3 +1,5 @@
+"""`dot test`: deep runtime, configuration schema, and CLI integration test runner."""
+
 import contextlib
 import io
 import json
@@ -41,20 +43,26 @@ JSONC_TOKEN_RE = re.compile(
 
 
 class TestReport:
+    """Track and display pass, warning, and failure counts for `dot test`."""
+
     def __init__(self):
+        """Initialize counters for test suite checks."""
         self.passed = 0
         self.warnings = 0
         self.failed = 0
 
     def ok(self, label: str, detail: str = ""):
+        """Record and print a passing integration check."""
         self.passed += 1
         print(f"  {C_GREEN}✔{C_RESET} {label:<44} {C_DIM}{detail}{C_RESET}")
 
     def warn(self, label: str, detail: str = ""):
+        """Record and print a non-fatal test warning."""
         self.warnings += 1
         print(f"  {C_YELLOW}⚠{C_RESET} {label:<44} {C_YELLOW}{detail}{C_RESET}")
 
     def fail(self, label: str, detail: str = ""):
+        """Record and print a failing integration check."""
         self.failed += 1
         print(f"  {C_RED}✖{C_RESET} {C_BOLD}{label:<44}{C_RESET} {C_RED}{detail}{C_RESET}")
 
@@ -179,6 +187,7 @@ def _check_cli_tool_configs(report: TestReport, dotfiles: Path) -> None:
 
 
 def test_parsers_and_schemas(report: TestReport, dotfiles: Path):
+    """Run all configuration file parser and schema validation checks."""
     print(f"\n{C_BOLD}1. Configuration & Runtime Parsers{C_RESET}")
     _check_json_schemas(report, dotfiles)
     _check_yazi_schemas(report, dotfiles)
@@ -357,6 +366,7 @@ wcd -h >/dev/null
 
 
 def test_shell_runtime(report: TestReport, dotfiles: Path):
+    """Run interactive Zsh boot, completion, reload, smoke, and unit test suites."""
     print(f"\n{C_BOLD}2. Shell Runtime & Interactive Startup{C_RESET}")
 
     if not shutil.which("zsh"):
@@ -477,6 +487,7 @@ def _check_brewfile_and_symlinks(report: TestReport, dotfiles: Path) -> None:
 
 
 def test_syntax_and_links(report: TestReport, dotfiles: Path):
+    """Run Bash/Zsh syntax checks, ShellCheck, shfmt, Brewfile sync, and symlink checks."""
     print(f"\n{C_BOLD}3. Script Syntax & Link Integrity{C_RESET}")
     _check_bash_scripts_syntax_and_lint(report, dotfiles)
     _check_zsh_scripts_syntax(report, dotfiles)
@@ -631,6 +642,7 @@ def _check_cli_subcommand_smoke(report: TestReport) -> None:
 
 
 def test_cli_architecture(report: TestReport, _dotfiles: Path):
+    """Run manifest, UI viewport clamping, mobile policy, prune, and subcommand smoke tests."""
     print(f"\n{C_BOLD}4. Python CLI Subcommands & Architecture{C_RESET}")
     _check_manifest_and_ui_primitives(report)
     _check_mobile_and_prune_policies(report)
@@ -638,6 +650,7 @@ def test_cli_architecture(report: TestReport, _dotfiles: Path):
 
 
 def run_tests() -> int:
+    """Execute the full deep integration test suite and return the exit code."""
     dotfiles = get_dotfiles_dir()
     report = TestReport()
 

@@ -1,3 +1,5 @@
+"""`dot` CLI entry point: argument parsing and subcommand dispatch."""
+
 import argparse
 import sys
 

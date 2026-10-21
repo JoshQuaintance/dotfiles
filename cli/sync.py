@@ -1,3 +1,5 @@
+"""`dot sync`: stage, commit, pull-rebase, push, and reconcile dotfiles across machines."""
+
 import socket
 from pathlib import Path
 from typing import Optional
@@ -104,6 +106,7 @@ def run_sync(
     dry_run: bool = False,
     auto_push: bool = True,
 ) -> int:
+    """Execute a two-way Git sync of the dotfiles repository and reconcile symlinks."""
     dotfiles = get_dotfiles_dir()
     print_header("Dotfiles Synchronizer — Git Repository Sync")
 

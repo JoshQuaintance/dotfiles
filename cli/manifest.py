@@ -1,3 +1,5 @@
+"""Declarative manifests for CLI tools, symlinks, and `$PATH` resolution."""
+
 import os
 import platform
 import shutil

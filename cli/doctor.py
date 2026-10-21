@@ -1,3 +1,5 @@
+"""`dot doctor`: audit and auto-heal symlinks, CLI tools, Zsh bytecode, SSH, and Git signing."""
+
 import contextlib
 import json
 import os
@@ -41,31 +43,39 @@ LBL_WT_THEME = "Windows Terminal theme"
 
 
 class DoctorReport:
+    """Track and display pass, warning, failure, and auto-repair counts for `dot doctor`."""
+
     def __init__(self):
+        """Initialize counters for doctor audit checks."""
         self.passed = 0
         self.warnings = 0
         self.failed = 0
         self.repaired = 0
 
     def ok(self, label: str, detail: str = ""):
+        """Record and print a passing health check."""
         self.passed += 1
         print(f"  {C_GREEN}✔{C_RESET} {label:<44} {C_DIM}{detail}{C_RESET}")
 
     def warn(self, label: str, detail: str = ""):
+        """Record and print a non-fatal health warning."""
         self.warnings += 1
         print(f"  {C_YELLOW}⚠{C_RESET} {label:<44} {C_YELLOW}{detail}{C_RESET}")
 
     def fail(self, label: str, detail: str = ""):
+        """Record and print a failing health check."""
         self.failed += 1
         print(f"  {C_RED}✖{C_RESET} {C_BOLD}{label:<44}{C_RESET} {C_RED}{detail}{C_RESET}")
 
     def fixed(self, label: str, detail: str = ""):
+        """Record and print an automatically repaired check."""
         self.repaired += 1
         self.passed += 1
         print(f"  {C_GREEN}✔ [FIXED]{C_RESET} {label:<36} {C_GREEN}{detail}{C_RESET}")
 
 
 def check_repository(report: DoctorReport, dotfiles: Path):
+    """Audit the dotfiles Git checkout, current branch, and working tree status."""
     print(f"\n{C_BOLD}1. Dotfiles Repository{C_RESET}")
     if not (dotfiles / ".git").is_dir():
         report.fail("Dotfiles repository not found", str(dotfiles))
@@ -101,7 +111,7 @@ def stale_zsh_bytecode(dotfiles: Path) -> list[Path]:
 
 
 def compile_zsh_sources(dotfiles: Path) -> int:
-    """zcompile stale repo zsh scripts; returns how many were compiled."""
+    """Compile stale repo Zsh scripts via `zcompile` and return how many were compiled."""
     if not shutil.which("zsh"):
         return 0
     compiled = 0
@@ -113,6 +123,7 @@ def compile_zsh_sources(dotfiles: Path) -> int:
 
 
 def check_zsh_bytecode(report: DoctorReport, dotfiles: Path, fix: bool = False):
+    """Verify `.zwc` bytecode freshness for sourced Zsh scripts and recompile when `fix` is True."""
     stale = stale_zsh_bytecode(dotfiles)
     if not stale:
         report.ok(LBL_ZSH_BYTECODE, "All sourced scripts compiled")
@@ -189,6 +200,7 @@ def _audit_single_symlink(report: DoctorReport, entry: SymlinkEntry, dotfiles: P
 
 
 def check_and_heal_symlinks(report: DoctorReport, dotfiles: Path, fix: bool = False):
+    """Audit all declarative symlinks and create or re-point them when `fix` is True."""
     print(f"\n{C_BOLD}2. Configuration Symlinks & Health{C_RESET}")
     for entry in get_symlink_manifest():
         _audit_single_symlink(report, entry, dotfiles, fix)
@@ -436,6 +448,7 @@ def _check_neovim_health(report: DoctorReport, home: Path, fix: bool) -> None:
 
 
 def check_cli_tools(report: DoctorReport, fix: bool = False):
+    """Audit installed CLI binaries, Zsh prompt/plugins, Mise runtimes, and Neovim health."""
     print(f"\n{C_BOLD}3. Core CLI & Runtime Tools{C_RESET}")
     for tool in get_cli_tool_manifest():
         _check_single_cli_tool(report, tool, fix)
@@ -448,6 +461,7 @@ def check_cli_tools(report: DoctorReport, fix: bool = False):
 
 
 def check_locale(report: DoctorReport):
+    """Check active terminal locale and Zsh UTF-8 multibyte character evaluation."""
     print(f"\n{C_BOLD}4. Locale & Multibyte Support{C_RESET}")
     lang = os.environ.get("LANG", "")
     lc_all = os.environ.get("LC_ALL", "")
@@ -468,6 +482,7 @@ def check_locale(report: DoctorReport):
 
 
 def check_ssh(report: DoctorReport, dotfiles: Path, fix: bool = False):
+    """Audit `~/.ssh/config` shared defaults include, multiplexing sockets, and agent status."""
     print(f"\n{C_BOLD}6. SSH Agent & Defaults{C_RESET}")
     if not shutil.which("ssh"):
         report.warn("SSH", "ssh binary not installed")
@@ -514,6 +529,7 @@ GPG_CACHE_TTL = {"default-cache-ttl": 28800, "max-cache-ttl": 86400}
 
 
 def check_gpg_cache(report: DoctorReport, fix: bool = False):
+    """Audit or extend `gpg-agent.conf` passphrase cache TTLs for non-TTY commit signing."""
     home = Path(os.environ.get("GNUPGHOME", Path.home() / ".gnupg"))
     conf = home / "gpg-agent.conf"
     try:
@@ -540,6 +556,7 @@ def check_gpg_cache(report: DoctorReport, fix: bool = False):
 
 
 def check_git_signing(report: DoctorReport, fix: bool = False):
+    """Audit Git user identity (`user.name`, `user.email`) and commit signing settings."""
     print(f"\n{C_BOLD}5. Git Identity & Commit Signing{C_RESET}")
     if not shutil.which("git"):
         report.warn("Git config", "git binary not installed")
@@ -571,6 +588,7 @@ def check_git_signing(report: DoctorReport, fix: bool = False):
 
 
 def is_wsl() -> bool:
+    """Return True when running inside Windows Subsystem for Linux (WSL)."""
     if os.environ.get("WSL_DISTRO_NAME"):
         return True
     try:
@@ -627,6 +645,7 @@ def _check_windows_terminal_theme(report: DoctorReport, dotfiles: Path, fix: boo
 
 
 def check_wsl(report: DoctorReport, dotfiles: Path, fix: bool = False):
+    """Audit WSL filesystem placement, `win32yank.exe`, `wslview`, and Windows Terminal theme."""
     print(f"\n{C_BOLD}7. WSL Integration{C_RESET}")
     if str(dotfiles.resolve()).startswith("/mnt/"):
         report.warn("Dotfiles location", "On the Windows drive; move to ~ (9P file access is slow)")
@@ -647,6 +666,7 @@ def check_wsl(report: DoctorReport, dotfiles: Path, fix: bool = False):
 
 
 def run_doctor(fix: bool = False) -> int:
+    """Run all workstation health checks and optionally auto-repair issues when `fix` is True."""
     dotfiles = get_dotfiles_dir()
     report = DoctorReport()
 

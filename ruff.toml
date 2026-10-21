@@ -17,7 +17,14 @@ select = [
     "S110", "S112",         # silent try/except/pass|continue
     "C90",                  # mccabe cyclomatic complexity
     "PLR09",                # pylint complexity limits (branches, statements, args)
+    "D",                    # pydocstyle docstrings
 ]
+
+[lint.pydocstyle]
+convention = "google"
+
+[lint.per-file-ignores]
+"cli/__init__.py" = ["D104"]
 
 [lint.mccabe]
 max-complexity = 10

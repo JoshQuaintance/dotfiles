@@ -1,3 +1,5 @@
+"""`dot bench`: benchmark interactive Zsh startup latency and modern CLI tool speedups."""
+
 import os
 import re
 import shutil
@@ -26,6 +28,7 @@ STEP_RE = re.compile(r"\u2714\s+(.+?)\s+([0-9]+)\s*ms\s*$")
 
 
 def benchmark_tools(dotfiles: Path) -> None:
+    """Compare modern Rust/Go CLI replacements against legacy POSIX equivalents."""
     print(f"\n{C_BOLD}4. Modern CLI Productivity Speedup Benchmark{C_RESET}")
     benchmarks = [
         ("ripgrep vs grep", ["rg", "-q", "main", str(dotfiles)], ["grep", "-rq", "main", str(dotfiles)]),
@@ -160,6 +163,7 @@ def run_bench(
     test_tools: bool = False,
     test_all: bool = False,
 ) -> int:
+    """Run the interactive Zsh startup benchmark and optional tool/prompt suites."""
     dotfiles = get_dotfiles_dir()
 
     if not shutil.which("zsh"):

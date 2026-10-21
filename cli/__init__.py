@@ -1,4 +1,3 @@
-"""
-Dotfiles CLI management package.
-"""
+"""Dotfiles CLI management package."""
+
 __version__ = "1.0.0"

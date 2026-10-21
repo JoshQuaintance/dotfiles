@@ -1,3 +1,5 @@
+"""`dot clean`: prune stale Zsh compdumps, completion caches, oversized logs, and build artifacts."""
+
 import contextlib
 import os
 import shutil
@@ -249,6 +251,7 @@ def _clean_package_caches(dry_run: bool, cleaned_items: list[tuple[str, str]]) -
 
 
 def run_clean(dry_run: bool = False, clean_all: bool = False, clean_builds: bool = False) -> int:
+    """Execute cache, log, and build artifact pruning and print a summary of reclaimed space."""
     dotfiles = get_dotfiles_dir()
     home = Path.home()
     reclaimed_total = 0

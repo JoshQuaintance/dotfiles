@@ -1,3 +1,5 @@
+"""`dot update`: check, pull, reconcile, and upgrade dotfiles, Homebrew, and Mise tools."""
+
 import shutil
 import subprocess
 import sys
@@ -153,6 +155,7 @@ def run_update(
     test_after: bool = False,
     prune: bool = True,
 ) -> int:
+    """Fetch, apply, and reconcile dotfiles updates and optional Homebrew/Mise upgrades."""
     dotfiles = get_dotfiles_dir()
 
     if tools_only:

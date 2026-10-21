@@ -1,3 +1,5 @@
+"""`dot backup` / `dot restore`: snapshot and restore untracked local machine overrides and state."""
+
 import datetime
 import os
 import socket

@@ -1,3 +1,5 @@
+"""`dot env`: audit environment variables, `$PATH` precedence, and shadowed binaries."""
+
 import os
 import shutil
 from pathlib import Path

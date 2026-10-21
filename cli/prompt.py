@@ -1,3 +1,5 @@
+"""`dot prompt`: benchmark and switch Zsh prompt engines (Fast Native vs. Spaceship)."""
+
 import os
 import shutil
 import statistics
@@ -38,6 +40,7 @@ PROMPT_ENGINES = {
 
 
 def get_prompt_config_path() -> Path:
+    """Return the user preference file path (`~/.config/dotfiles/prompt`)."""
     xdg = os.environ.get("XDG_CONFIG_HOME")
     base = Path(xdg) if xdg else Path.home() / ".config"
     return base / "dotfiles" / "prompt"
@@ -80,6 +83,7 @@ def is_mobile_or_proot() -> bool:
 
 
 def get_active_prompt() -> tuple[str, str]:
+    """Resolve the active prompt engine and its configuration source description."""
     # 1. Environment variable override (takes absolute precedence)
     env_val = os.environ.get("DOTFILES_PROMPT", "").strip().lower()
     if env_val in PROMPT_ENGINES:
@@ -113,6 +117,7 @@ def get_active_prompt() -> tuple[str, str]:
 
 
 def set_active_prompt(engine: str) -> bool:
+    """Persist the chosen prompt engine to `~/.config/dotfiles/prompt`."""
     engine = engine.strip().lower()
     if engine not in PROMPT_ENGINES:
         print(f"{C_RED}{ICON_FAIL} Unknown prompt engine: {engine}{C_RESET}")
@@ -132,6 +137,7 @@ def set_active_prompt(engine: str) -> bool:
 
 
 def is_engine_installed(engine: str) -> bool:
+    """Return True if the specified prompt engine is installed on this machine."""
     if engine == "native":
         return True
     if engine == "spaceship":
@@ -147,6 +153,7 @@ def is_engine_installed(engine: str) -> bool:
 
 
 def benchmark_engine(engine: str, dotfiles_dir: Path, iterations: int = 3) -> Optional[tuple[float, float, float]]:
+    """Measure `(min_ms, median_ms, max_ms)` render time for a prompt engine."""
     if not is_engine_installed(engine):
         return None
 
@@ -188,6 +195,7 @@ def benchmark_engine(engine: str, dotfiles_dir: Path, iterations: int = 3) -> Op
 
 
 def run_prompt_benchmark(iterations: int = 3) -> dict[str, Optional[tuple[float, float, float]]]:
+    """Benchmark all supported prompt engines and return their timing tuples."""
     dotfiles = get_dotfiles_dir()
     results: dict[str, Optional[tuple[float, float, float]]] = {}
     for engine in PROMPT_ENGINES:
@@ -246,6 +254,7 @@ def _prompt_interactive_selection(engine_keys: list[str], mobile: bool) -> None:
 
 
 def print_prompt_summary(interactive: bool = False) -> None:
+    """Display active prompt status, render latency benchmarks, and optional selection prompt."""
     print_header("Shell Prompt Manager & Benchmark")
 
     active_engine, source = get_active_prompt()
@@ -278,6 +287,7 @@ def print_prompt_summary(interactive: bool = False) -> None:
 
 
 def run_prompt_command(subcommand: Optional[str] = None, value: Optional[str] = None) -> int:
+    """Run the `dot prompt` subcommand (`set`, `benchmark`, or interactive overview)."""
     if subcommand == "set":
         if not value:
             print(f"{C_RED}{ICON_FAIL} Missing engine argument.{C_RESET}")

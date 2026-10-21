@@ -1,3 +1,5 @@
+"""`dot prune`: remove symlinks, caches, and packages deleted upstream across commits."""
+
 import json
 import os
 import re
@@ -42,6 +44,7 @@ class PrunePlan:
 
     @property
     def empty(self) -> bool:
+        """Return True when no stale links, caches, or packages were found."""
         return not (self.links or self.caches or self.brew or self.mise)
 
 
@@ -54,6 +57,7 @@ class Orphans:
 
     @property
     def empty(self) -> bool:
+        """Return True when no orphaned Homebrew or Mise packages were found."""
         return not (self.brew or self.mise)
 
 
@@ -225,6 +229,7 @@ def find_orphans(dotfiles: Path) -> Orphans:
 
 
 def print_orphans(orphans: Orphans) -> None:
+    """Print orphaned Homebrew formulas/casks and Mise tool versions."""
     for kind, names in orphans.brew.items():
         label = "cask" if kind == "cask" else "formula"
         for name in names:
@@ -275,6 +280,7 @@ def _short(path: Path) -> str:
 
 
 def print_plan(plan: PrunePlan) -> None:
+    """Print each link, cache, and package scheduled for removal in `plan`."""
     for link, rel in plan.links:
         print(f"  {C_RED}-{C_RESET} {_short(link)} {C_DIM}(link to removed {rel}){C_RESET}")
     for cache in plan.caches:

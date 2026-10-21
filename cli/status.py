@@ -1,3 +1,5 @@
+"""`dot status`: render a concise workstation, repository, symlink, and runtime dashboard."""
+
 import platform
 import shutil
 from pathlib import Path
@@ -73,6 +75,7 @@ def _summarize_symlinks(dotfiles: Path) -> str:
 
 
 def run_status() -> int:
+    """Render the `dot status` workstation overview and command reference table."""
     dotfiles = get_dotfiles_dir()
     print_header("Dotfiles Workstation Status \u2014 Quick Overview")
 
