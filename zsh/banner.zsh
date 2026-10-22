@@ -137,6 +137,8 @@ if [ "$_ZSH_STARTUP_VERBOSE" = true ] && [ -n "$EPOCHREALTIME" ]; then
 
     # 6. Rotating Shortcuts / Tips
     local -a _tips=(
+      "',' / ', <cmd>'   → Comma command palette, autosuggest & launcher"
+      "',hash' / ',hashc' → Multi-digest file/folder hashes & hash comparison"
       "'dot' / '.status' → Quick workstation & dotfiles overview"
       "'npmr' / 'bunr'   → Interactive package.json script runner"
       "'.check' / '.update' → Check or update dotfiles & packages"

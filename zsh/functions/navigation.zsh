@@ -379,6 +379,44 @@ _proj_list_repos() {
   fi
 }
 
+# Format tab-separated project rows (<rel>\t<branch>\t<full>) for FZF display.
+_proj_format_rows() {
+  awk -F'\t' -v home="$HOME" '
+    {
+      rel = $1; branch = $2; full = $3;
+      if (length(rel) > 38) rel = substr(rel, 1, 35) "...";
+      if (length(branch) > 36) branch = substr(branch, 1, 33) "...";
+      disp_path = full;
+      if (index(disp_path, home) == 1) disp_path = "~" substr(disp_path, length(home) + 1);
+      rels[NR] = rel; branches[NR] = branch; disps[NR] = disp_path; fulls[NR] = full;
+      if (length(rel) > w_rel) w_rel = length(rel);
+      if (length(branch) > w_br) w_br = length(branch);
+    }
+    END {
+      if (w_rel < 20) w_rel = 20;
+      if (w_br < 16) w_br = 16;
+      for (r = 1; r <= NR; r++) {
+        rel = rels[r]; branch = branches[r]; disp_path = disps[r]; full = fulls[r];
+        slash_idx = 0;
+        for (i = length(rel); i >= 1; i--) {
+          if (substr(rel, i, 1) == "/") { slash_idx = i; break; }
+        }
+        pad = (w_rel + 2) - length(rel);
+        if (pad < 1) pad = 1;
+        spaces = sprintf("%*s", pad, "");
+        if (slash_idx > 0) {
+          prefix = substr(rel, 1, slash_idx);
+          leaf = substr(rel, slash_idx + 1);
+          name_col = sprintf("\033[38;2;203;166;247m%s\033[1;38;2;137;180;250m%s\033[0m%s", prefix, leaf, spaces);
+        } else {
+          name_col = sprintf("\033[1;38;2;137;180;250m%s\033[0m%s", rel, spaces);
+        }
+        printf "%s\t\033[38;2;166;227;161m %-*s\033[0m\t\033[2m%s\033[0m\t%s\n", name_col, w_br, branch, disp_path, full
+      }
+    }
+  '
+}
+
 # Interactive Git Project & Repository Switcher (proj / fp)
 # Scans ~/Codes (or $DOTFILES_PROJECTS_DIR) and ~/.dotfiles for Git repositories & worktrees
 # Usage:
@@ -422,15 +460,9 @@ proj() {
     local -a exact_rel_paths=() exact_leaf_paths=() substring_paths=()
     while IFS=$'\t' read -r n b p; do
       leaf="${n:t}"
-      if [[ "${n:l}" == "${query:l}" ]]; then
-        exact_rel_paths+=("$p")
-      fi
-      if [[ "${leaf:l}" == "${query:l}" ]]; then
-        exact_leaf_paths+=("$p")
-      fi
-      if [[ "${n:l}" == *"${query:l}"* ]]; then
-        substring_paths+=("$p")
-      fi
+      [[ "${n:l}" == "${query:l}" ]] && exact_rel_paths+=("$p")
+      [[ "${leaf:l}" == "${query:l}" ]] && exact_leaf_paths+=("$p")
+      [[ "${n:l}" == *"${query:l}"* ]] && substring_paths+=("$p")
     done <<< "$rows"
 
     if (( ${#exact_rel_paths[@]} == 1 )) && [[ -d "${exact_rel_paths[1]}" ]]; then
@@ -455,50 +487,7 @@ proj() {
   fi
 
   local formatted
-  formatted=$(printf "%s\n" "$rows" | awk -F'\t' -v home="$HOME" '
-    {
-      rel = $1;
-      branch = $2;
-      full = $3;
-      if (length(rel) > 38) rel = substr(rel, 1, 35) "...";
-      if (length(branch) > 36) branch = substr(branch, 1, 33) "...";
-      disp_path = full;
-      if (index(disp_path, home) == 1) {
-        disp_path = "~" substr(disp_path, length(home) + 1);
-      }
-      rels[NR] = rel;
-      branches[NR] = branch;
-      disps[NR] = disp_path;
-      fulls[NR] = full;
-      if (length(rel) > w_rel) w_rel = length(rel);
-      if (length(branch) > w_br) w_br = length(branch);
-    }
-    END {
-      if (w_rel < 20) w_rel = 20;
-      if (w_br < 16) w_br = 16;
-      for (r = 1; r <= NR; r++) {
-        rel = rels[r];
-        branch = branches[r];
-        disp_path = disps[r];
-        full = fulls[r];
-        slash_idx = 0;
-        for (i = length(rel); i >= 1; i--) {
-          if (substr(rel, i, 1) == "/") { slash_idx = i; break; }
-        }
-        pad = (w_rel + 2) - length(rel);
-        if (pad < 1) pad = 1;
-        spaces = sprintf("%*s", pad, "");
-        if (slash_idx > 0) {
-          prefix = substr(rel, 1, slash_idx);
-          leaf = substr(rel, slash_idx + 1);
-          name_col = sprintf("\033[38;2;203;166;247m%s\033[1;38;2;137;180;250m%s\033[0m%s", prefix, leaf, spaces);
-        } else {
-          name_col = sprintf("\033[1;38;2;137;180;250m%s\033[0m%s", rel, spaces);
-        }
-        printf "%s\t\033[38;2;166;227;161m %-*s\033[0m\t\033[2m%s\033[0m\t%s\n", name_col, w_br, branch, disp_path, full
-      }
-    }
-  ')
+  formatted="$(printf "%s\n" "$rows" | _proj_format_rows)"
 
   local hdr="  j/k: navigate │ /: search │ enter: cd │ e: edit │ l: lazygit │ t: new tab │ y: copy path │ q: quit"
   local -a fzf_mode_flags
@@ -522,25 +511,11 @@ proj() {
   [[ -z "$chosen" || ! -d "$chosen" ]] && return 0
 
   case "$key" in
-    e)
-      (cd "$chosen" && "${EDITOR:-nvim}" .)
-      ;;
-    l)
-      if command -v lazygit &>/dev/null; then
-        lazygit -p "$chosen"
-      else
-        cd "$chosen"
-      fi
-      ;;
-    t)
-      _open_terminal_tab "$chosen"
-      ;;
-    y)
-      _copy_or_print "$chosen" "project path: $chosen"
-      ;;
-    *)
-      cd "$chosen"
-      ;;
+    e) (cd "$chosen" && "${EDITOR:-nvim}" .) ;;
+    l) command -v lazygit &>/dev/null && lazygit -p "$chosen" || cd "$chosen" ;;
+    t) _open_terminal_tab "$chosen" ;;
+    y) _copy_or_print "$chosen" "project path: $chosen" ;;
+    *) cd "$chosen" ;;
   esac
 }
 

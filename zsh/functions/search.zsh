@@ -321,39 +321,14 @@ cheath() {
 # ------------------------------------------------------------------------------
 # 4. Interactive JSON / YAML / TOML Path Explorer (fjq / ,jq)
 # ------------------------------------------------------------------------------
-# Powered by jq (+ yq for YAML/TOML) + modal-Vim FZF with live subtree preview
-# Usage:
-#   fjq <file.json|.yaml|.toml> -> Browse all paths & values interactively
-#   cat data.json | fjq         -> Browse piped JSON/YAML payload interactively
-#   Keys: enter = print value, y = copy value, p = copy jq path expression
-fjq() {
-  if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
-    printf "\033[1;38;2;203;166;247mfjq\033[0m — Interactive modal-Vim JSON/YAML/TOML path explorer (powered by jq & yq)\n\n"
-    printf "\033[1mUsage:\033[0m\n"
-    printf "  fjq <file>         Browse paths in .json, .yaml/.yml, or .toml file\n"
-    printf "  cat a.json | fjq   Browse piped JSON/YAML from stdin\n"
-    printf "  Enter              Output formatted value for selected path\n"
-    printf "  y                  Copy extracted value to clipboard\n"
-    printf "  p                  Copy jq path expression (e.g. .scripts.build) to clipboard\n"
-    return 0
-  fi
-
-  if ! command -v jq &>/dev/null; then
-    printf "\033[31m✖ 'jq' is not installed.\033[0m\n" >&2
-    return 1
-  fi
-
-  local tmp_json=""
-  local json_file=""
-  setopt localoptions localtraps
-  trap '[ -n "$tmp_json" ] && command rm -f -- "$tmp_json"' EXIT INT TERM
-  if [ -n "$1" ]; then
-    if [ ! -f "$1" ]; then
-      printf "\033[31m✖ File not found: %s\033[0m\n" "$1" >&2
+# Internal helper: resolve input file or stdin into a JSON file path (`json_file` / `tmp_json` in caller)
+_fjq_prepare_json() {
+  local input_file="$1"
+  if [ -n "$input_file" ]; then
+    if [ ! -f "$input_file" ]; then
+      printf "\033[31m✖ File not found: %s\033[0m\n" "$input_file" >&2
       return 1
     fi
-    local input_file="$1"
-    shift
     case "${input_file:l}" in
       *.yaml|*.yml)
         if ! command -v yq &>/dev/null; then
@@ -385,6 +360,38 @@ fjq() {
     printf "\033[33mUsage: fjq <file.json|.yaml|.toml>  (or pipe JSON/YAML via stdin)\033[0m\n" >&2
     return 1
   fi
+}
+
+# Powered by jq (+ yq for YAML/TOML) + modal-Vim FZF with live subtree preview
+# Usage:
+#   fjq <file.json|.yaml|.toml> -> Browse all paths & values interactively
+#   cat data.json | fjq         -> Browse piped JSON/YAML payload interactively
+#   Keys: enter = print value, y = copy value, p = copy jq path expression
+fjq() {
+  if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    printf "\033[1;38;2;203;166;247mfjq\033[0m — Interactive modal-Vim JSON/YAML/TOML path explorer (powered by jq & yq)\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  fjq <file>         Browse paths in .json, .yaml/.yml, or .toml file\n"
+    printf "  cat a.json | fjq   Browse piped JSON/YAML from stdin\n"
+    printf "  Enter              Output formatted value for selected path\n"
+    printf "  y                  Copy extracted value to clipboard\n"
+    printf "  p                  Copy jq path expression (e.g. .scripts.build) to clipboard\n"
+    return 0
+  fi
+
+  if ! command -v jq &>/dev/null; then
+    printf "\033[31m✖ 'jq' is not installed.\033[0m\n" >&2
+    return 1
+  fi
+
+  local tmp_json="" json_file="" input_arg=""
+  setopt localoptions localtraps
+  trap '[ -n "$tmp_json" ] && command rm -f -- "$tmp_json"' EXIT INT TERM
+  if [ -n "$1" ]; then
+    input_arg="$1"
+    shift
+  fi
+  _fjq_prepare_json "$input_arg" || return 1
 
   # Enumerate all navigable jq paths with a compact value preview
   local jq_paths_filter='
@@ -447,17 +454,13 @@ fjq() {
   jq_path="${selected_lines%%$'\n'*}"
 
   case "$key" in
-    p)
-      _copy_or_print "$jq_path" "jq path '$jq_path' to clipboard"
-      ;;
+    p) _copy_or_print "$jq_path" "jq path '$jq_path' to clipboard" ;;
     y)
       local extracted
       extracted=$(jq -r "$jq_path" "$json_file" 2>/dev/null)
       _copy_or_print "$extracted" "value of '$jq_path' to clipboard"
       ;;
-    *)
-      jq "$jq_path" "$json_file"
-      ;;
+    *) jq "$jq_path" "$json_file" ;;
   esac
 
   [ -n "$tmp_json" ] && rm -f -- "$tmp_json"
@@ -488,6 +491,24 @@ _snip_list() {
       printf "%s\n" "$line"
     done < "$f"
   done
+}
+
+# Prompt interactively for any <placeholder> tokens in a snippet command and place on prompt.
+_snip_fill_and_paste() {
+  local cmd="$1"
+  local -a placeholders=()
+  local rest="$cmd" ph val
+  while [[ "$rest" =~ \<([A-Za-z_][A-Za-z0-9_-]*)\> ]]; do
+    ph="${match[1]}"
+    (( ${placeholders[(I)$ph]} )) || placeholders+=("$ph")
+    rest="${rest#*\<${ph}\>}"
+  done
+  for ph in "${placeholders[@]}"; do
+    printf "\033[1;36m?\033[0m Value for \033[1;33m<%s>\033[0m (Enter to keep): " "$ph"
+    IFS= read -r val
+    [[ -n "$val" ]] && cmd="${cmd//\<${ph}\>/$val}"
+  done
+  print -z "$cmd"
 }
 
 # Interactive Command Bookmark & Snippet Runner (snip)
@@ -600,27 +621,8 @@ snip() {
   [[ -z "$cmd" ]] && return 0
 
   case "$key" in
-    e)
-      snip --edit
-      ;;
-    y)
-      _copy_or_print "$cmd" "snippet: $cmd"
-      ;;
-    *)
-      # Prompt interactively for any <placeholder> tokens when running in a TTY
-      local -a placeholders=()
-      local rest="$cmd" ph val
-      while [[ "$rest" =~ \<([A-Za-z_][A-Za-z0-9_-]*)\> ]]; do
-        ph="${match[1]}"
-        (( ${placeholders[(I)$ph]} )) || placeholders+=("$ph")
-        rest="${rest#*\<${ph}\>}"
-      done
-      for ph in "${placeholders[@]}"; do
-        printf "\033[1;36m?\033[0m Value for \033[1;33m<%s>\033[0m (Enter to keep): " "$ph"
-        IFS= read -r val
-        [[ -n "$val" ]] && cmd="${cmd//\<${ph}\>/$val}"
-      done
-      print -z "$cmd"
-      ;;
+    e) snip --edit ;;
+    y) _copy_or_print "$cmd" "snippet: $cmd" ;;
+    *) _snip_fill_and_paste "$cmd" ;;
   esac
 }

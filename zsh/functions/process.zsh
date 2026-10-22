@@ -42,6 +42,41 @@ _port_list_listening() {
 # Usage:
 #   port / fport     -> Interactive modal-Vim FZF browser of all listening TCP ports
 #   port <number>    -> Inspect process listening on <number>
+# Inspect or kill a single numeric TCP port (`port <num>` or `port -k <num>`).
+_port_direct_target() {
+  local kill_mode="$1" target_port="${2#:}"
+  if [ "$kill_mode" = true ]; then
+    local pids=()
+    if command -v lsof &>/dev/null; then
+      pids=($(lsof -t -i :"$target_port" 2>/dev/null))
+    elif command -v fuser &>/dev/null; then
+      pids=($(fuser "${target_port}/tcp" 2>/dev/null))
+    elif command -v ss &>/dev/null; then
+      pids=($(ss -tlnp "sport = :$target_port" 2>/dev/null | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u))
+    fi
+    if [ "${#pids[@]}" -eq 0 ]; then
+      if ! command -v lsof &>/dev/null && ! command -v fuser &>/dev/null && ! command -v ss &>/dev/null; then
+        printf "\033[31m✖ Neither lsof, fuser, nor ss is installed.\033[0m\n" >&2
+        return 1
+      fi
+      printf "\033[33mNo process found listening on port %s.\033[0m\n" "$target_port"
+      return 1
+    fi
+    kill -15 "${pids[@]}" 2>/dev/null || kill -9 "${pids[@]}" 2>/dev/null
+    printf "\033[32m✔ Terminated process(es) on port %s (PID: %s)\033[0m\n" "$target_port" "${pids[*]}"
+    return 0
+  fi
+
+  if command -v lsof &>/dev/null; then
+    lsof -i :"$target_port" -P -n
+  elif command -v ss &>/dev/null; then
+    ss -tlnp "sport = :$target_port"
+  else
+    printf "\033[31m✖ Neither lsof nor ss is installed.\033[0m\n" >&2
+    return 1
+  fi
+}
+
 #   port -k <number> -> Kill process listening on <number>
 #   Keys: enter = SIGTERM (-15), x = SIGKILL (-9), o = open localhost URL, y = copy port, u = copy URL
 port() {
@@ -65,45 +100,13 @@ port() {
   fi
 
   local initial_query=""
-  # Direct numeric port argument provided (or kill mode)
   if [ "$kill_mode" = true ] || [[ "$1" =~ ^:?[0-9]+$ ]]; then
-    local target_port="${1#:}"
-    if [ "$kill_mode" = true ]; then
-      local pids=()
-      if command -v lsof &>/dev/null; then
-        pids=($(lsof -t -i :"$target_port" 2>/dev/null))
-      elif command -v fuser &>/dev/null; then
-        pids=($(fuser "${target_port}/tcp" 2>/dev/null))
-      elif command -v ss &>/dev/null; then
-        pids=($(ss -tlnp "sport = :$target_port" 2>/dev/null | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u))
-      fi
-      if [ "${#pids[@]}" -eq 0 ]; then
-        if ! command -v lsof &>/dev/null && ! command -v fuser &>/dev/null && ! command -v ss &>/dev/null; then
-          printf "\033[31m✖ Neither lsof, fuser, nor ss is installed.\033[0m\n" >&2
-          return 1
-        fi
-        printf "\033[33mNo process found listening on port %s.\033[0m\n" "$target_port"
-        return 1
-      fi
-      kill -15 "${pids[@]}" 2>/dev/null || kill -9 "${pids[@]}" 2>/dev/null
-      printf "\033[32m✔ Terminated process(es) on port %s (PID: %s)\033[0m\n" "$target_port" "${pids[*]}"
-      return 0
-    fi
-
-    if command -v lsof &>/dev/null; then
-      lsof -i :"$target_port" -P -n
-    elif command -v ss &>/dev/null; then
-      ss -tlnp "sport = :$target_port"
-    else
-      printf "\033[31m✖ Neither lsof nor ss is installed.\033[0m\n" >&2
-      return 1
-    fi
+    _port_direct_target "$kill_mode" "$1"
     return $?
   elif [ $# -gt 0 ]; then
     initial_query="$*"
   fi
 
-  # No direct port specified: non-TTY or missing fzf prints table
   local rows
   rows="$(_port_list_listening)"
   if [ -z "$rows" ]; then
@@ -143,24 +146,12 @@ port() {
   local first_port="${${first_line%%$'\t'*}// /}"
 
   case "$key" in
-    o)
-      if [ -n "$first_port" ]; then
-        open "http://localhost:${first_port}"
-      fi
-      return 0
-      ;;
-    y)
-      [ -n "$first_port" ] && _copy_or_print "$first_port" "port ${first_port} to clipboard"
-      return 0
-      ;;
-    u)
-      [ -n "$first_port" ] && _copy_or_print "http://localhost:${first_port}" "http://localhost:${first_port} to clipboard"
-      return 0
-      ;;
+    o) [ -n "$first_port" ] && open "http://localhost:${first_port}"; return 0 ;;
+    y) [ -n "$first_port" ] && _copy_or_print "$first_port" "port ${first_port} to clipboard"; return 0 ;;
+    u) [ -n "$first_port" ] && _copy_or_print "http://localhost:${first_port}" "http://localhost:${first_port} to clipboard"; return 0 ;;
   esac
 
-  local sig="-15"
-  local sig_label="SIGTERM (-15)"
+  local sig="-15" sig_label="SIGTERM (-15)"
   if [ "$key" = "x" ]; then
     sig="-9"
     sig_label="SIGKILL (-9)"

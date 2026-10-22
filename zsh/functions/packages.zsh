@@ -25,6 +25,56 @@ _fpkg_list() {
   fi
 }
 
+# Execute a package action (`u` upgrade, `x` uninstall, `o` homepage, `""` info) for one package.
+_fpkg_run_action() {
+  local key="$1" mgr="$2" pkg="$3"
+  case "$key" in
+    u)
+      printf "\033[1;36m➜ Upgrading %s (%s)...\033[0m\n" "$pkg" "$mgr"
+      case "$mgr" in
+        brew)   brew upgrade "$pkg" ;;
+        cask)   brew upgrade --cask "$pkg" ;;
+        mise)   mise upgrade "$pkg" ;;
+        apt)    sudo apt-get install --only-upgrade -y "$pkg" ;;
+        pacman) sudo pacman -S "$pkg" ;;
+        dnf)    sudo dnf upgrade -y "$pkg" ;;
+      esac
+      ;;
+    x)
+      printf "\033[1;31m➜ Uninstalling %s (%s)...\033[0m\n" "$pkg" "$mgr"
+      case "$mgr" in
+        brew)   brew uninstall "$pkg" ;;
+        cask)   brew uninstall --cask "$pkg" ;;
+        mise)   mise uninstall "$pkg" ;;
+        apt)    sudo apt-get remove -y "$pkg" ;;
+        pacman) sudo pacman -R "$pkg" ;;
+        dnf)    sudo dnf remove -y "$pkg" ;;
+      esac
+      ;;
+    o)
+      case "$mgr" in
+        brew) brew home "$pkg" ;;
+        cask) brew home --cask "$pkg" ;;
+        apt)
+          local url
+          url="$(dpkg -s "$pkg" 2>/dev/null | awk '/^Homepage:/ {print $2; exit}')"
+          [[ -n "$url" ]] && open "$url"
+          ;;
+      esac
+      ;;
+    "")
+      case "$mgr" in
+        brew)   brew info "$pkg" ;;
+        cask)   brew info --cask "$pkg" ;;
+        mise)   mise tool "$pkg" ;;
+        apt)    dpkg -s "$pkg" ;;
+        pacman) pacman -Qi "$pkg" ;;
+        dnf)    rpm -qi "$pkg" ;;
+      esac
+      ;;
+  esac
+}
+
 # Interactive Package Inspector & Manager (fpkg / fbrew)
 # Browse installed Homebrew, Mise, and Linux system packages in modal-Vim FZF
 # Usage:
@@ -99,28 +149,12 @@ fpkg() {
   local preview_cmd='
     mgr={4}; pkg={5}
     case "$mgr" in
-      brew)
-        brew info "$pkg" 2>/dev/null
-        echo ""
-        brew deps --tree --installed "$pkg" 2>/dev/null
-        ;;
-      cask)
-        brew info --cask "$pkg" 2>/dev/null
-        ;;
-      mise)
-        mise tool "$pkg" 2>/dev/null
-        echo ""
-        mise ls "$pkg" 2>/dev/null
-        ;;
-      apt)
-        dpkg -s "$pkg" 2>/dev/null
-        ;;
-      pacman)
-        pacman -Qi "$pkg" 2>/dev/null
-        ;;
-      dnf)
-        rpm -qi "$pkg" 2>/dev/null
-        ;;
+      brew)   brew info "$pkg" 2>/dev/null; echo ""; brew deps --tree --installed "$pkg" 2>/dev/null ;;
+      cask)   brew info --cask "$pkg" 2>/dev/null ;;
+      mise)   mise tool "$pkg" 2>/dev/null; echo ""; mise ls "$pkg" 2>/dev/null ;;
+      apt)    dpkg -s "$pkg" 2>/dev/null ;;
+      pacman) pacman -Qi "$pkg" 2>/dev/null ;;
+      dnf)    rpm -qi "$pkg" 2>/dev/null ;;
     esac
   '
 
@@ -144,51 +178,7 @@ fpkg() {
   local c1 c2 c3 mgr pkg
   while IFS=$'\t' read -r c1 c2 c3 mgr pkg; do
     [[ -n "$pkg" ]] && pkgs+=("$pkg")
-    case "$key" in
-      u)
-        printf "\033[1;36m➜ Upgrading %s (%s)...\033[0m\n" "$pkg" "$mgr"
-        case "$mgr" in
-          brew)   brew upgrade "$pkg" ;;
-          cask)   brew upgrade --cask "$pkg" ;;
-          mise)   mise upgrade "$pkg" ;;
-          apt)    sudo apt-get install --only-upgrade -y "$pkg" ;;
-          pacman) sudo pacman -S "$pkg" ;;
-          dnf)    sudo dnf upgrade -y "$pkg" ;;
-        esac
-        ;;
-      x)
-        printf "\033[1;31m➜ Uninstalling %s (%s)...\033[0m\n" "$pkg" "$mgr"
-        case "$mgr" in
-          brew)   brew uninstall "$pkg" ;;
-          cask)   brew uninstall --cask "$pkg" ;;
-          mise)   mise uninstall "$pkg" ;;
-          apt)    sudo apt-get remove -y "$pkg" ;;
-          pacman) sudo pacman -R "$pkg" ;;
-          dnf)    sudo dnf remove -y "$pkg" ;;
-        esac
-        ;;
-      o)
-        case "$mgr" in
-          brew) brew home "$pkg" ;;
-          cask) brew home --cask "$pkg" ;;
-          apt)
-            local url
-            url="$(dpkg -s "$pkg" 2>/dev/null | awk '/^Homepage:/ {print $2; exit}')"
-            [[ -n "$url" ]] && open "$url"
-            ;;
-        esac
-        ;;
-      "")
-        case "$mgr" in
-          brew)   brew info "$pkg" ;;
-          cask)   brew info --cask "$pkg" ;;
-          mise)   mise tool "$pkg" ;;
-          apt)    dpkg -s "$pkg" ;;
-          pacman) pacman -Qi "$pkg" ;;
-          dnf)    rpm -qi "$pkg" ;;
-        esac
-        ;;
-    esac
+    _fpkg_run_action "$key" "$mgr" "$pkg"
   done <<< "$selected_lines"
 
   if [[ "$key" == "y" ]] && (( ${#pkgs[@]} > 0 )); then

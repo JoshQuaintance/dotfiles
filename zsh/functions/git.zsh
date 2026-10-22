@@ -1,5 +1,38 @@
 # Git & Worktree Helpers
 
+# Internal helper: resolve the default branch name of a newly cloned bare repository.
+_clone_detect_bare_default_branch() {
+  local target_dir="$1"
+  local def_branch raw_ref candidate
+
+  def_branch="$(git -C "$target_dir" symbolic-ref --short HEAD 2>/dev/null)"
+  if [ -z "$def_branch" ]; then
+    git -C "$target_dir" remote set-head origin --auto 2>/dev/null || true
+    raw_ref="$(git -C "$target_dir" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null)"
+    def_branch="${raw_ref#refs/remotes/origin/}"
+  fi
+
+  if [ -z "$def_branch" ]; then
+    for candidate in main master develop trunk; do
+      if git -C "$target_dir" show-ref --verify --quiet "refs/heads/$candidate" || \
+         git -C "$target_dir" show-ref --verify --quiet "refs/remotes/origin/$candidate"; then
+        def_branch="$candidate"
+        break
+      fi
+    done
+  fi
+
+  if [ -z "$def_branch" ]; then
+    def_branch="$(git -C "$target_dir" for-each-ref --format="%(refname:short)" --count=1 refs/heads/ 2>/dev/null)"
+    if [ -z "$def_branch" ]; then
+      raw_ref="$(git -C "$target_dir" for-each-ref --format="%(refname:short)" refs/remotes/origin/ 2>/dev/null | grep -v '/HEAD$' | head -n 1)"
+      def_branch="${raw_ref#origin/}"
+    fi
+  fi
+
+  printf "%s" "$def_branch"
+}
+
 # Smart Git Clone: supports full URLs, owner/repo shorthand, auto-cd, and -b/--bare worktree hub setup
 clone() {
   local bare_mode=false
@@ -19,15 +52,9 @@ clone() {
         printf "  clone -r owner/repo      Clone recursively including all submodules\n"
         return 0
         ;;
-      -b|--bare)
-        bare_mode=true
-        ;;
-      -s|--shallow)
-        shallow_mode=true
-        ;;
-      -r|--recursive)
-        recursive_mode=true
-        ;;
+      -b|--bare) bare_mode=true ;;
+      -s|--shallow) shallow_mode=true ;;
+      -r|--recursive) recursive_mode=true ;;
       *)
         if [ -z "$repo" ]; then
           repo="$arg"
@@ -45,12 +72,8 @@ clone() {
 
   local clone_url=""
   case "$repo" in
-    http://*|https://*|git@*|ssh://*|file://*)
-      clone_url="$repo"
-      ;;
-    */*)
-      clone_url="git@github.com:${repo%.git}.git"
-      ;;
+    http://*|https://*|git@*|ssh://*|file://*) clone_url="$repo" ;;
+    */*) clone_url="git@github.com:${repo%.git}.git" ;;
     *)
       local gh_user
       gh_user="$(git config --get github.user 2>/dev/null || echo "JoshQuaintance")"
@@ -59,19 +82,14 @@ clone() {
   esac
 
   if [ -z "$target_dir" ]; then
-    # :t = tail (basename) without spawning an external subshell
     local stripped_url="${clone_url%.git}"
     target_dir="${stripped_url:t}"
   fi
   target_dir="${target_dir:A}"
 
   local -a clone_extra_opts
-  if [ "$shallow_mode" = true ]; then
-    clone_extra_opts+=("--depth" "1")
-  fi
-  if [ "$recursive_mode" = true ]; then
-    clone_extra_opts+=("--recurse-submodules")
-  fi
+  [ "$shallow_mode" = true ] && clone_extra_opts+=("--depth" "1")
+  [ "$recursive_mode" = true ] && clone_extra_opts+=("--recurse-submodules")
 
   if [ "$bare_mode" = true ]; then
     printf "\033[1;34m==>\033[0m Cloning bare worktree hub \033[1m%s\033[0m into \033[1;36m%s\033[0m...\n" "$clone_url" "$target_dir"
@@ -84,40 +102,8 @@ clone() {
     git -C "$target_dir" config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
     git -C "$target_dir" fetch origin --quiet 2>/dev/null || true
 
-    local def_branch raw_ref candidate
-    # 1. Primary: Query the bare repository's HEAD symbolic-ref.
-    #    git clone --bare sets HEAD to the upstream's default branch (e.g. trunk, main, develop).
-    def_branch="$(git -C "$target_dir" symbolic-ref --short HEAD 2>/dev/null)"
-
-    # 2. Secondary: Remote tracking origin/HEAD detection.
-    #    If HEAD is detached or non-symbolic, query origin to set refs/remotes/origin/HEAD.
-    if [ -z "$def_branch" ]; then
-      git -C "$target_dir" remote set-head origin --auto 2>/dev/null || true
-      raw_ref="$(git -C "$target_dir" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null)"
-      def_branch="${raw_ref#refs/remotes/origin/}"
-    fi
-
-    # 3. Tertiary: Probe standard default branch names in order of prevalence, verifying existence.
-    if [ -z "$def_branch" ]; then
-      for candidate in main master develop trunk; do
-        if git -C "$target_dir" show-ref --verify --quiet "refs/heads/$candidate" || \
-           git -C "$target_dir" show-ref --verify --quiet "refs/remotes/origin/$candidate"; then
-          def_branch="$candidate"
-          break
-        fi
-      done
-    fi
-
-    # 4. Quaternary: Fall back to any available local branch or remote tracking branch.
-    if [ -z "$def_branch" ]; then
-      def_branch="$(git -C "$target_dir" for-each-ref --format="%(refname:short)" --count=1 refs/heads/ 2>/dev/null)"
-      if [ -z "$def_branch" ]; then
-        raw_ref="$(git -C "$target_dir" for-each-ref --format="%(refname:short)" refs/remotes/origin/ 2>/dev/null | grep -v '/HEAD$' | head -n 1)"
-        def_branch="${raw_ref#origin/}"
-      fi
-    fi
-
-    # 5. Guard: If no valid branch exists, abort cleanly instead of crashing worktree add.
+    local def_branch
+    def_branch="$(_clone_detect_bare_default_branch "$target_dir")"
     if [ -z "$def_branch" ]; then
       printf "\033[31m✖ Could not determine default branch for repository.\033[0m\n" >&2
       return 1
@@ -408,22 +394,18 @@ ga() {
   fi
 
   local preview_cmd='
-    clean=$(echo {} | sed "s/\x1b\[[0-9;]*m//g")
-    st="${clean:0:2}"
+    clean=$(echo {} | sed "s/\x1b\[[0-9;]*m//g"); st="${clean:0:2}"
     f=$(echo "$clean" | sed -E "s/^.. //; s/.* -> //; s/^\"(.*)\"$/\1/")
     if [ "$st" = "??" ]; then
       if [ -d "$f" ]; then
-        if command -v eza &>/dev/null; then eza --tree --level=2 --icons --color=always "$f"; else ls -la "$f"; fi
-      elif command -v bat &>/dev/null; then
-        bat --color=always --style=numbers --line-range :300 "$f" 2>/dev/null
+        command -v eza &>/dev/null && eza --tree --level=2 --icons --color=always "$f" || ls -la "$f"
       else
-        cat "$f" 2>/dev/null
+        command -v bat &>/dev/null && bat --color=always --style=numbers --line-range :300 "$f" 2>/dev/null || cat "$f" 2>/dev/null
       fi
     elif command -v delta &>/dev/null; then
       { git diff -- "$f" 2>/dev/null; git diff --staged -- "$f" 2>/dev/null; } | delta --paging=never --width="${FZF_PREVIEW_COLUMNS:-80}"
     else
-      git diff --color=always -- "$f" 2>/dev/null
-      git diff --staged --color=always -- "$f" 2>/dev/null
+      git diff --color=always -- "$f" 2>/dev/null; git diff --staged --color=always -- "$f" 2>/dev/null
     fi
   '
 

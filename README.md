@@ -71,6 +71,25 @@ dot restore [ARC]     # Restore untracked local machine overrides & state from s
 
 ---
 
+## Comma Command Palette (`,`) & Interactive Shell Tools
+
+Every custom shell function is accessible via the `,` prefix convention (with Fish-like autosuggestions, live syntax highlighting, and tab completion whether typed as `,<cmd>` or `, <cmd>`):
+
+```bash
+,                     # Open modal-Vim FZF palette of all custom dotfiles commands
+, <cmd> [args...]     # Run any custom command directly (e.g. `, pkg`, `, port`, `, gwts`)
+,hash <path...>       # Compute MD5, SHA-1, SHA-256 & SHA-512 for files or directories (checksum)
+,hashc <p1> <p2>...   # Compare 2+ files/folders for byte-for-byte identity or verify digest (hashc)
+,net                  # Network, DNS, gateway, VPN & latency diagnostic card (netinfo)
+,pkg / ,brew          # Inspect, upgrade, or uninstall Homebrew, Mise & system packages (fpkg)
+,kill / ,ports        # Interactive process & listening TCP port inspector/killer (fkill / port)
+wt / gwts / gwtn      # Interactive Git worktree switcher, fleet status table & creator
+```
+
+Helper Python executables invoked by shell functions live in `libexec/` (`checksum.py`, `clip_transform.py`, `decode.py`, `strdiff.py`, `wsl_terminal_settings.py`) and are linted alongside `cli/` via `ruff` and `lefthook`.
+
+---
+
 ## Bare Linux Install / Containers
 
 On a fresh or minimal Linux install (Ubuntu, Debian, Fedora, or container), ensure `curl` and `sudo` are installed first:
@@ -137,6 +156,9 @@ This dotfiles framework builds upon and integrates with numerous exceptional ope
 | **uv** | [astral-sh/uv](https://github.com/astral-sh/uv) | Apache-2.0 / MIT | High-performance Python package and environment manager |
 | **shellcheck** | [koalaman/shellcheck](https://github.com/koalaman/shellcheck) | GPL-3.0 | Static analysis and linter for shell scripts |
 | **shfmt** | [mvdan/sh](https://github.com/mvdan/sh) | BSD-3-Clause | Shell script parser, formatter, and interpreter |
+| **lefthook** | [evilmartians/lefthook](https://github.com/evilmartians/lefthook) | MIT | Fast parallel Git hooks manager |
+| **typos** | [crate-ci/typos](https://github.com/crate-ci/typos) | Apache-2.0 / MIT | Low-false-positive source code spell checker |
+| **actionlint** | [rhysd/actionlint](https://github.com/rhysd/actionlint) | MIT | Static checker for GitHub Actions workflow files |
 | **fzf-tab** | [Aloxaf/fzf-tab](https://github.com/Aloxaf/fzf-tab) | MIT | Rich fzf-driven completion popup for Zsh |
 | **zsh-autosuggestions** | [zsh-users/zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggestions) | MIT | Fast Fish-like autosuggestions for Zsh |
 | **zsh-syntax-highlighting** | [zsh-users/zsh-syntax-highlighting](https://github.com/zsh-users/zsh-syntax-highlighting) | BSD-3-Clause | Fish-like real-time syntax highlighting for Zsh |

@@ -445,14 +445,13 @@ def _check_zsh_function_bounds(report: TestReport, dotfiles: Path) -> None:
     func_files = sorted((dotfiles / "zsh" / "functions").glob("*.zsh"))
     oversized_modules: list[str] = []
     oversized_funcs: list[str] = []
-    func_header = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*)\s*\(\)\s*\{")
+    func_header = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*|,)\s*\(\)\s*\{")
 
     for zfile in func_files:
         lines = zfile.read_text(encoding="utf-8", errors="ignore").splitlines()
         if len(lines) > 1100:
             oversized_modules.append(f"{zfile.name} ({len(lines)}L)")
         stack: list[tuple[str, int]] = []
-        max_fn_lines = 120 if zfile.name == "worktree.zsh" else 165
         for idx, line in enumerate(lines, 1):
             match = func_header.match(line)
             if match:
@@ -460,7 +459,7 @@ def _check_zsh_function_bounds(report: TestReport, dotfiles: Path) -> None:
             elif line == "}" and stack:
                 fn_name, start_line = stack.pop()
                 fn_len = idx - start_line + 1
-                if fn_len > max_fn_lines:
+                if fn_len > 120:
                     oversized_funcs.append(f"{fn_name} ({fn_len}L in {zfile.name})")
 
     if oversized_modules or oversized_funcs:
@@ -469,7 +468,7 @@ def _check_zsh_function_bounds(report: TestReport, dotfiles: Path) -> None:
     else:
         report.ok(
             "Zsh module & function bounds",
-            f"All {len(func_files)} zsh/functions/*.zsh modules within size limits",
+            f"All {len(func_files)} zsh/functions/*.zsh modules & functions within 120L limit",
         )
 
 
@@ -522,11 +521,35 @@ def _check_brewfile_and_symlinks(report: TestReport, dotfiles: Path) -> None:
         report.fail("Symlink health", f"Dangling symlinks: {', '.join(dangling)}")
 
 
+def _check_python_scripts_syntax_and_lint(report: TestReport, dotfiles: Path) -> None:
+    """Validate Python syntax (py_compile) and Ruff linting across cli/ and libexec/."""
+    py_files = sorted([*(dotfiles / "cli").glob("*.py"), *(dotfiles / "libexec").glob("*.py")])
+    py_failed = False
+    for pyfile in py_files:
+        if run_cmd([sys.executable, "-m", "py_compile", str(pyfile)])[0] != 0:
+            report.fail(f"Python syntax: {pyfile.name}", "Syntax error")
+            py_failed = True
+    if not py_failed:
+        report.ok("Python modules & libexec syntax", f"All {len(py_files)} cli/*.py and libexec/*.py pass (py_compile)")
+
+    if shutil.which("ruff"):
+        r_code, r_out, r_err = run_cmd(
+            ["ruff", "check", str(dotfiles / "cli"), str(dotfiles / "libexec")],
+            timeout=15,
+        )
+        if r_code == 0:
+            report.ok("Ruff static analysis", f"0 lint/complexity issues across {len(py_files)} Python files")
+        else:
+            first = (r_out or r_err).splitlines()[0] if (r_out or r_err) else "Ruff error"
+            report.fail("Ruff static analysis", first[:48])
+
+
 def test_syntax_and_links(report: TestReport, dotfiles: Path):
-    """Run Bash/Zsh syntax checks, ShellCheck, shfmt, Brewfile sync, and symlink checks."""
+    """Run Bash/Zsh/Python syntax checks, ShellCheck, shfmt, Ruff, Brewfile sync, and symlink checks."""
     print(f"\n{C_BOLD}3. Script Syntax & Link Integrity{C_RESET}")
     _check_bash_scripts_syntax_and_lint(report, dotfiles)
     _check_zsh_scripts_syntax(report, dotfiles)
+    _check_python_scripts_syntax_and_lint(report, dotfiles)
     _check_brewfile_and_symlinks(report, dotfiles)
 
 

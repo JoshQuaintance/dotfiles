@@ -63,6 +63,45 @@ _conf_candidates() {
   fi
 }
 
+# Internal helper: open target file/dir in editor and auto-reload shell/terminal when modified.
+_conf_edit_and_reload() {
+  local target_file="$1" is_shell_rc="$2"
+  case "$target_file" in
+    *"/.zshrc"|*"/.aliases"|*"/zsh/functions.zsh"|*"/zsh/functions/"*|*"/spaceship.zsh")
+      is_shell_rc=true
+      ;;
+  esac
+
+  if [ -d "$target_file" ]; then
+    _edit_file "$target_file"
+    return 0
+  fi
+
+  [ ! -f "$target_file" ] && touch "$target_file"
+
+  local before_sum after_sum
+  before_sum=$(cksum "$target_file" 2>/dev/null)
+  _edit_file "$target_file"
+  after_sum=$(cksum "$target_file" 2>/dev/null)
+
+  if [ "$before_sum" != "$after_sum" ]; then
+    if [ "$is_shell_rc" = true ]; then
+      echo "Changes detected. Sourcing $target_file..."
+      local real_target="${target_file:A}"
+      zcompile -R -- "${real_target}.zwc" "$real_target" 2>/dev/null || true
+      source "$target_file"
+      echo "✔ Terminal environment updated!"
+    elif [[ "$target_file" == *"/windows-terminal/settings.json" ]] && [ -n "$WSL_DISTRO_NAME" ] && command -v wsl-setup-terminal &>/dev/null; then
+      echo "Changes detected. Syncing Windows Terminal settings to Windows host..."
+      wsl-setup-terminal
+    else
+      echo "✔ Saved changes to $target_file"
+    fi
+  else
+    echo "No changes made."
+  fi
+}
+
 # Fuzzy configuration opener with auto-reload (conf)
 conf() {
   if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
@@ -77,11 +116,9 @@ conf() {
   local target_file=""
   local is_shell_rc=false
 
-  # 1. If nothing passed and not in an interactive FZF-capable terminal, default to ~/.zshrc
   if [ -z "$1" ] && { [ ! -t 1 ] || ! command -v fzf &>/dev/null; }; then
     target_file="$HOME/.zshrc"
     is_shell_rc=true
-  # 2. If an explicit file or directory path was given
   elif [ -n "$1" ] && { [ -f "$1" ] || [ -d "$1" ]; }; then
     target_file="$1"
   else
@@ -89,7 +126,6 @@ conf() {
     local all_candidates
     all_candidates=$(_conf_candidates)
 
-    # Check for exact key match first (case-insensitive) when a query is provided
     local exact_match=""
     if [ -n "$query" ]; then
       exact_match=$(echo "$all_candidates" | awk -F'\t' -v q="$query" 'tolower($1) == tolower(q) { print $2; exit }')
@@ -98,9 +134,7 @@ conf() {
     if [ -n "$exact_match" ]; then
       target_file="$exact_match"
     else
-      # Fuzzy filter candidate entries (or deduplicate by path when browsing all)
-      local matches=""
-      local match_count=0
+      local matches="" match_count=0
       if [ -n "$query" ]; then
         matches=$(echo "$all_candidates" | awk -F'\t' -v q="$query" 'tolower($1) ~ tolower(q) || tolower($2) ~ tolower(q) { if (!seen[$2]++) print $0 }')
         match_count=$(echo "$matches" | grep -c . || true)
@@ -125,69 +159,24 @@ conf() {
           --preview='if [ -d {2} ]; then if command -v eza &>/dev/null; then eza -la --color=always {2}; else ls -la {2}; fi; elif [ -f {2} ]; then if command -v bat &>/dev/null; then bat --style=plain --color=always --line-range :60 {2}; else head -n 60 {2}; fi; fi' \
           --preview-window='right:55%:wrap')
 
-        if [ -n "$selected" ]; then
-          target_file=$(echo "$selected" | awk -F'\t' '{print $2}')
-        else
-          return 0
-        fi
+        [ -z "$selected" ] && return 0
+        target_file=$(echo "$selected" | awk -F'\t' '{print $2}')
+      elif [ "$match_count" -gt 1 ]; then
+        printf "\033[33mMultiple matches for '%s':\033[0m\n" "$query"
+        echo "$matches" | awk -F'\t' '{printf "%2d) %-14s -> %s\n", NR, $1, $2}'
+        printf "Select config number: "
+        local choice
+        read -r choice
+        target_file=$(echo "$matches" | sed -n "${choice}p" | awk -F'\t' '{print $2}')
       else
-        if [ "$match_count" -gt 1 ]; then
-          printf "\033[33mMultiple matches for '%s':\033[0m\n" "$query"
-          echo "$matches" | awk -F'\t' '{printf "%2d) %-14s -> %s\n", NR, $1, $2}'
-          printf "Select config number: "
-          local choice
-          read -r choice
-          target_file=$(echo "$matches" | sed -n "${choice}p" | awk -F'\t' '{print $2}')
-        else
-          printf "\033[31m✖ No configuration found matching '%s'.\033[0m\n" "$query"
-          return 1
-        fi
+        printf "\033[31m✖ No configuration found matching '%s'.\033[0m\n" "$query"
+        return 1
       fi
     fi
   fi
 
-  if [ -z "$target_file" ]; then
-    return 0
-  fi
-
-  # Determine if target is a shell rc file that should trigger auto-reloading
-  case "$target_file" in
-    *"/.zshrc"|*"/.aliases"|*"/zsh/functions.zsh"|*"/zsh/functions/"*|*"/spaceship.zsh")
-      is_shell_rc=true
-      ;;
-  esac
-
-  if [ -d "$target_file" ]; then
-    _edit_file "$target_file"
-    return 0
-  fi
-
-  [ ! -f "$target_file" ] && touch "$target_file"
-
-  local before_sum
-  before_sum=$(cksum "$target_file" 2>/dev/null)
-
-  _edit_file "$target_file"
-
-  local after_sum
-  after_sum=$(cksum "$target_file" 2>/dev/null)
-
-  if [ "$before_sum" != "$after_sum" ]; then
-    if [ "$is_shell_rc" = true ]; then
-      echo "Changes detected. Sourcing $target_file..."
-      local real_target="${target_file:A}"
-      zcompile -R -- "${real_target}.zwc" "$real_target" 2>/dev/null || true
-      source "$target_file"
-      echo "✔ Terminal environment updated!"
-    elif [[ "$target_file" == *"/windows-terminal/settings.json" ]] && [ -n "$WSL_DISTRO_NAME" ] && command -v wsl-setup-terminal &>/dev/null; then
-      echo "Changes detected. Syncing Windows Terminal settings to Windows host..."
-      wsl-setup-terminal
-    else
-      echo "✔ Saved changes to $target_file"
-    fi
-  else
-    echo "No changes made."
-  fi
+  [ -z "$target_file" ] && return 0
+  _conf_edit_and_reload "$target_file" "$is_shell_rc"
 }
 
 # Dotfiles Branch Switcher (dotbranch / .branch / .b)
