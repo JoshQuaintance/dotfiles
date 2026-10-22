@@ -461,6 +461,7 @@ _collect_gwts_entry() {
   status_str=""
   if [ -z "$status_out" ]; then
     status_str="\033[32m✔ clean\033[0m"
+    (( ++clean_count ))
   else
     staged=$(echo "$status_out" | grep -c '^[MADRC]' || true)
     unstaged=$(echo "$status_out" | grep -c '^.[MD]' || true)
@@ -470,57 +471,73 @@ _collect_gwts_entry() {
     (( unstaged > 0 )) && parts+=("${unstaged} modified")
     (( untracked > 0 )) && parts+=("${untracked} untracked")
     status_str="\033[1;33m●\033[0m \033[33m${(j:, :)parts}\033[0m"
+    (( ++dirty_count ))
   fi
 
   local sync_plain="" sync_color=""
+  ahead=0; behind=0
   upstream_count=$(git -C "$wt_path" rev-list --left-right --count HEAD...@{u} 2>/dev/null || true)
   if [ -n "$upstream_count" ]; then
     ahead=$(echo "$upstream_count" | awk '{print $1}')
     behind=$(echo "$upstream_count" | awk '{print $2}')
+    if (( ahead > 0 || behind > 0 )); then
+      (( ++unpushed_count ))
+    fi
     if (( ahead > 0 && behind > 0 )); then
-      sync_plain="↑${ahead} ↓${behind}"
-      sync_color="\033[33m"
+      sync_plain="↑${ahead} ↓${behind}"; sync_color="\033[33m"
     elif (( ahead > 0 )); then
-      sync_plain="↑${ahead}"
-      sync_color="\033[32m"
+      sync_plain="↑${ahead}"; sync_color="\033[32m"
     elif (( behind > 0 )); then
-      sync_plain="↓${behind}"
-      sync_color="\033[31m"
+      sync_plain="↓${behind}"; sync_color="\033[31m"
     else
-      sync_plain="✔ synced"
-      sync_color="\033[32m"
+      sync_plain="✔ synced"; sync_color="\033[32m"
     fi
   else
-    sync_plain="(no upstream)"
-    sync_color="\033[38;2;108;112;134m"
+    sync_plain="(no upstream)"; sync_color="\033[38;2;108;112;134m"
   fi
 
-  # :t = tail (basename) without forking a subshell
   wt_name="${wt_path:t}"
-  if (( ${#wt_name} > 28 )); then
-    wt_name="${wt_name[1,25]}..."
-  fi
+  if (( ${#wt_name} > 28 )); then wt_name="${wt_name[1,25]}..."; fi
   wt_display_branch="$wt_branch"
-  if (( ${#wt_display_branch} > 40 )); then
-    wt_display_branch="${wt_display_branch[1,37]}..."
-  fi
+  if (( ${#wt_display_branch} > 40 )); then wt_display_branch="${wt_display_branch[1,37]}..."; fi
 
-  (( ${#wt_name} > wt_w )) && wt_w=${#wt_name}
-  (( ${#wt_display_branch} > br_w )) && br_w=${#wt_display_branch}
-  (( ${#sync_plain} > sync_w )) && sync_w=${#sync_plain}
+  if (( ${#wt_name} > wt_w )); then wt_w=${#wt_name}; fi
+  if (( ${#wt_display_branch} > br_w )); then br_w=${#wt_display_branch}; fi
+  if (( ${#sync_plain} > sync_w )); then sync_w=${#sync_plain}; fi
 
-  gwts_rows+=("${is_active}|${wt_name}|${wt_display_branch}|${sync_plain}|${sync_color}|${status_str}")
+  gwts_rows+=("${is_active}|${wt_name}|${wt_display_branch}|${sync_plain}|${sync_color}|${status_str}|${wt_path}|${wt_branch}|${ahead}|${behind}")
 }
 
 # Git Worktree Fleet Status Dashboard (gwts / gwtstatus)
 # Scans all worktrees in the current repo and prints aligned status, branch, and sync state
 gwts() {
+  local do_fetch=false json_mode=false
+  while (( $# > 0 )); do
+    case "$1" in
+      -h|--help)
+        printf "\033[1;38;2;203;166;247mgwts\033[0m (alias: \033[1mgwtstatus\033[0m) — Git worktree fleet status dashboard\n\n"
+        printf "\033[1mUsage:\033[0m\n"
+        printf "  gwts              Show aligned table of all worktrees, branches, sync & dirty state\n"
+        printf "  gwts -f, --fetch  Fetch origin before computing ahead/behind counts\n"
+        printf "  gwts -j, --json   Emit JSON array of worktree status objects\n"
+        return 0
+        ;;
+      -f|--fetch) do_fetch=true; shift ;;
+      -j|--json) json_mode=true; shift ;;
+      *) shift ;;
+    esac
+  done
+
   _require_git_repo || return 1
+  if [[ "$do_fetch" == true ]]; then
+    git fetch --all --prune --quiet 2>/dev/null || true
+  fi
 
   local active_wt
   active_wt="$(git rev-parse --show-toplevel 2>/dev/null)"
   local wt_path="" wt_branch="" is_active="0" status_out="" status_str=""
   local staged=0 unstaged=0 untracked=0 ahead=0 behind=0 upstream_count=""
+  local clean_count=0 dirty_count=0 unpushed_count=0
   local wt_name="" wt_display_branch=""
   local -a parts gwts_rows=()
   local is_bare=false is_detached=false line=""
@@ -528,44 +545,38 @@ gwts() {
 
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
-      worktree\ *)
-        _collect_gwts_entry
-        wt_path="${line#worktree }"
-        wt_branch=""
-        is_bare=false
-        is_detached=false
-        ;;
-      bare)
-        is_bare=true
-        ;;
-      detached)
-        is_detached=true
-        ;;
-      branch\ refs/heads/*)
-        wt_branch="${line#branch refs/heads/}"
-        ;;
-      branch\ *)
-        wt_branch="${line#branch }"
-        ;;
-      "")
-        _collect_gwts_entry
-        wt_path=""
-        wt_branch=""
-        is_bare=false
-        is_detached=false
-        ;;
+      worktree\ *) _collect_gwts_entry; wt_path="${line#worktree }"; wt_branch=""; is_bare=false; is_detached=false ;;
+      bare) is_bare=true ;;
+      detached) is_detached=true ;;
+      branch\ refs/heads/*) wt_branch="${line#branch refs/heads/}" ;;
+      branch\ *) wt_branch="${line#branch }" ;;
+      "") _collect_gwts_entry; wt_path=""; wt_branch=""; is_bare=false; is_detached=false ;;
     esac
   done < <(git worktree list --porcelain 2>/dev/null)
   _collect_gwts_entry
+
+  if [[ "$json_mode" == true ]]; then
+    printf "[\n"
+    local idx=0 row r_act r_name r_br r_sp r_sc r_st r_path r_fullbr r_ah r_bh comma
+    for row in "${gwts_rows[@]}"; do
+      (( idx++ ))
+      IFS="|" read -r r_act r_name r_br r_sp r_sc r_st r_path r_fullbr r_ah r_bh <<< "$row"
+      comma=$( (( idx < ${#gwts_rows[@]} )) && echo "," || echo "" )
+      printf '  {"name":"%s","branch":"%s","path":"%s","active":%s,"sync":"%s","ahead":%d,"behind":%d}%s\n' \
+        "$r_name" "$r_fullbr" "$r_path" "$( [[ "$r_act" == "1" ]] && echo true || echo false )" "$r_sp" "${r_ah:-0}" "${r_bh:-0}" "$comma"
+    done
+    printf "]\n"
+    return 0
+  fi
 
   local total_w=$(( 2 + wt_w + 2 + br_w + 2 + sync_w + 2 + 24 ))
   printf "\n\033[1;38;2;203;166;247m  %-*s  %-*s  %-*s  %s\033[0m\n" \
     "$wt_w" "WORKTREE" "$br_w" "BRANCH" "$sync_w" "SYNC" "WORKING TREE"
   printf "\033[38;2;108;112;134m%s\033[0m\n" "${(l:$total_w::─:):-}"
 
-  local row="" r_act="" r_name="" r_br="" r_sp="" r_sc="" r_st="" marker="" pad_len=0 sync_pad=""
+  local row="" r_act="" r_name="" r_br="" r_sp="" r_sc="" r_st="" r_rest="" marker="" pad_len=0 sync_pad=""
   for row in "${gwts_rows[@]}"; do
-    IFS="|" read -r r_act r_name r_br r_sp r_sc r_st <<< "$row"
+    IFS="|" read -r r_act r_name r_br r_sp r_sc r_st r_rest <<< "$row"
     pad_len=$(( sync_w - ${#r_sp} ))
     sync_pad="${(l:$pad_len:: :):-}"
     if [[ "$r_act" == "1" ]]; then
@@ -578,7 +589,9 @@ gwts() {
         "$marker" "$wt_w" "$r_name" "$br_w" "$r_br" "$r_sc" "$r_sp" "$sync_pad" "$r_st"
     fi
   done
-  printf "\n"
+  printf "\033[38;2;108;112;134m%s\033[0m\n" "${(l:$total_w::─:):-}"
+  printf "  \033[2m%d worktree(s): \033[0m\033[32m%d clean\033[0m\033[2m, \033[0m\033[33m%d dirty\033[0m\033[2m, \033[0m\033[36m%d ahead/behind\033[0m\n\n" \
+    "${#gwts_rows[@]}" "$clean_count" "$dirty_count" "$unpushed_count"
 }
 
 # Return 0 if the branch name is a protected long-lived branch

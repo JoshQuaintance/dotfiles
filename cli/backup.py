@@ -106,7 +106,7 @@ def run_backup(
         for _label, path in items:
             rel_name = str(path.relative_to(base_home))
             tar.add(path, arcname=rel_name, recursive=True)
-    os.chmod(dest, 0o600)
+    dest.chmod(0o600)
 
     arc_size = _format_size(dest.stat().st_size)
     print(format_row("Created snapshot (0600)", f"{dest} ({arc_size})", f"{C_GREEN}✔{C_RESET}"))

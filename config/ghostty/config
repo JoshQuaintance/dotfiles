@@ -22,6 +22,9 @@ copy-on-select = clipboard
 clipboard-read = allow
 clipboard-write = allow
 window-save-state = always
+window-inherit-working-directory = true
+link-url = true
+confirm-close-surface = false
 mouse-hide-while-typing = true
 quit-after-last-window-closed = true
 

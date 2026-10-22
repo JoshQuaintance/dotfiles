@@ -532,6 +532,34 @@ netinfo() {
 }
 
 # File Checksum & Integrity Verifier (checksum / ,hash / hashfile / fhash)
+# Interactive modal-Vim FZF file/folder picker for `checksum` and `hashc` when invoked with 0 args in a TTY.
+_checksum_pick_targets() {
+  local mode="$1"
+  local prompt="🔢 Hash Target(s) > "
+  local hdr="  j/k: move │ space: select multiple │ /: search │ enter: compute hashes │ q: quit"
+  if [[ "$mode" == "compare" ]]; then
+    prompt="⚖  Compare Hashes > "
+    hdr="  j/k: move │ space: select 2+ targets │ /: search │ enter: compare hashes │ q: quit"
+  fi
+
+  local -a fzf_mode_flags
+  _fzf_vim_mode "$prompt" "$hdr" "select" "space" "" "space:toggle+down"
+
+  local list_cmd="find . -maxdepth 3 -not -path '*/.git*' -not -path '.' 2>/dev/null | sed 's|^\\./||' | sort"
+  if command -v fd &>/dev/null; then
+    list_cmd="fd --hidden --exclude .git --max-depth 3 2>/dev/null"
+  fi
+
+  eval "$list_cmd" | fzf \
+    --multi \
+    --height=~55% \
+    --marker="✓ " \
+    "${fzf_mode_flags[@]}" \
+    --color="header:italic:dim,prompt:bold:yellow,pointer:bold:green,marker:bold:yellow" \
+    --preview='if [ -d {} ]; then command -v eza &>/dev/null && eza --tree --level=2 --icons --color=always {} || ls -la {}; else command -v bat &>/dev/null && bat --style=numbers --color=always --line-range :120 {} 2>/dev/null || head -n 120 {} 2>/dev/null; fi' \
+    --preview-window='right:55%:wrap'
+}
+
 # Internal runner shared by `checksum` (,hash) and `hashc` (,hashc / hashcompare).
 _checksum_run() {
   local mode="$1"
@@ -543,25 +571,19 @@ _checksum_run() {
 
   while (( $# > 0 )); do
     case "$1" in
-      -c|--copy)
-        copy_sha256=true
-        shift
-        ;;
-      -e|--expect)
-        expected="${2:-}"
-        shift 2 || shift
-        ;;
-      --)
-        shift
-        args+=("$@")
-        break
-        ;;
-      *)
-        args+=("$1")
-        shift
-        ;;
+      -c|--copy) copy_sha256=true; shift ;;
+      -e|--expect) expected="${2:-}"; shift 2 || shift ;;
+      --) shift; args+=("$@"); break ;;
+      *) args+=("$1"); shift ;;
     esac
   done
+
+  if (( ${#args[@]} == 0 )) && [[ -t 0 && -t 1 ]] && command -v fzf &>/dev/null; then
+    local picked
+    picked="$(_checksum_pick_targets "$mode")"
+    [[ -z "$picked" ]] && return 0
+    args=("${(@f)picked}")
+  fi
 
   if (( ${#args[@]} == 0 )); then
     if [[ "$mode" == "compare" ]]; then

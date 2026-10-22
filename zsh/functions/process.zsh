@@ -46,25 +46,8 @@ _port_list_listening() {
 _port_direct_target() {
   local kill_mode="$1" target_port="${2#:}"
   if [ "$kill_mode" = true ]; then
-    local pids=()
-    if command -v lsof &>/dev/null; then
-      pids=($(lsof -t -i :"$target_port" 2>/dev/null))
-    elif command -v fuser &>/dev/null; then
-      pids=($(fuser "${target_port}/tcp" 2>/dev/null))
-    elif command -v ss &>/dev/null; then
-      pids=($(ss -tlnp "sport = :$target_port" 2>/dev/null | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u))
-    fi
-    if [ "${#pids[@]}" -eq 0 ]; then
-      if ! command -v lsof &>/dev/null && ! command -v fuser &>/dev/null && ! command -v ss &>/dev/null; then
-        printf "\033[31m✖ Neither lsof, fuser, nor ss is installed.\033[0m\n" >&2
-        return 1
-      fi
-      printf "\033[33mNo process found listening on port %s.\033[0m\n" "$target_port"
-      return 1
-    fi
-    kill -15 "${pids[@]}" 2>/dev/null || kill -9 "${pids[@]}" 2>/dev/null
-    printf "\033[32m✔ Terminated process(es) on port %s (PID: %s)\033[0m\n" "$target_port" "${pids[*]}"
-    return 0
+    "${DOTFILES_DIR:-$HOME/.dotfiles}/bin/killport" "$target_port"
+    return $?
   fi
 
   if command -v lsof &>/dev/null; then

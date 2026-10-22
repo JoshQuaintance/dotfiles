@@ -198,4 +198,10 @@ test_gwts_aligns_columns_with_long_worktree_names_and_mixed_sync_states() {
 
   assert_eq "$hdr_col" "$qa_col"
   assert_eq "$hdr_col" "$long_col"
+  assert_contains "$out" "2 worktree(s): 2 clean, 0 dirty"
+
+  local json_out
+  json_out="$(gwts --json)"
+  assert_contains "$json_out" '"name":"qa"'
+  assert_contains "$json_out" '"branch":"feat/submittal-index-sections"'
 }

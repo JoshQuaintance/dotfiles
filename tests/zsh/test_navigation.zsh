@@ -200,6 +200,37 @@ test_decode_handles_jwt_epoch_url_and_base64() {
   local b64_out
   b64_out="$(decode 'aGVsbG8tZGVjb2Rl')"
   assert_eq "hello-decode" "$b64_out"
+
+  # 5. UUIDv7, Hex, and HTML entities
+  assert_contains "$(decode '018f4a7c-8e10-7000-8000-000000000001' | strip_ansi)" "UUID (v7)"
+  assert_contains "$(decode '0x68656c6c6f' | strip_ansi)" "hello"
+  assert_contains "$(decode '&lt;span&gt;ok&amp;good&lt;/span&gt;' | strip_ansi)" "<span>ok&good</span>"
+}
+
+test_port_fpkg_action_and_conf_candidates() {
+  mkdir -p "$HOME/proc_stubs"
+  cat <<'EOF' > "$HOME/proc_stubs/lsof"
+#!/usr/bin/env bash
+if [[ "$*" == *"-t -i :9999"* ]]; then
+  echo ""
+elif [[ "$*" == *"-i :8080"* ]]; then
+  echo "node 12345 user 20u IPv4 0x1 0t0 TCP *:8080 (LISTEN)"
+fi
+EOF
+  chmod +x "$HOME/proc_stubs/lsof"
+
+  local port_info
+  port_info="$(PATH="$HOME/proc_stubs:$PATH" port 8080)"
+  assert_contains "$port_info" "12345"
+
+  local kill_rc=0
+  PATH="$HOME/proc_stubs:$PATH" port -k 9999 >/dev/null 2>&1 || kill_rc=$?
+  assert_eq 1 $kill_rc
+
+  local conf_out
+  conf_out="$(_conf_candidates)"
+  assert_contains "$conf_out" $'functions\t'
+  assert_contains "$conf_out" $'ghostty\t'
 }
 
 test_fsize_fknown_and_termtest() {

@@ -1,5 +1,6 @@
 """`dot status`: render a concise workstation, repository, symlink, and runtime dashboard."""
 
+import json
 import platform
 import shutil
 from pathlib import Path
@@ -48,8 +49,8 @@ def _short_version(bin_name: str, args: list[str]) -> str:
     return out.splitlines()[0].strip()
 
 
-def _summarize_symlinks(dotfiles: Path) -> str:
-    """Return a formatted status string summarizing healthy vs. total symlinks."""
+def _count_symlinks(dotfiles: Path) -> tuple[int, int]:
+    """Return (linked_ok, total_links) across the symlink manifest."""
     linked_ok = 0
     total_links = 0
 
@@ -65,7 +66,12 @@ def _summarize_symlinks(dotfiles: Path) -> str:
                     linked_ok += 1
             except (OSError, RuntimeError):
                 pass
+    return linked_ok, total_links
 
+
+def _summarize_symlinks(dotfiles: Path) -> str:
+    """Return a formatted status string summarizing healthy vs. total symlinks."""
+    linked_ok, total_links = _count_symlinks(dotfiles)
     if linked_ok == total_links:
         return f"{C_GREEN}{ICON_OK} {linked_ok}/{total_links} linked{C_RESET}"
     return (
@@ -74,10 +80,9 @@ def _summarize_symlinks(dotfiles: Path) -> str:
     )
 
 
-def run_status() -> int:
-    """Render the `dot status` workstation overview and command reference table."""
+def run_status(json_output: bool = False) -> int:
+    """Render the `dot status` workstation overview (or JSON when `json_output` is True)."""
     dotfiles = get_dotfiles_dir()
-    print_header("Dotfiles Workstation Status \u2014 Quick Overview")
 
     # 1. Repository & Branch State
     _, branch, _ = run_cmd(["git", "-C", str(dotfiles), "branch", "--show-current"])
@@ -86,20 +91,35 @@ def run_status() -> int:
     _, porcelain, _ = run_cmd(["git", "-C", str(dotfiles), "status", "--porcelain"])
     dirty_count = len(porcelain.splitlines()) if porcelain else 0
 
-    if dirty_count == 0:
-        tree_str = f"{C_GREEN}{ICON_OK} clean{C_RESET}"
-    else:
-        tree_str = f"{C_YELLOW}{ICON_WARN} {dirty_count} modified{C_RESET}"
-
     # 2. Symlink & Runtime Versions
-    link_str = _summarize_symlinks(dotfiles)
+    linked_ok, total_links = _count_symlinks(dotfiles)
     zsh_ver = _short_version("zsh", ["--version"]).replace("zsh ", "").split(" ")[0]
     nvim_ver = _short_version("nvim", ["--version"]).replace("NVIM ", "")
     node_ver = _short_version("node", ["--version"])
     uv_ver = _short_version("uv", ["--version"]).replace("uv ", "").split(" ")[0]
-
     os_label = f"{platform.system()} ({platform.machine()})"
     active_prompt, _ = get_active_prompt()
+
+    if json_output:
+        payload = {
+            "os": os_label,
+            "branch": branch,
+            "commit": commit,
+            "dirty_count": dirty_count,
+            "prompt": active_prompt,
+            "symlinks": {"healthy": linked_ok, "total": total_links},
+            "runtimes": {"zsh": zsh_ver, "nvim": nvim_ver, "node": node_ver, "uv": uv_ver},
+        }
+        print(json.dumps(payload, indent=2))
+        return 0
+
+    print_header("Dotfiles Workstation Status \u2014 Quick Overview")
+    tree_str = (
+        f"{C_GREEN}{ICON_OK} clean{C_RESET}"
+        if dirty_count == 0
+        else f"{C_YELLOW}{ICON_WARN} {dirty_count} modified{C_RESET}"
+    )
+    link_str = _summarize_symlinks(dotfiles)
     sep = f"{C_DIM}{ICON_BULLET}{C_RESET}"
 
     print(f"\n{C_BOLD}Environment{C_RESET}")

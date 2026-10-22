@@ -227,9 +227,9 @@ _comma_gen_list() {
       _copy_or_print "$comma_cmd" "command: $comma_cmd"
       ;;
     *)
-      # Commands that require a positional file/dir/url argument are placed on the prompt
+      # Commands that require a freeform new path/URL argument are placed on the prompt
       case "$orig_cmd" in
-        take|extract|pack|clone|checksum|hashc|wpath|wcd)
+        take|clone|wpath|wcd)
           print -z "$orig_cmd "
           ;;
         *)
@@ -287,6 +287,75 @@ _comma() {
 }
 (( $+functions[compdef] )) && compdef _comma , f || true
 
+# Suggest subcommands, flags, or worktree names for the 2nd+ argument after `, <cmd> <arg...>`.
+_comma_suggest_arg2() {
+  local cmd_lead="$1" clean_cmd="$2" canonical="$3" rest="$4"
+  local opt
+
+  if [[ "$canonical" == "dot" ]]; then
+    if [[ "$rest" =~ ^[a-z]+$ ]]; then
+      for opt in status doctor test bench clean prune sync update backup env prompt help; do
+        if [[ "$opt" == "${rest}"* && "$opt" != "$rest" ]]; then
+          typeset -g suggestion="${cmd_lead}${opt}"
+          return 0
+        fi
+      done
+    elif [[ "$rest" =~ ^(doctor|update|clean|prune|sync|backup|env)[[:space:]]+(-[a-z-]*)$ ]]; then
+      local sub="${match[1]}" flag_part="${match[2]}"
+      local -a sub_flags=(--help)
+      case "$sub" in
+        doctor) sub_flags=(--fix --json --help) ;;
+        update) sub_flags=(--all --check --tools --no-prune --yes --help) ;;
+        clean)  sub_flags=(--dry-run --all --help) ;;
+        prune)  sub_flags=(--dry-run --orphans --yes --help) ;;
+        sync)   sub_flags=(--dry-run --message --help) ;;
+        backup) sub_flags=(--list --dry-run --help) ;;
+        env)    sub_flags=(--all --help) ;;
+      esac
+      for opt in "${sub_flags[@]}"; do
+        if [[ "$opt" == "${flag_part}"* && "$opt" != "$flag_part" ]]; then
+          typeset -g suggestion="${cmd_lead}${sub} ${opt}"
+          return 0
+        fi
+      done
+    fi
+  fi
+
+  # Common long-flag completion for custom functions (e.g. `, gwts --f` -> `--fetch`, `, hashc --c` -> `--copy`)
+  if [[ "$rest" == -* ]]; then
+    local -a cmd_flags=(--help)
+    case "$canonical" in
+      gwts)              cmd_flags=(--fetch --json --help) ;;
+      checksum|hashc)    cmd_flags=(--copy --expect --help) ;;
+      netinfo)           cmd_flags=(--no-ping --help) ;;
+      gwtclean|gbclean)  cmd_flags=(--dry-run --force --help) ;;
+      gwtenv)            cmd_flags=(--force --yes --help) ;;
+      fpkg|proj|snip|fknown) cmd_flags=(--list --help) ;;
+      strdiff)           cmd_flags=(--words --chars --scratch --help) ;;
+      port)              cmd_flags=(--kill --help) ;;
+    esac
+    for opt in "${cmd_flags[@]}"; do
+      if [[ "$opt" == "${rest}"* && "$opt" != "$rest" ]]; then
+        typeset -g suggestion="${cmd_lead}${opt}"
+        return 0
+      fi
+    done
+  fi
+
+  # Worktree leaf/branch completion for `, wt <partial>` and `, gwtdel <partial>`
+  if [[ "$canonical" == (wt|gwtdel) && "$rest" =~ ^[A-Za-z0-9_./-]+$ ]]; then
+    local wt_path wt_leaf
+    while IFS= read -r wt_path; do
+      wt_leaf="${wt_path:t}"
+      if [[ "$wt_leaf" == "${rest}"* && "$wt_leaf" != "$rest" ]]; then
+        typeset -g suggestion="${cmd_lead}${wt_leaf}"
+        return 0
+      fi
+    done < <(git worktree list --porcelain 2>/dev/null | awk '/^worktree / {print substr($0, 10)}')
+  fi
+  return 1
+}
+
 # Fish-like autosuggestion strategy for `, <cmd>` and `, <cmd> <args...>`.
 # Registered in ZSH_AUTOSUGGEST_STRATEGY=(history comma completion).
 _zsh_autosuggest_strategy_comma() {
@@ -332,15 +401,7 @@ _zsh_autosuggest_strategy_comma() {
     local canonical
     canonical="$(_comma_resolve_target "$clean_cmd")"
 
-    if [[ "$canonical" == "dot" && "$rest" =~ ^[a-z]+$ ]]; then
-      local sub
-      for sub in status doctor test bench clean prune sync update backup env prompt help; do
-        if [[ "$sub" == "${rest}"* && "$sub" != "$rest" ]]; then
-          typeset -g suggestion="${cmd_lead}${sub}"
-          return 0
-        fi
-      done
-    fi
+    _comma_suggest_arg2 "$cmd_lead" "$clean_cmd" "$canonical" "$rest" && return 0
 
     # Search history for matching invocations of either `,<clean_cmd> <rest>*` or `<canonical> <rest>*`
     local pat1=",${clean_cmd} ${rest}*"

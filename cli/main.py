@@ -25,10 +25,11 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="subcommand", help="Available subcommands")
 
     # 1. Overview & Diagnostics (status, doctor, env, test, bench)
-    subparsers.add_parser(
+    parser_status = subparsers.add_parser(
         "status",
         help="Show quick 1-screen workstation & dotfiles status overview",
     )
+    parser_status.add_argument("-j", "--json", action="store_true", help="Output workstation status as JSON")
 
     parser_doctor = subparsers.add_parser(
         "doctor",
@@ -36,6 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run system health checks and audit symlinks",
     )
     parser_doctor.add_argument("-f", "--fix", action="store_true", help="Automatically repair broken or missing symlinks")
+    parser_doctor.add_argument("-j", "--json", action="store_true", help="Output health check report as JSON")
 
     parser_env = subparsers.add_parser(
         "env",
@@ -129,12 +131,12 @@ def _dispatch_command(args: argparse.Namespace) -> int:
     """Dispatch parsed CLI arguments to the corresponding subcommand runner."""
     cmd = args.subcommand or "status"
     handlers = {
-        "status": lambda a: run_status(),
-        "doctor": lambda a: run_doctor(fix=a.fix),
-        "health": lambda a: run_doctor(fix=a.fix),
+        "status": lambda a: run_status(json_output=getattr(a, "json", False)),
+        "doctor": lambda a: run_doctor(fix=a.fix, json_output=getattr(a, "json", False)),
+        "health": lambda a: run_doctor(fix=a.fix, json_output=getattr(a, "json", False)),
         "link": lambda a: run_doctor(fix=a.fix),
         "env": lambda a: run_env_audit(show_all_path=a.all),
-        "test": lambda a: run_tests(),
+        "test": lambda _a: run_tests(),
         "prompt": lambda a: run_prompt_command(subcommand=a.action, value=a.engine),
         "bench": lambda a: run_bench(
             iterations=a.iterations,

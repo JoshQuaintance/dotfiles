@@ -182,6 +182,18 @@ test_netinfo_and_comma_launcher() {
   _zsh_autosuggest_strategy_comma ", dot doc"
   assert_eq ", dot doctor" "$suggestion"
 
+  suggestion=""
+  _zsh_autosuggest_strategy_comma ", dot doctor --f"
+  assert_eq ", dot doctor --fix" "$suggestion"
+
+  suggestion=""
+  _zsh_autosuggest_strategy_comma ", gwts --f"
+  assert_eq ", gwts --fetch" "$suggestion"
+
+  suggestion=""
+  _zsh_autosuggest_strategy_comma ", hashc --c"
+  assert_eq ", hashc --copy" "$suggestion"
+
   # Syntax highlighting for `, <cmd>` and `, <cmd> <arg2>`
   local BUFFER=", dot doctor --fix"
   local -a region_highlight=()

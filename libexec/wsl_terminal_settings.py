@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from pathlib import Path
 from typing import Any
 
 
@@ -70,12 +71,10 @@ def _merge_actions(data: dict[str, Any], template: dict[str, Any]) -> None:
 
 def main() -> int:
     """Entry point for Windows Terminal settings merger."""
-    settings_path, template_path = sys.argv[1], sys.argv[2]
+    settings_path, template_path = Path(sys.argv[1]), Path(sys.argv[2])
     try:
-        with open(settings_path, encoding="utf-8") as f:
-            data = parse_jsonc(f.read())
-        with open(template_path, encoding="utf-8") as f:
-            template = parse_jsonc(f.read())
+        data = parse_jsonc(settings_path.read_text(encoding="utf-8"))
+        template = parse_jsonc(template_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         print(f"\033[38;2;243;139;168m[ERROR]\033[0m Failed to parse JSON: {exc}", file=sys.stderr)
         return 1
@@ -88,7 +87,7 @@ def main() -> int:
     _merge_profile_defaults(data, template)
     _merge_actions(data, template)
 
-    with open(settings_path, "w", encoding="utf-8") as f:
+    with settings_path.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
 
     print(

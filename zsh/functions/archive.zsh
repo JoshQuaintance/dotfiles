@@ -7,6 +7,27 @@
 # Universal Archive Extractor (extract / x)
 # Uses Rust-based `ouch` when available, with portable fallback to tar/unzip/7z/zstd.
 extract() {
+  if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    printf "\033[1;38;2;203;166;247mextract\033[0m (alias: \033[1mx\033[0m) — Universal archive extractor\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  extract <archive...>   Extract one or more archives\n"
+    printf "  extract                Interactively pick archive(s) in FZF\n"
+    return 0
+  fi
+
+  if [ $# -eq 0 ] && [ -t 0 ] && [ -t 1 ] && command -v fzf &>/dev/null; then
+    local -a fzf_mode_flags
+    _fzf_vim_mode "📦 Extract Archive > " "  j/k: move │ space: select │ /: search │ enter: extract │ q: quit" "extract" "space" "" "space:toggle+down"
+    local picked
+    picked=$(find . -maxdepth 3 -type f \( -iname "*.tar.gz" -o -iname "*.tgz" -o -iname "*.tar.bz2" -o -iname "*.tbz2" -o -iname "*.tar.xz" -o -iname "*.txz" -o -iname "*.tar.zst" -o -iname "*.tar" -o -iname "*.zip" -o -iname "*.7z" -o -iname "*.rar" -o -iname "*.gz" -o -iname "*.bz2" -o -iname "*.zst" \) 2>/dev/null | sed 's|^\./||' | sort | fzf --multi --height=~50% --marker="✓ " "${fzf_mode_flags[@]}")
+    [ -z "$picked" ] && return 0
+    local f
+    for f in "${(@f)picked}"; do
+      extract "$f" || return $?
+    done
+    return 0
+  fi
+
   if [ -z "$1" ]; then
     printf "\033[33mUsage: extract <archive_file>\033[0m\n" >&2
     printf "Supports: .tar.gz, .tgz, .tar.bz2, .tbz2, .tar.xz, .txz, .zip, .rar, .7z, .tar.zst, .zst, .gz, .bz2\n" >&2
@@ -62,14 +83,31 @@ _extract() {
 #   pack <archive_name> <files/dirs...>   -> Create archive in specified format (.tar.gz, .zip, .tar.zst, .7z, etc.)
 #   pack <directory>                      -> Defaults to <directory>.tar.gz
 pack() {
-  if [ $# -eq 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+  if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     printf "\033[1;38;2;203;166;247mpack\033[0m — Universal archive creator (companion to \033[1mextract\033[0m / \033[1mx\033[0m)\n\n"
     printf "\033[1mUsage:\033[0m\n"
     printf "  pack <archive.ext> <files/dirs...>   Create archive inferred from extension\n"
     printf "  pack <folder>                        Create <folder>.tar.gz from <folder>\n\n"
     printf "\033[1mSupported formats:\033[0m\n"
     printf "  .tar.gz, .tgz, .tar.bz2, .tbz2, .tar.xz, .txz, .tar.zst, .tar, .zip, .7z, .gz, .bz2, .zst\n"
-    [ $# -eq 0 ] && return 1 || return 0
+    return 0
+  fi
+
+  if [ $# -eq 0 ] && [ -t 0 ] && [ -t 1 ] && command -v fzf &>/dev/null; then
+    local -a fzf_mode_flags
+    _fzf_vim_mode "🗜  Pack Files/Folders > " "  j/k: move │ space: select │ /: search │ enter: pack │ q: quit" "pack" "space" "" "space:toggle+down"
+    local picked
+    picked=$(find . -maxdepth 2 -not -path '*/.git*' -not -path '.' 2>/dev/null | sed 's|^\./||' | sort | fzf --multi --height=~50% --marker="✓ " "${fzf_mode_flags[@]}")
+    [ -z "$picked" ] && return 0
+    local -a sel_items=("${(@f)picked}")
+    local def_name="${sel_items[1]%/}.tar.gz"
+    printf "\033[1;36m?\033[0m Archive name [\033[1;33m%s\033[0m]: " "$def_name"
+    local out_name=""
+    IFS= read -r out_name
+    set -- "${out_name:-$def_name}" "${sel_items[@]}"
+  elif [ $# -eq 0 ]; then
+    printf "\033[33mUsage: pack <archive_file> <files_or_dirs...>\033[0m\n" >&2
+    return 1
   fi
 
   local archive="$1"

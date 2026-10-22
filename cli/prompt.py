@@ -294,12 +294,11 @@ def run_prompt_command(subcommand: Optional[str] = None, value: Optional[str] = 
             print(f"Usage: dot prompt set <{'|'.join(PROMPT_ENGINES.keys())}>")
             return 1
         return 0 if set_active_prompt(value) else 1
-    elif subcommand == "benchmark":
+    if subcommand == "benchmark":
         print_prompt_summary(interactive=False)
         return 0
-    else:
-        # Default: show benchmark and offer interactive selection if in TTY
-        import sys
-        is_tty = sys.stdin.isatty() and sys.stdout.isatty()
-        print_prompt_summary(interactive=is_tty)
-        return 0
+    # Default: show benchmark and offer interactive selection if in TTY
+    import sys
+    is_tty = sys.stdin.isatty() and sys.stdout.isatty()
+    print_prompt_summary(interactive=is_tty)
+    return 0

@@ -392,7 +392,7 @@ def _collect_bash_scripts(dotfiles: Path) -> list[Path]:
         if not script.is_file():
             continue
         try:
-            with open(script, encoding="utf-8", errors="ignore") as f:
+            with script.open(encoding="utf-8", errors="ignore") as f:
                 if re.match(r"^#!.*(bash|sh)", f.readline()):
                     valid.append(script)
         except (OSError, ValueError):
@@ -543,6 +543,14 @@ def _check_python_scripts_syntax_and_lint(report: TestReport, dotfiles: Path) ->
             first = (r_out or r_err).splitlines()[0] if (r_out or r_err) else "Ruff error"
             report.fail("Ruff static analysis", first[:48])
 
+    libexec_test = dotfiles / "tests" / "test_libexec.py"
+    if libexec_test.is_file():
+        u_code, _u_out, u_err = run_cmd([sys.executable, "-m", "unittest", str(libexec_test)], cwd=dotfiles, timeout=15)
+        if u_code == 0:
+            report.ok("Python libexec unit tests", "All 5 libexec/*.py executables pass unit tests")
+        else:
+            report.fail("Python libexec unit tests", (u_err.splitlines()[-1] if u_err else "Unit test failed")[:48])
+
 
 def test_syntax_and_links(report: TestReport, dotfiles: Path):
     """Run Bash/Zsh/Python syntax checks, ShellCheck, shfmt, Ruff, Brewfile sync, and symlink checks."""
@@ -663,7 +671,9 @@ def _check_cli_subcommand_smoke(report: TestReport) -> None:
 
     subcommand_specs = [
         ("CLI smoke: status", ["dot", "status"], "Quick workstation status overview (read-only)", None),
+        ("CLI smoke: status (--json)", ["dot", "status", "--json"], "Structured JSON workstation status", None),
         ("CLI smoke: doctor", ["dot", "doctor"], "Health audit & symlinks check (read-only)", [patch("cli.doctor.check_cli_tools")]),
+        ("CLI smoke: doctor (--json)", ["dot", "doctor", "--json"], "Structured JSON health audit", [patch("cli.doctor.check_cli_tools")]),
         (
             "CLI smoke: prompt",
             ["dot", "prompt", "benchmark"],

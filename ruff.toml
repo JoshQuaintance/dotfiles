@@ -18,6 +18,13 @@ select = [
     "C90",                  # mccabe cyclomatic complexity
     "PLR09",                # pylint complexity limits (branches, statements, args)
     "D",                    # pydocstyle docstrings
+    "PTH",                  # flake8-use-pathlib
+    "PIE",                  # flake8-pie
+    "PERF",                 # perflint
+    "FURB",                 # refurb
+    "RET",                  # flake8-return
+    "ARG",                  # flake8-unused-arguments
+    "C4",                   # flake8-comprehensions
 ]
 
 [lint.pydocstyle]

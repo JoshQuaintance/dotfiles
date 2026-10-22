@@ -84,10 +84,9 @@ def format_row(label: str, detail: str = "", status_icon: str = "", cols: Option
         if len(detail) > max_det:
             det = f"{detail[:max_det - 3]}..." if max_det >= 3 else detail[:max_det]
         return f"{prefix}{lbl} {C_DIM}{det}{C_RESET}"
-    else:
-        lbl_w = 44
-        lbl = f"{label:<{lbl_w}}"
-        return f"{prefix}{lbl} {C_DIM}{detail}{C_RESET}"
+    lbl_w = 44
+    lbl = f"{label:<{lbl_w}}"
+    return f"{prefix}{lbl} {C_DIM}{detail}{C_RESET}"
 
 
 def run_cmd(

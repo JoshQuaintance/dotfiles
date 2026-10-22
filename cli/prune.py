@@ -110,10 +110,10 @@ def _stale_link_rel_target(
     gone: set[str],
 ) -> Optional[str]:
     """Return the deleted repo-relative path for a broken/deleted repo symlink, or None."""
-    raw = os.readlink(link)
-    target = os.path.normpath(raw if os.path.isabs(raw) else os.path.join(current, raw))
+    raw = link.readlink()
+    target = os.path.normpath(str(raw if raw.is_absolute() else Path(current) / raw))
     rel = next((target[len(repo) + 1 :] for repo in repo_roots if target.startswith(repo + os.sep)), None)
-    if rel and (not os.path.exists(target) or _fully_deleted(dotfiles, old, rel, gone)):
+    if rel and (not Path(target).exists() or _fully_deleted(dotfiles, old, rel, gone)):
         return rel
     return None
 

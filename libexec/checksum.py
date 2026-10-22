@@ -8,6 +8,7 @@ import hashlib
 import os
 import sys
 from collections import defaultdict
+from pathlib import Path
 
 C_MAUVE = "\033[1;38;2;203;166;247m"
 C_BLUE = "\033[1;38;2;137;180;250m"
@@ -20,12 +21,13 @@ C_RST = "\033[0m"
 
 def _hash_file(filepath: str) -> tuple[list[tuple[str, str]], int, int]:
     """Compute MD5, SHA-1, SHA-256, and SHA-512 for a single file."""
+    path = Path(filepath)
     h_md5 = hashlib.md5()
     h_sha1 = hashlib.sha1()
     h_sha256 = hashlib.sha256()
     h_sha512 = hashlib.sha512()
 
-    with open(filepath, "rb") as f:
+    with path.open("rb") as f:
         while chunk := f.read(1024 * 1024):
             h_md5.update(chunk)
             h_sha1.update(chunk)
@@ -38,7 +40,7 @@ def _hash_file(filepath: str) -> tuple[list[tuple[str, str]], int, int]:
         ("SHA-256", h_sha256.hexdigest()),
         ("SHA-512", h_sha512.hexdigest()),
     ]
-    return digests, os.path.getsize(filepath), 1
+    return digests, path.stat().st_size, 1
 
 
 def _hash_directory(dirpath: str) -> tuple[list[tuple[str, str]], int, int]:
@@ -48,13 +50,14 @@ def _hash_directory(dirpath: str) -> tuple[list[tuple[str, str]], int, int]:
     h_sha256 = hashlib.sha256()
     h_sha512 = hashlib.sha512()
 
-    rel_files: list[tuple[str, str]] = []
+    rel_files: list[tuple[str, Path]] = []
     for root, dirs, files in os.walk(dirpath):
         dirs[:] = sorted(d for d in dirs if d != ".git")
+        root_path = Path(root)
         for fname in sorted(files):
-            full = os.path.join(root, fname)
-            if os.path.isfile(full) and not os.path.islink(full):
-                rel = os.path.relpath(full, dirpath).replace(os.sep, "/")
+            full = root_path / fname
+            if full.is_file() and not full.is_symlink():
+                rel = os.path.relpath(str(full), dirpath).replace(os.sep, "/")
                 rel_files.append((rel, full))
 
     rel_files.sort(key=lambda item: item[0])
@@ -63,8 +66,8 @@ def _hash_directory(dirpath: str) -> tuple[list[tuple[str, str]], int, int]:
         header = f"{rel}\0".encode()
         for h in (h_md5, h_sha1, h_sha256, h_sha512):
             h.update(header)
-        total_bytes += os.path.getsize(full)
-        with open(full, "rb") as f:
+        total_bytes += full.stat().st_size
+        with full.open("rb") as f:
             while chunk := f.read(1024 * 1024):
                 h_md5.update(chunk)
                 h_sha1.update(chunk)
@@ -88,8 +91,9 @@ def _render_target(
     expected: str,
 ) -> str | None:
     """Print formatted digests for a file or folder and return matched algorithm name if any."""
-    is_dir = os.path.isdir(target)
-    label = os.path.basename(os.path.normpath(target)) or target
+    target_path = Path(target)
+    is_dir = target_path.is_dir()
+    label = target_path.name or target
     if is_dir:
         meta = f"({file_count:,} files, {total_bytes:,} bytes)"
         print(f"{C_MAUVE}📁 {label}/{C_RST} {C_DIM}{meta}{C_RST}")
@@ -169,8 +173,8 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     if (
         len(ns.paths) == 3
         and ns.paths[2] in ("argument", "clipboard")
-        and not os.path.exists(ns.paths[2])
-        and os.path.exists(ns.paths[0])
+        and not Path(ns.paths[2]).exists()
+        and Path(ns.paths[0]).exists()
     ):
         ns.expect = ns.paths[1]
         ns.source = ns.paths[2]
@@ -193,7 +197,7 @@ def main() -> int:
     for idx, target in enumerate(ns.paths):
         if idx > 0:
             print()
-        if os.path.isdir(target):
+        if Path(target).is_dir():
             digests, total_bytes, file_count = _hash_directory(target)
         else:
             digests, total_bytes, file_count = _hash_file(target)

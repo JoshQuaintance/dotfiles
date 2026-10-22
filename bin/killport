@@ -2,10 +2,14 @@
 # Description: Terminate process listening on a given TCP port (non-interactive script counterpart to `port -k`)
 set -e
 
-# Kill process listening on a given TCP port (macOS & Linux)
-PORT="${1#:}"
-if [ -z "$PORT" ] || [ "$PORT" = "-h" ] || [ "$PORT" = "--help" ]; then
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   echo "Usage: killport <port_number>"
+  exit 0
+fi
+
+PORT="${1#:}"
+if [ -z "$PORT" ]; then
+  echo "Usage: killport <port_number>" >&2
   exit 1
 fi
 
@@ -16,15 +20,16 @@ elif command -v fuser &>/dev/null; then
   PIDS=$(fuser "${PORT}/tcp" 2>/dev/null || true)
 elif command -v ss &>/dev/null; then
   PIDS=$(ss -tlnp "sport = :$PORT" 2>/dev/null | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u || true)
+else
+  printf "\033[31m✖ Neither lsof, fuser, nor ss is installed.\033[0m\n" >&2
+  exit 1
 fi
 
 if [ -n "$PIDS" ]; then
   PID_LIST=$(echo "$PIDS" | tr '\n' ' ' | sed 's/ *$//')
-  echo "Terminating process(es) on port $PORT (PID: $PID_LIST)..."
-  # Try graceful SIGTERM first, fallback to SIGKILL
   echo "$PIDS" | xargs kill -15 2>/dev/null || echo "$PIDS" | xargs kill -9 2>/dev/null || true
-  echo "✔ Port $PORT cleared"
+  printf "\033[32m✔ Terminated process(es) on port %s (PID: %s)\033[0m\n" "$PORT" "$PID_LIST"
 else
-  echo "No process found listening on port $PORT"
+  printf "\033[33mNo process found listening on port %s.\033[0m\n" "$PORT"
   exit 1
 fi

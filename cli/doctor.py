@@ -46,31 +46,36 @@ class DoctorReport:
     """Track and display pass, warning, failure, and auto-repair counts for `dot doctor`."""
 
     def __init__(self):
-        """Initialize counters for doctor audit checks."""
+        """Initialize counters and check entry log for doctor audit checks."""
         self.passed = 0
         self.warnings = 0
         self.failed = 0
         self.repaired = 0
+        self.entries: list[dict[str, str]] = []
 
     def ok(self, label: str, detail: str = ""):
         """Record and print a passing health check."""
         self.passed += 1
+        self.entries.append({"status": "ok", "label": label, "detail": detail})
         print(f"  {C_GREEN}✔{C_RESET} {label:<44} {C_DIM}{detail}{C_RESET}")
 
     def warn(self, label: str, detail: str = ""):
         """Record and print a non-fatal health warning."""
         self.warnings += 1
+        self.entries.append({"status": "warn", "label": label, "detail": detail})
         print(f"  {C_YELLOW}⚠{C_RESET} {label:<44} {C_YELLOW}{detail}{C_RESET}")
 
     def fail(self, label: str, detail: str = ""):
         """Record and print a failing health check."""
         self.failed += 1
+        self.entries.append({"status": "fail", "label": label, "detail": detail})
         print(f"  {C_RED}✖{C_RESET} {C_BOLD}{label:<44}{C_RESET} {C_RED}{detail}{C_RESET}")
 
     def fixed(self, label: str, detail: str = ""):
         """Record and print an automatically repaired check."""
         self.repaired += 1
         self.passed += 1
+        self.entries.append({"status": "fixed", "label": label, "detail": detail})
         print(f"  {C_GREEN}✔ [FIXED]{C_RESET} {label:<36} {C_GREEN}{detail}{C_RESET}")
 
 
@@ -110,6 +115,18 @@ def stale_zsh_bytecode(dotfiles: Path) -> list[Path]:
     return stale
 
 
+def orphaned_zsh_bytecode(dotfiles: Path) -> list[Path]:
+    """Return `.zwc` files under `zsh/` whose underlying `.zsh` or `.aliases` source is missing."""
+    zsh_dir = dotfiles / "zsh"
+    zwc_files = [*zsh_dir.glob("*.zwc"), *zsh_dir.glob(".*.zwc"), *(zsh_dir / "functions").glob("*.zwc")]
+    orphans: list[Path] = []
+    for zwc in zwc_files:
+        src = zwc.with_name(zwc.name[:-4])
+        if zwc.is_file() and not src.is_file():
+            orphans.append(zwc)
+    return orphans
+
+
 def compile_zsh_sources(dotfiles: Path) -> int:
     """Compile stale repo Zsh scripts via `zcompile` and return how many were compiled."""
     if not shutil.which("zsh"):
@@ -123,14 +140,33 @@ def compile_zsh_sources(dotfiles: Path) -> int:
 
 
 def check_zsh_bytecode(report: DoctorReport, dotfiles: Path, fix: bool = False):
-    """Verify `.zwc` bytecode freshness for sourced Zsh scripts and recompile when `fix` is True."""
+    """Verify `.zwc` bytecode freshness and orphan absence, healing when `fix` is True."""
     stale = stale_zsh_bytecode(dotfiles)
-    if not stale:
+    orphans = orphaned_zsh_bytecode(dotfiles)
+    if not stale and not orphans:
         report.ok(LBL_ZSH_BYTECODE, "All sourced scripts compiled")
-    elif fix:
-        report.fixed(LBL_ZSH_BYTECODE, f"Compiled {compile_zsh_sources(dotfiles)} script(s)")
+        return
+
+    if fix:
+        compiled = compile_zsh_sources(dotfiles)
+        removed = 0
+        for zwc in orphans:
+            with contextlib.suppress(OSError):
+                zwc.unlink()
+                removed += 1
+        parts: list[str] = []
+        if compiled:
+            parts.append(f"Compiled {compiled} script(s)")
+        if removed:
+            parts.append(f"removed {removed} orphan .zwc")
+        report.fixed(LBL_ZSH_BYTECODE, ", ".join(parts) or "Healed .zwc bytecode")
     else:
-        report.warn(LBL_ZSH_BYTECODE, f"{len(stale)} script(s) stale. Run with --fix")
+        issues: list[str] = []
+        if stale:
+            issues.append(f"{len(stale)} stale")
+        if orphans:
+            issues.append(f"{len(orphans)} orphaned")
+        report.warn(LBL_ZSH_BYTECODE, f"{', '.join(issues)}. Run with --fix")
 
 
 def _audit_existing_symlink(
@@ -148,7 +184,7 @@ def _audit_existing_symlink(
         actual_target = None
 
     if not link.exists() or actual_target is None or not actual_target.exists():
-        raw_target = os.readlink(link)
+        raw_target = str(link.readlink())
         if fix:
             link.unlink()
             link.symlink_to(target_expected)
@@ -665,17 +701,8 @@ def check_wsl(report: DoctorReport, dotfiles: Path, fix: bool = False):
     _check_windows_terminal_theme(report, dotfiles, fix)
 
 
-def run_doctor(fix: bool = False) -> int:
-    """Run all workstation health checks and optionally auto-repair issues when `fix` is True."""
-    dotfiles = get_dotfiles_dir()
-    report = DoctorReport()
-
-    header_text = "Dotfiles Doctor \u2014 System & Environment Health Check"
-    if fix:
-        header_text += " [FIX]"
-
-    print_header(header_text)
-
+def _run_all_doctor_checks(report: DoctorReport, dotfiles: Path, fix: bool) -> None:
+    """Execute all doctor check suites in order."""
     check_repository(report, dotfiles)
     check_zsh_bytecode(report, dotfiles, fix=fix)
     check_and_heal_symlinks(report, dotfiles, fix=fix)
@@ -685,6 +712,33 @@ def run_doctor(fix: bool = False) -> int:
     check_ssh(report, dotfiles, fix=fix)
     if is_wsl():
         check_wsl(report, dotfiles, fix=fix)
+
+
+def run_doctor(fix: bool = False, json_output: bool = False) -> int:
+    """Run all workstation health checks and optionally auto-repair issues when `fix` is True."""
+    dotfiles = get_dotfiles_dir()
+    report = DoctorReport()
+
+    if json_output:
+        import io
+        with contextlib.redirect_stdout(io.StringIO()):
+            _run_all_doctor_checks(report, dotfiles, fix)
+        payload = {
+            "passed": report.passed,
+            "warnings": report.warnings,
+            "failed": report.failed,
+            "repaired": report.repaired,
+            "checks": report.entries,
+        }
+        print(json.dumps(payload, indent=2))
+        return 1 if report.failed > 0 else 0
+
+    header_text = "Dotfiles Doctor \u2014 System & Environment Health Check"
+    if fix:
+        header_text += " [FIX]"
+
+    print_header(header_text)
+    _run_all_doctor_checks(report, dotfiles, fix)
 
     print(f"\n{C_BOLD}Summary:{C_RESET} {C_GREEN}{report.passed} passed{C_RESET}", end="")
     if report.repaired > 0:
@@ -701,4 +755,5 @@ def run_doctor(fix: bool = False) -> int:
 
 if __name__ == "__main__":
     do_fix = "--fix" in sys.argv or "-f" in sys.argv
-    sys.exit(run_doctor(fix=do_fix))
+    do_json = "--json" in sys.argv or "-j" in sys.argv
+    sys.exit(run_doctor(fix=do_fix, json_output=do_json))

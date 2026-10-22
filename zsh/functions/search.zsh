@@ -324,6 +324,13 @@ cheath() {
 # Internal helper: resolve input file or stdin into a JSON file path (`json_file` / `tmp_json` in caller)
 _fjq_prepare_json() {
   local input_file="$1"
+  if [ -z "$input_file" ] && [ -t 0 ] && [ -t 1 ] && command -v fzf &>/dev/null; then
+    local -a fzf_mode_flags
+    _fzf_vim_mode "🧬 Pick Data File > " "  j/k: move │ /: search │ enter: inspect │ q: quit" "inspect"
+    input_file=$(find . -maxdepth 3 -type f \( -iname "*.json" -o -iname "*.yaml" -o -iname "*.yml" -o -iname "*.toml" \) -not -path '*/.git*' -not -path '*/node_modules*' 2>/dev/null | sed 's|^\./||' | sort | fzf --height=~50% "${fzf_mode_flags[@]}")
+    [ -z "$input_file" ] && return 1
+  fi
+
   if [ -n "$input_file" ]; then
     if [ ! -f "$input_file" ]; then
       printf "\033[31m✖ File not found: %s\033[0m\n" "$input_file" >&2
