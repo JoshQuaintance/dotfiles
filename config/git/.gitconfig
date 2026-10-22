@@ -10,6 +10,7 @@
     default = current
     autoSetupRemote = true
     followTags = true
+    useForceIfIncludes = true
 
 [branch]
     sort = -committerdate
@@ -24,12 +25,14 @@
     prune = true
     pruneTags = false
     writeCommitGraph = true
+    parallel = 0
 
 [merge]
     conflictstyle = zdiff3
 
 [diff]
     colorMoved = zebra
+    colorMovedWS = allow-indentation-change
     algorithm = histogram
     renames = true
     mnemonicPrefix = true
@@ -76,6 +79,7 @@
 
 [rebase]
     autoStash = true
+    autoSquash = true
     updateRefs = true
 
 [rerere]

@@ -147,6 +147,29 @@ def _run_post_update_hooks(auto_apply: bool, update_all: bool, test_after: bool,
         print(f"\n{C_CYAN}💡 Run 'sz' to reload your active shell session.{C_RESET}")
 
 
+def _preview_incoming_diff(dotfiles: Path, upstream: str, behind: int) -> int:
+    """Preview commit log and full diff for incoming changes without applying."""
+    if behind == 0:
+        print(f"{C_GREEN}✔ Dotfiles are already up to date with {C_BOLD}{upstream}{C_RESET}. No incoming changes.")
+        return 0
+    print(f"\n{C_BOLD}Incoming Commits from {upstream} ({behind} new):{C_RESET}")
+    subprocess.run(["git", "-C", str(dotfiles), "log", GIT_LOG_FMT, f"HEAD..{upstream}"], check=False)
+    print(f"\n{C_BOLD}File Changes Summary:{C_RESET}")
+    subprocess.run(["git", "-C", str(dotfiles), "diff", "--stat", f"HEAD..{upstream}"], check=False)
+    print(f"\n{C_BOLD}Detailed Patch Preview:{C_RESET}")
+    subprocess.run(["git", "-C", str(dotfiles), "diff", f"HEAD..{upstream}"], check=False)
+    return 0
+
+
+def _tools_update(auto_apply: bool, update_all: bool, test_after: bool) -> int:
+    """Run Homebrew and Mise updates with optional testing."""
+    update_brew(auto_apply=auto_apply or update_all)
+    update_mise()
+    if test_after or update_all:
+        run_tests()
+    return 0
+
+
 def run_update(
     check_only: bool = False,
     auto_apply: bool = False,
@@ -154,16 +177,13 @@ def run_update(
     tools_only: bool = False,
     test_after: bool = False,
     prune: bool = True,
+    show_diff: bool = False,
 ) -> int:
     """Fetch, apply, and reconcile dotfiles updates and optional Homebrew/Mise upgrades."""
     dotfiles = get_dotfiles_dir()
 
     if tools_only:
-        update_brew(auto_apply=auto_apply or update_all)
-        update_mise()
-        if test_after or update_all:
-            run_tests()
-        return 0
+        return _tools_update(auto_apply, update_all, test_after)
 
     print(f"{C_BLUE}==>{C_RESET} Checking for dotfiles updates in {C_BOLD}{dotfiles}{C_RESET}...")
 
@@ -175,6 +195,9 @@ def run_update(
     git_state = _inspect_git_state(dotfiles)
     _current_branch, upstream, behind, ahead, is_dirty = git_state
     updated_git = False
+
+    if show_diff:
+        return _preview_incoming_diff(dotfiles, upstream, behind)
 
     if behind == 0 and ahead == 0:
         _, head_short, _ = run_cmd(["git", "-C", str(dotfiles), "rev-parse", "--short", "HEAD"])

@@ -134,6 +134,11 @@ _pm_wrapper() {
 _pm_run_shortcut() {
   local pm="$1"
   shift
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "Usage: %sr [script-name]\n" "$pm"
+    printf "  Run %s package.json scripts with interactive modal-Vim FZF selector\n" "$pm"
+    return 0
+  fi
   if ! _find_package_json >/dev/null; then
     printf "\033[31m✖ Cannot find a package.json file.\033[0m\n" >&2
     return 1

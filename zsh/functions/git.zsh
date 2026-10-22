@@ -117,15 +117,22 @@ clone() {
     printf "\033[1;34m==>\033[0m Cloning \033[1m%s\033[0m into \033[1;36m%s\033[0m...\n" "$clone_url" "$target_dir"
     if git clone "${clone_extra_opts[@]}" "$clone_url" "$target_dir"; then
       command -v zoxide &>/dev/null && zoxide add "$target_dir" 2>/dev/null || true
+      rm -f "${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles/proj_repos.cache" 2>/dev/null
       cd "$target_dir"
     else
       return 1
     fi
   fi
+  rm -f "${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles/proj_repos.cache" 2>/dev/null
 }
 
 # Search git commit messages across all branches (gsearch)
 gsearch() {
+  if [[ -z "$1" || "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "Usage: gsearch <pattern>\n"
+    printf "  Search git commit messages across all branches\n"
+    return 0
+  fi
   git log --all --grep="$1" --oneline
 }
 
@@ -133,6 +140,11 @@ gsearch() {
 # Browses the commit graph interactively with live side-by-side diff previews.
 # Supports Enter (pager diff), Ctrl-V (Neovim Diffview), Ctrl-Y (copy hash), and Tab (range diff).
 gl() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "Usage: gl [git-log-options]\n"
+    printf "  Interactive git graph and commit browser with diff previews\n"
+    return 0
+  fi
   _require_git_repo || return 1
 
   # Fall back to standard git log if stdout is not a TTY or if flags starting with '-' are passed
@@ -291,8 +303,6 @@ gco() {
 # When run without arguments: opens modal-Vim FZF stash browser with live diff preview
 # Keys: enter = apply, p = pop, x = drop (multi-select supported for drop)
 gstash() {
-  _require_git_repo || return 1
-
   if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     printf "\033[1;38;2;203;166;247mgstash\033[0m (alias: \033[1mgstl\033[0m) — Interactive modal-Vim Git stash browser\n\n"
     printf "\033[1mUsage:\033[0m\n"
@@ -300,6 +310,8 @@ gstash() {
     printf "  gstash <args...>   Pass arguments directly to 'git stash <args...>'\n"
     return 0
   fi
+
+  _require_git_repo || return 1
 
   if [ $# -gt 0 ]; then
     git stash "$@"
@@ -605,6 +617,11 @@ gfile() {
 # Git Local Merged Branch Cleaner (gbclean)
 # Safely deletes local branches that are already merged into develop or main
 gbclean() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "Usage: gbclean\n"
+    printf "  Safely deletes local branches that are already merged into develop or main\n"
+    return 0
+  fi
   _require_git_repo || return 1
 
   local base
@@ -680,7 +697,7 @@ gbclean() {
   for b in "${selected_branches[@]}"; do
     if git branch -d "$b" 2>/dev/null; then
       printf "  \033[32m✔\033[0m Deleted %s\n" "$b"
-      ((count++))
+      (( ++count ))
     else
       printf "  \033[31m✖\033[0m Could not delete %s\n" "$b"
     fi

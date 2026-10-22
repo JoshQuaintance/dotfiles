@@ -59,6 +59,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser_bench.add_argument("-p", "--prompt", action="store_true", help="Also benchmark shell prompt rendering (Native vs Spaceship)")
     parser_bench.add_argument("-t", "--tools", action="store_true", help="Also benchmark modern CLI tools (rg, fd, eza)")
     parser_bench.add_argument("-a", "--all", action="store_true", help="Run full benchmark suite (startup + tools + prompt)")
+    parser_bench.add_argument("-s", "--save", action="store_true", help="Save benchmark results as performance baseline")
+    parser_bench.add_argument("-c", "--compare", action="store_true", help="Compare startup latency against saved baseline")
     parser_bench.add_argument("-j", "--json", action="store_true", help="Output startup benchmark results as JSON")
 
     # 2. Synchronization, Updates & Symlinks (sync, update, link, prompt)
@@ -75,6 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Check and apply dotfiles, Homebrew, and Mise updates",
     )
     parser_update.add_argument("-c", "--check", action="store_true", help="Check for updates without applying")
+    parser_update.add_argument("-d", "--diff", action="store_true", help="Preview incoming diff without applying updates")
     parser_update.add_argument("-y", "--yes", action="store_true", help="Automatically apply updates without prompting")
     parser_update.add_argument("-a", "--all", action="store_true", help="Full workstation upgrade: git + Homebrew + Mise + test")
     parser_update.add_argument("-t", "--tools", action="store_true", help="Update Homebrew and Mise tools only")
@@ -95,6 +98,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser_prompt.add_argument("engine", nargs="?", help="Prompt engine to set ('native', 'spaceship')")
 
     # 3. Hygiene, Pruning & Local State Backups (clean, prune, backup, restore)
+    _add_maintenance_subparsers(subparsers)
+
+    return parser
+
+
+def _add_maintenance_subparsers(subparsers: argparse._SubParsersAction) -> None:
+    """Register hygiene, pruning, and snapshot backup/restore subcommands."""
     parser_clean = subparsers.add_parser(
         "clean",
         help="Clean stale Zsh dumps, completion caches, oversized logs, and temp files",
@@ -126,8 +136,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser_restore.add_argument("archive", nargs="?", help="Backup archive path (default: most recent archive)")
     parser_restore.add_argument("-n", "--dry-run", action="store_true", help="Preview files that would be restored without extracting")
 
-    return parser
-
 
 def _dispatch_command(args: argparse.Namespace) -> int:
     """Dispatch parsed CLI arguments to the corresponding subcommand runner."""
@@ -146,6 +154,8 @@ def _dispatch_command(args: argparse.Namespace) -> int:
             test_tools=a.tools,
             test_all=a.all,
             json_output=getattr(a, "json", False),
+            save_baseline=getattr(a, "save", False),
+            compare_baseline=getattr(a, "compare", False),
         ),
         "sync": lambda a: run_sync(
             message=a.message,
@@ -161,6 +171,7 @@ def _dispatch_command(args: argparse.Namespace) -> int:
             tools_only=a.tools,
             test_after=a.test,
             prune=not a.no_prune,
+            show_diff=getattr(a, "diff", False),
         ),
         "backup": lambda a: run_backup(output_path=a.output, dry_run=a.dry_run, list_only=a.list),
         "restore": lambda a: run_restore(archive_path=a.archive, dry_run=a.dry_run),

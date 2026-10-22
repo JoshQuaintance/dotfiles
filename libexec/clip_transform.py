@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import base64
+import html
 import json
 import sys
 import urllib.parse
@@ -42,6 +43,14 @@ def _transform_b64d(text: str) -> str:
     return base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8", errors="replace")
 
 
+def _transform_hexd(text: str) -> str:
+    """Decode hex string into UTF-8 text."""
+    raw = "".join(text.split())
+    if raw.startswith(("0x", "0X")):
+        raw = raw[2:]
+    return bytes.fromhex(raw).decode("utf-8", errors="replace")
+
+
 def main() -> int:
     """Entry point for clip_transform Python executable."""
     op = sys.argv[1] if len(sys.argv) > 1 else ""
@@ -65,6 +74,11 @@ def main() -> int:
         "urldecode": lambda s: urllib.parse.unquote_plus(s.strip()),
         "b64e": lambda s: base64.b64encode(s.encode("utf-8")).decode("ascii"),
         "b64d": _transform_b64d,
+        "b64u": lambda s: base64.urlsafe_b64encode(s.encode("utf-8")).decode("ascii").rstrip("="),
+        "hexe": lambda s: s.encode("utf-8").hex(),
+        "hexd": _transform_hexd,
+        "htmle": html.escape,
+        "htmld": html.unescape,
     }
     handler = dispatch.get(op)
     if handler is not None:

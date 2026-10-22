@@ -60,6 +60,10 @@ _port_direct_target() {
   fi
 }
 
+# Interactive Port Inspector & Killer (port)
+# Usage:
+#   port             -> Browse all listening TCP ports in modal-Vim FZF
+#   port <number>    -> Inspect specific port
 #   port -k <number> -> Kill process listening on <number>
 #   Keys: enter = SIGTERM (-15), x = SIGKILL (-9), o = open localhost URL, y = copy port, u = copy URL
 port() {

@@ -539,6 +539,26 @@ def _check_ssh_agent_and_keys(report: DoctorReport) -> None:
         report.warn("SSH key pair", "No key in ~/.ssh (run 'ssh-keygen -t ed25519')")
 
 
+def _check_sensitive_permissions(report: DoctorReport, path: Path, expected_mode: int, label: str, fix: bool) -> None:
+    """Audit permissions on sensitive credential/config paths and chmod on fix."""
+    if not path.exists():
+        return
+    try:
+        curr_mode = path.stat().st_mode & 0o777
+    except OSError:
+        return
+    if curr_mode == expected_mode:
+        report.ok(label, f"Permissions {oct(curr_mode)} (secure)")
+    elif fix:
+        try:
+            path.chmod(expected_mode)
+            report.fixed(label, f"Chmod {oct(curr_mode)} -> {oct(expected_mode)}")
+        except OSError as exc:
+            report.warn(label, f"Could not chmod to {oct(expected_mode)}: {exc}")
+    else:
+        report.warn(label, f"Permissive {oct(curr_mode)} (expected {oct(expected_mode)}). Run with --fix")
+
+
 def check_ssh(report: DoctorReport, dotfiles: Path, fix: bool = False):
     """Audit `~/.ssh/config` shared defaults include, multiplexing sockets, and agent status."""
     print(f"\n{C_BOLD}6. SSH Agent & Defaults{C_RESET}")
@@ -546,8 +566,16 @@ def check_ssh(report: DoctorReport, dotfiles: Path, fix: bool = False):
         report.warn("SSH", "ssh binary not installed")
         return
 
-    ssh_config = Path.home() / ".ssh" / "config"
-    ssh_sockets = Path.home() / ".ssh" / "sockets"
+    ssh_dir = Path.home() / ".ssh"
+    ssh_config = ssh_dir / "config"
+    ssh_sockets = ssh_dir / "sockets"
+    _check_sensitive_permissions(report, ssh_dir, 0o700, "~/.ssh directory permissions", fix)
+    _check_sensitive_permissions(report, ssh_config, 0o600, "~/.ssh/config permissions", fix)
+    if ssh_dir.is_dir():
+        for k in sorted(ssh_dir.glob("id_*")):
+            if not k.name.endswith(".pub") and k.is_file():
+                _check_sensitive_permissions(report, k, 0o600, f"~/.ssh/{k.name} private key", fix)
+
     include = f"Include {dotfiles / 'config' / 'ssh' / 'dotfiles.conf'}"
     try:
         current = ssh_config.read_text()
@@ -582,6 +610,7 @@ GPG_CACHE_TTL = {"default-cache-ttl": 28800, "max-cache-ttl": 86400}
 def check_gpg_cache(report: DoctorReport, fix: bool = False):
     """Audit or extend `gpg-agent.conf` passphrase cache TTLs for non-TTY commit signing."""
     home = Path(os.environ.get("GNUPGHOME", Path.home() / ".gnupg"))
+    _check_sensitive_permissions(report, home, 0o700, "~/.gnupg directory permissions", fix)
     conf = home / "gpg-agent.conf"
     try:
         lines = conf.read_text().splitlines()
@@ -606,13 +635,14 @@ def check_gpg_cache(report: DoctorReport, fix: bool = False):
         report.warn(LBL_GPG_CACHE, f"Only {ttl // 60} min; signing outside a terminal fails. Run with --fix")
 
 
-def _check_git_identity_config(report: DoctorReport) -> None:
+def _check_git_identity_config(report: DoctorReport, fix: bool = False) -> None:
     """Audit `~/.gitconfig.local`, `user.name`, and `user.email`."""
     local_gitconfig = Path.home() / ".gitconfig.local"
     _, name, _ = run_cmd(["git", "config", "--get", "user.name"])
     _, email, _ = run_cmd(["git", "config", "--get", "user.email"])
     if local_gitconfig.is_file():
         report.ok("~/.gitconfig.local", "Local Git credentials override active")
+        _check_sensitive_permissions(report, local_gitconfig, 0o600, "~/.gitconfig.local permissions", fix)
     elif name and email:
         report.ok("~/.gitconfig.local", "Optional (identity set in global config)")
     else:
@@ -636,7 +666,7 @@ def check_git_signing(report: DoctorReport, fix: bool = False):
         report.warn("Git config", "git binary not installed")
         return
 
-    _check_git_identity_config(report)
+    _check_git_identity_config(report, fix=fix)
 
     _, sign, _ = run_cmd(["git", "config", "--get", "commit.gpgsign"])
     _, format_type, _ = run_cmd(["git", "config", "--get", "gpg.format"])

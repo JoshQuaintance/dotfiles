@@ -4,7 +4,17 @@
 # Core system helpers (`y`, `open`, `dotenv`, `fsize`, `fknown`, `termtest`, `netinfo`, `checksum`).
 
 # Yazi Shell Wrapper (changes directory on exit)
+# Usage:
+#   y                  -> Launch Yazi in current directory
+#   y <path>           -> Launch Yazi in specified path
 y() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "\033[1;38;2;137;180;250my\033[0m — Yazi terminal file manager wrapper with shell cd-on-exit\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  y              Open current directory in Yazi\n"
+    printf "  y <path>       Open path in Yazi\n"
+    return 0
+  fi
   local tmp
   tmp="$(mktemp -t "yazi-cwd.XXXXXX")"
   local cwd
@@ -47,13 +57,14 @@ if [[ "$OSTYPE" != darwin* ]]; then
   }
 fi
 
+typeset -gUa _DOTENV_LOADED_KEYS=()
+
 # Safe .env File Loader & Unloader (dotenv)
 # Parses .env files in pure Zsh without eval (immune to command substitution injection)
 # Usage:
 #   dotenv [file...]     -> Load .env (or specified files) into current shell session
 #   dotenv -u|--unload   -> Unset all variables loaded by dotenv in this session
 #   dotenv -l|--list     -> List keys currently loaded by dotenv
-typeset -gUa _DOTENV_LOADED_KEYS=()
 dotenv() {
   # Delegate `dotenv run ...` to external dotenv CLI when present
   if [[ "$1" == "run" ]] && whence -p dotenv &>/dev/null; then
@@ -110,6 +121,16 @@ dotenv() {
     if [[ ! -f "$f" ]]; then
       printf "\033[31m✖ Env file not found: %s\033[0m\n" "$f" >&2
       return 1
+    fi
+    if git rev-parse --is-inside-work-tree &>/dev/null; then
+      case "${f:t}" in
+        *.example|*.sample|*template*|*.dist) ;;
+        *)
+          if ! git check-ignore -q "$f" 2>/dev/null; then
+            printf "\033[33m⚠ Warning: %s is not gitignored in this repository!\033[0m\n" "$f" >&2
+          fi
+          ;;
+      esac
     fi
     while IFS= read -r line || [[ -n "$line" ]]; do
       line="${line%$'\r'}"

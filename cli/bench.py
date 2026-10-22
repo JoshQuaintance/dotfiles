@@ -160,12 +160,124 @@ def _render_boot_results(
         print(f"  {name:<42} {bar} {C_BLUE}{avg_ms:5.1f}ms{C_RESET} {C_DIM}({pct:4.1f}%){C_RESET}")
 
 
+def _handle_json_output(
+    dotfiles: Path,
+    iterations: int,
+    cache_dir: Path,
+    baseline_path: Path,
+    save_baseline: bool,
+    compare_baseline: bool,
+) -> int:
+    with contextlib.redirect_stdout(io.StringIO()):
+        run_totals, step_order, step_samples = _measure_boot_runs(dotfiles, iterations)
+    median_ms = round(statistics.median(run_totals), 2)
+    payload: dict = {
+        "iterations": iterations,
+        "median_ms": median_ms,
+        "min_ms": round(min(run_totals), 2),
+        "mean_ms": round(statistics.mean(run_totals), 2),
+        "max_ms": round(max(run_totals), 2),
+        "runs_ms": [round(r, 2) for r in run_totals],
+        "phases_ms": {name: round(statistics.mean(step_samples[name]), 2) for name in step_order},
+    }
+
+    if save_baseline:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        baseline_path.write_text(json.dumps(payload, indent=2))
+
+    regression = False
+    if compare_baseline and baseline_path.exists():
+        try:
+            base_data = json.loads(baseline_path.read_text())
+            base_median = float(base_data.get("median_ms", 0.0))
+            diff_ms = round(median_ms - base_median, 2)
+            diff_pct = round(((median_ms - base_median) / base_median * 100.0), 1) if base_median > 0 else 0.0
+            regression = diff_pct > 15.0
+            payload["comparison"] = {
+                "baseline_ms": base_median,
+                "diff_ms": diff_ms,
+                "diff_pct": diff_pct,
+                "regression": regression,
+            }
+        except (ValueError, KeyError):
+            pass
+
+    print(json.dumps(payload, indent=2))
+    return 1 if regression else 0
+
+
+def _handle_cli_baseline(
+    cache_dir: Path,
+    baseline_path: Path,
+    run_totals: list[float],
+    step_info: tuple[list[str], dict[str, list[float]]],
+    iterations: int,
+    save_baseline: bool,
+    compare_baseline: bool,
+) -> bool:
+    """Save baseline or compare current run against saved baseline. Returns True if regression."""
+    step_order, step_samples = step_info
+    median_ms = statistics.median(run_totals)
+    if save_baseline:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        baseline_payload = {
+            "timestamp": time.time(),
+            "iterations": iterations,
+            "median_ms": round(median_ms, 2),
+            "mean_ms": round(statistics.mean(run_totals), 2),
+            "min_ms": round(min(run_totals), 2),
+            "max_ms": round(max(run_totals), 2),
+            "phases_ms": {name: round(statistics.mean(step_samples[name]), 2) for name in step_order},
+        }
+        baseline_path.write_text(json.dumps(baseline_payload, indent=2))
+        print(f"\n{C_GREEN}✔ Saved benchmark baseline ({median_ms:.1f}ms) to {baseline_path}{C_RESET}")
+
+    if not compare_baseline:
+        return False
+
+    print(f"\n{C_BOLD}5. Baseline Comparison{C_RESET}")
+    if not baseline_path.exists():
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        init_payload = {
+            "timestamp": time.time(),
+            "iterations": iterations,
+            "median_ms": round(median_ms, 2),
+            "mean_ms": round(statistics.mean(run_totals), 2),
+            "phases_ms": {name: round(statistics.mean(step_samples[name]), 2) for name in step_order},
+        }
+        baseline_path.write_text(json.dumps(init_payload, indent=2))
+        print(f"  {C_YELLOW}⚠ No baseline found. Saved current run as baseline at {baseline_path}.{C_RESET}")
+        return False
+
+    try:
+        base_data = json.loads(baseline_path.read_text())
+        base_median = float(base_data.get("median_ms", 0.0))
+        diff_ms = round(median_ms - base_median, 2)
+        diff_pct = round(((median_ms - base_median) / base_median * 100.0), 1) if base_median > 0 else 0.0
+        regression = diff_pct > 15.0
+
+        if regression:
+            status_lbl = f"{C_RED}✖ REGRESSION (+{diff_pct:.1f}% > 15% threshold){C_RESET}"
+        elif diff_pct < -5.0:
+            status_lbl = f"{C_GREEN}✔ FASTER ({diff_pct:+.1f}%){C_RESET}"
+        else:
+            status_lbl = f"{C_GREEN}✔ COMPARABLE ({diff_pct:+.1f}%){C_RESET}"
+
+        print(f"  Baseline: {C_CYAN}{base_median:.1f}ms{C_RESET} │ Current: {C_CYAN}{median_ms:.1f}ms{C_RESET} │ Diff: {diff_ms:+.1f}ms │ {status_lbl}")
+        return regression
+    except (ValueError, KeyError) as exc:
+        print(f"  {C_RED}✖ Could not read baseline file: {exc}{C_RESET}")
+        return False
+
+
 def run_bench(
     iterations: int = 5,
     test_prompt: bool = False,
     test_tools: bool = False,
     test_all: bool = False,
     json_output: bool = False,
+    save_baseline: bool = False,
+    compare_baseline: bool = False,
 ) -> int:
     """Run the interactive Zsh startup benchmark and optional tool/prompt suites."""
     dotfiles = get_dotfiles_dir()
@@ -178,20 +290,13 @@ def run_bench(
         return 1
 
     iterations = max(1, min(iterations, 25))
+    cache_dir = Path(os.environ.get("XDG_CACHE_HOME") or (Path.home() / ".cache")) / "dotfiles"
+    baseline_path = cache_dir / "bench_baseline.json"
+
     if json_output:
-        with contextlib.redirect_stdout(io.StringIO()):
-            run_totals, step_order, step_samples = _measure_boot_runs(dotfiles, iterations)
-        payload = {
-            "iterations": iterations,
-            "median_ms": round(statistics.median(run_totals), 2),
-            "min_ms": round(min(run_totals), 2),
-            "mean_ms": round(statistics.mean(run_totals), 2),
-            "max_ms": round(max(run_totals), 2),
-            "runs_ms": [round(r, 2) for r in run_totals],
-            "phases_ms": {name: round(statistics.mean(step_samples[name]), 2) for name in step_order},
-        }
-        print(json.dumps(payload, indent=2))
-        return 0
+        return _handle_json_output(
+            dotfiles, iterations, cache_dir, baseline_path, save_baseline, compare_baseline
+        )
 
     print_header("Dotfiles Unified Benchmark Suite — Profiler & Diagnostics")
 
@@ -205,5 +310,9 @@ def run_bench(
         from cli.prompt import print_prompt_summary
         print_prompt_summary(interactive=False)
 
+    regression = _handle_cli_baseline(
+        cache_dir, baseline_path, run_totals, (step_order, step_samples), iterations, save_baseline, compare_baseline
+    )
+
     print()
-    return 0
+    return 1 if regression else 0

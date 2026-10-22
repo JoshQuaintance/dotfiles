@@ -35,6 +35,11 @@ take() {
 
 # Jump to the root directory of the current git repository (groot)
 groot() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "Usage: groot\n"
+    printf "  Jump to the root directory of the current git repository\n"
+    return 0
+  fi
   _require_git_repo || return 1
   local root
   root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
@@ -43,6 +48,11 @@ groot() {
 
 # Jump from any worktree or subdirectory to the primary repository root
 gmain() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "Usage: gmain\n"
+    printf "  Jump from any worktree or subdirectory to the primary repository root\n"
+    return 0
+  fi
   _require_git_repo || return 1
   local main_root
   main_root="$(_git_main_root)"
@@ -335,6 +345,19 @@ APPLESCRIPT
 # so worktrees and multi-repo layouts sharing branch names like `develop` are always unambiguous.
 # Output format: <relative_name>\t<branch>\t<path>
 _proj_list_repos() {
+  local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles"
+  local cache_file="$cache_dir/proj_repos.cache"
+  if [[ "$1" != "-f" && "$1" != "--force" && -f "$cache_file" ]]; then
+    local mtime=0 now
+    now=$(date +%s 2>/dev/null || echo 0)
+    zmodload -F zsh/stat b:zstat 2>/dev/null
+    mtime=$(zstat -L +mtime "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || stat -c %Y "$cache_file" 2>/dev/null || echo 0)
+    if (( now - mtime < 60 && mtime > 0 )); then
+      cat "$cache_file"
+      return 0
+    fi
+  fi
+
   local dot_dir="${DOTFILES_DIR:-$HOME/.dotfiles}"
   local -a search_dirs=()
   if [[ -n "$DOTFILES_PROJECTS_DIR" ]]; then
@@ -349,6 +372,7 @@ _proj_list_repos() {
   local -A seen_paths=()
   local sdir entry repo rel_name branch
   local -a sdir_entries=()
+  local -a out_lines=()
 
   for sdir in "${search_dirs[@]}"; do
     [[ -d "$sdir" ]] || continue
@@ -368,15 +392,47 @@ _proj_list_repos() {
       rel_name="${repo#${sdir}/}"
       [[ -z "$rel_name" || "$rel_name" == "$repo" ]] && rel_name="${repo:t}"
       branch="$(_proj_repo_branch "$repo")"
-      printf "%s\t%s\t%s\n" "$rel_name" "$branch" "$repo"
+      out_lines+=("${rel_name}"$'\t'"${branch}"$'\t'"${repo}")
     done
   done
 
   if [[ -e "$dot_dir/.git" ]] && (( ! ${+seen_paths[$dot_dir]} )); then
     seen_paths[$dot_dir]=1
     branch="$(_proj_repo_branch "$dot_dir")"
-    printf "%s\t%s\t%s\n" "${dot_dir:t}" "$branch" "$dot_dir"
+    out_lines+=("${dot_dir:t}"$'\t'"${branch}"$'\t'"${dot_dir}")
   fi
+
+  mkdir -p "$cache_dir" 2>/dev/null
+  if (( ${#out_lines[@]} > 0 )); then
+    printf "%s\n" "${out_lines[@]}" | tee "$cache_file" 2>/dev/null
+  fi
+}
+
+# Sort discovered projects: boost zoxide frecent repos to top when available, then alphabetical
+_proj_rank_repos() {
+  local -a in_rows=(${(f)"$(cat)"})
+  [[ ${#in_rows[@]} -eq 0 ]] && return 0
+  if ! command -v zoxide &>/dev/null; then
+    printf "%s\n" "${in_rows[@]}" | sort -f -k1,1
+    return 0
+  fi
+
+  local -A z_ranks=()
+  local rk=0 zpath
+  while IFS= read -r zpath; do
+    [[ -n "$zpath" ]] || continue
+    (( ++rk ))
+    [[ -z "${z_ranks[$zpath]:-}" ]] && z_ranks[$zpath]=$rk
+  done < <(zoxide query -l 2>/dev/null)
+
+  local line pth rank
+  local -a ranked=()
+  for line in "${in_rows[@]}"; do
+    pth="${line##*$'\t'}"
+    rank="${z_ranks[$pth]:-999999}"
+    ranked+=("${(l:6::0:)rank}"$'\t'"${line}")
+  done
+  printf "%s\n" "${ranked[@]}" | sort -k1,1n -k2,2f | cut -f2-
 }
 
 # Format tab-separated project rows (<rel>\t<branch>\t<full>) for FZF display.
@@ -431,6 +487,7 @@ proj() {
     printf "  proj / fp          Browse all Git repositories in ~/Codes & ~/.dotfiles\n"
     printf "  proj <name>        Jump directly to <name> (or filter in FZF if multiple match)\n"
     printf "  proj -l, --list    Print tab-separated table of discovered projects\n"
+    printf "  proj -r, --refresh Force re-scan and refresh cached project list\n"
     printf "  Enter              cd into selected repository\n"
     printf "  e                  Open repository in \$EDITOR (nvim)\n"
     printf "  l                  Open lazygit in selected repository\n"
@@ -439,14 +496,21 @@ proj() {
     return 0
   fi
 
-  local list_only=false
-  if [[ "$1" == "-l" || "$1" == "--list" ]]; then
-    list_only=true
-    shift
-  fi
+  local list_only=false force_refresh=false
+  while [[ "$1" == -* ]]; do
+    case "$1" in
+      -l|--list) list_only=true; shift ;;
+      -r|--refresh) force_refresh=true; shift ;;
+      *) break ;;
+    esac
+  done
 
   local rows
-  rows="$(_proj_list_repos | sort -f -k1,1)"
+  if [[ "$force_refresh" == true ]]; then
+    rows="$(_proj_list_repos -f | _proj_rank_repos)"
+  else
+    rows="$(_proj_list_repos | _proj_rank_repos)"
+  fi
   if [[ -z "$rows" ]]; then
     printf "\033[33mNo Git repositories found in %s.\033[0m\n" "${DOTFILES_PROJECTS_DIR:-$HOME/Codes}" >&2
     return 1
@@ -501,8 +565,7 @@ proj() {
     --height=~55% \
     "${fzf_mode_flags[@]}" \
     --color="header:italic:dim,prompt:bold:blue,pointer:bold:green" \
-    --preview='p={4}; git -C "$p" status -sb 2>/dev/null; echo ""; git -C "$p" log --oneline --graph --decorate --color=always -n 8 2>/dev/null; echo ""; if command -v eza &>/dev/null; then eza --tree --level=2 --icons --color=always "$p" 2>/dev/null; else ls -la "$p" 2>/dev/null; fi' \
-    --preview-window='right:55%:wrap')
+    --preview='p={4}; git -C "$p" status -sb 2>/dev/null; echo ""; git -C "$p" log --oneline --graph --decorate --color=always -n 8 2>/dev/null; echo ""; if command -v eza &>/dev/null; then eza --tree --level=2 --icons --color=always "$p" 2>/dev/null; else ls -la "$p" 2>/dev/null; fi')
 
   local key="" selected_lines=""
   _fzf_split_expect "$selection" || return 0

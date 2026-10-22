@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Description: Run related unit tests for JS/TS files changed vs base branch or working tree
+set -e
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  echo "Usage: testdiff [-w|--worktree] [base_branch]"
+  echo "  testdiff               Run tests for JS/TS files changed vs base branch (develop/main/master)"
+  echo "  testdiff origin/main   Run tests for JS/TS files changed vs origin/main"
+  echo "  testdiff -w            Run tests for uncommitted JS/TS files in working tree"
+  exit 0
+fi
+
+if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+  echo "Error: Not inside a git repository" >&2
+  exit 1
+fi
+
+WORKTREE_MODE=false
+if [ "${1:-}" = "-w" ] || [ "${1:-}" = "--worktree" ]; then
+  WORKTREE_MODE=true
+  shift
+fi
+
+detect_base_branch() {
+  local candidate
+  for candidate in origin/develop origin/main origin/master develop main master; do
+    if git rev-parse --verify --quiet "$candidate" >/dev/null 2>&1; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  echo "HEAD~1"
+}
+
+changed_files=()
+if [ "$WORKTREE_MODE" = true ]; then
+  TARGET_LABEL="working tree"
+  while IFS= read -r file; do
+    [ -n "$file" ] && [ -f "$file" ] && changed_files+=("$file")
+  done < <({
+    git diff --name-only --diff-filter=d HEAD 2>/dev/null
+    git ls-files --others --exclude-standard 2>/dev/null
+  } | sort -u | grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$' || true)
+else
+  BASE_BRANCH="${1:-$(detect_base_branch)}"
+  TARGET_LABEL="$BASE_BRANCH"
+  while IFS= read -r file; do
+    [ -n "$file" ] && [ -f "$file" ] && changed_files+=("$file")
+  done < <(git diff "$BASE_BRANCH"...HEAD --name-only --diff-filter=d 2>/dev/null | grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$' || true)
+fi
+
+if [ "${#changed_files[@]}" -eq 0 ]; then
+  echo "✔ No JS/TS files changed vs $TARGET_LABEL"
+  exit 0
+fi
+
+echo "Testing changes for ${#changed_files[@]} file(s) vs $TARGET_LABEL:"
+printf '  %s\n' "${changed_files[@]}"
+echo ""
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+# Auto-detect test runner: vitest, jest, or angular ng test
+if [ -f "$REPO_ROOT/node_modules/.bin/vitest" ] || [ -f "$REPO_ROOT/vitest.config.ts" ] || [ -f "$REPO_ROOT/vitest.config.js" ]; then
+  echo "==> Running with Vitest..."
+  if [ -x "$REPO_ROOT/node_modules/.bin/vitest" ]; then
+    "$REPO_ROOT/node_modules/.bin/vitest" related --run "${changed_files[@]}"
+  else
+    npx vitest related --run "${changed_files[@]}"
+  fi
+elif [ -f "$REPO_ROOT/node_modules/.bin/jest" ] || [ -f "$REPO_ROOT/jest.config.js" ] || [ -f "$REPO_ROOT/jest.config.ts" ]; then
+  echo "==> Running with Jest..."
+  if [ -x "$REPO_ROOT/node_modules/.bin/jest" ]; then
+    "$REPO_ROOT/node_modules/.bin/jest" --findRelatedTests "${changed_files[@]}"
+  else
+    npx jest --findRelatedTests "${changed_files[@]}"
+  fi
+elif [ -f "$REPO_ROOT/angular.json" ]; then
+  echo "==> Running with Angular ng test..."
+  npx ng test --watch=false --include="${changed_files[*]}"
+else
+  echo "==> Attempting npm test..."
+  npm test -- "${changed_files[@]}"
+fi

@@ -91,6 +91,22 @@ def run_status(json_output: bool = False) -> int:
     _, porcelain, _ = run_cmd(["git", "-C", str(dotfiles), "status", "--porcelain"])
     dirty_count = len(porcelain.splitlines()) if porcelain else 0
 
+    code, tracking_counts, _ = run_cmd(["git", "-C", str(dotfiles), "rev-list", "--left-right", "--count", "HEAD...@{u}"])
+    ahead = 0
+    behind = 0
+    if code == 0 and tracking_counts:
+        parts = tracking_counts.split()
+        if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+            ahead = int(parts[0])
+            behind = int(parts[1])
+
+    sync_tags = []
+    if ahead > 0:
+        sync_tags.append(f"↑{ahead}")
+    if behind > 0:
+        sync_tags.append(f"↓{behind}")
+    sync_str = f" {C_YELLOW}{''.join(sync_tags)}{C_RESET}" if sync_tags else ""
+
     # 2. Symlink & Runtime Versions
     linked_ok, total_links = _count_symlinks(dotfiles)
     zsh_ver = _short_version("zsh", ["--version"]).replace("zsh ", "").split(" ")[0]
@@ -106,6 +122,7 @@ def run_status(json_output: bool = False) -> int:
             "branch": branch,
             "commit": commit,
             "dirty_count": dirty_count,
+            "upstream": {"ahead": ahead, "behind": behind},
             "prompt": active_prompt,
             "symlinks": {"healthy": linked_ok, "total": total_links},
             "runtimes": {"zsh": zsh_ver, "nvim": nvim_ver, "node": node_ver, "uv": uv_ver},
@@ -124,7 +141,7 @@ def run_status(json_output: bool = False) -> int:
 
     print(f"\n{C_BOLD}Environment{C_RESET}")
     print(f"  {C_MAUVE}OS & Shell:{C_RESET}   {os_label} {sep} zsh {zsh_ver} ({C_CYAN}{active_prompt}{C_RESET}) {sep} nvim {nvim_ver}")
-    print(f"  {C_MAUVE}Repository:{C_RESET}   {C_BOLD}{branch}{C_RESET} ({C_CYAN}{commit}{C_RESET}) {sep} {tree_str}")
+    print(f"  {C_MAUVE}Repository:{C_RESET}   {C_BOLD}{branch}{C_RESET} ({C_CYAN}{commit}{C_RESET}{sync_str}) {sep} {tree_str}")
     print(f"  {C_MAUVE}Symlinks:{C_RESET}     {link_str}")
     print(f"  {C_MAUVE}Runtimes:{C_RESET}     node {C_GREEN}{node_ver}{C_RESET} {sep} uv {C_GREEN}{uv_ver}{C_RESET}")
 

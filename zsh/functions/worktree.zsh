@@ -17,6 +17,11 @@ _confirm_dirty_worktree() {
 # Git Worktree Interactive Switcher (wt)
 # Dynamically queries git worktrees in the current repo and provides an interactive fzf selector
 wt() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "Usage: wt [query]\n"
+    printf "  Interactive git worktree switcher and manager\n"
+    return 0
+  fi
   _require_git_repo || return 1
 
   local worktrees
@@ -411,6 +416,7 @@ gwtnew() {
     printf "\033[1;34m==>\033[0m Creating worktree \033[1m%s\033[0m tracking branch \033[1;36m%s\033[0m...\n" "$target_folder" "$target_branch"
     if git worktree add "$target_wt_path" "$target_branch"; then
       _copy_worktree_env "$src_wt" "$target_wt_path" "$main_root" "$base_branch" "$auto_env" || true
+      rm -f "${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles/proj_repos.cache" 2>/dev/null
       printf "\033[32m✔ Worktree created successfully!\033[0m\n"
       command -v zoxide &>/dev/null && zoxide add "$target_wt_path" 2>/dev/null || true; cd "$target_wt_path" || return 1
       return 0
@@ -432,6 +438,7 @@ gwtnew() {
       *)
         if git worktree add -b "$target_branch" "$target_wt_path" "$base_branch"; then
           _copy_worktree_env "$src_wt" "$target_wt_path" "$main_root" "$base_branch" "$auto_env" || true
+          rm -f "${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles/proj_repos.cache" 2>/dev/null
           printf "\033[32m✔ Worktree created successfully with new branch '%s'!\033[0m\n" "$target_branch"
           command -v zoxide &>/dev/null && zoxide add "$target_wt_path" 2>/dev/null || true; cd "$target_wt_path" || return 1
           return 0
@@ -559,11 +566,15 @@ gwts() {
     printf "[\n"
     local idx=0 row r_act r_name r_br r_sp r_sc r_st r_path r_fullbr r_ah r_bh comma
     for row in "${gwts_rows[@]}"; do
-      (( idx++ ))
+      (( ++idx ))
       IFS="|" read -r r_act r_name r_br r_sp r_sc r_st r_path r_fullbr r_ah r_bh <<< "$row"
       comma=$( (( idx < ${#gwts_rows[@]} )) && echo "," || echo "" )
+      local safe_name="${${r_name//\\/\\\\}//\"/\\\"}"
+      local safe_branch="${${r_fullbr//\\/\\\\}//\"/\\\"}"
+      local safe_path="${${r_path//\\/\\\\}//\"/\\\"}"
+      local safe_sync="${${r_sp//\\/\\\\}//\"/\\\"}"
       printf '  {"name":"%s","branch":"%s","path":"%s","active":%s,"sync":"%s","ahead":%d,"behind":%d}%s\n' \
-        "$r_name" "$r_fullbr" "$r_path" "$( [[ "$r_act" == "1" ]] && echo true || echo false )" "$r_sp" "${r_ah:-0}" "${r_bh:-0}" "$comma"
+        "$safe_name" "$safe_branch" "$safe_path" "$( [[ "$r_act" == "1" ]] && echo true || echo false )" "$safe_sync" "${r_ah:-0}" "${r_bh:-0}" "$comma"
     done
     printf "]\n"
     return 0
@@ -679,6 +690,11 @@ _gwt_format_fzf_rows() {
 # Git Worktree Delete (gwtdel / gwtrm)
 # Safely removes an individual worktree and optionally deletes its local branch
 gwtdel() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "Usage: gwtdel [worktree-name]\n"
+    printf "  Safely removes an individual worktree and optionally deletes its local branch\n"
+    return 0
+  fi
   _require_git_repo || return 1
 
   local active_wt target_input="$1" target_wt="" target_branch=""
@@ -778,6 +794,7 @@ gwtdel() {
       esac
     fi
     git worktree prune 2>/dev/null
+    rm -f "${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles/proj_repos.cache" 2>/dev/null
     printf "\033[32m✔ Worktree '%s' removed successfully!\033[0m\n" "$wt_name"
   else
     printf " \033[31m✖ Failed to remove worktree.\033[0m\n" >&2
@@ -881,7 +898,7 @@ _gwtclean_select_candidates() {
       dirty_tag=" \033[31m(DIRTY: uncommitted changes)\033[0m"
     fi
     printf "  %2d) %-40s \033[2m[%s]\033[0m%b\n" "$idx" "$wt_path" "$wt_branch" "$dirty_tag"
-    ((idx++))
+    (( ++idx ))
   done
 
   printf "\nEnter numbers to prune (e.g. 1,2 or 'a' for all, Enter to cancel): "
@@ -909,6 +926,11 @@ _gwtclean_select_candidates() {
 # Git Worktree Clean / Prune (gwtclean / gwtprune / gwtc)
 # Prunes worktrees whose remote upstream branch has been deleted on the remote
 gwtclean() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "Usage: gwtclean [-f|--force]\n"
+    printf "  Prunes worktrees whose remote upstream branch has been deleted on the remote\n"
+    return 0
+  fi
   _require_git_repo || return 1
 
   local force=false

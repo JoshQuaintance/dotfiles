@@ -88,6 +88,10 @@ _conf_edit_and_reload() {
     if [ "$is_shell_rc" = true ]; then
       echo "Changes detected. Sourcing $target_file..."
       local real_target="${target_file:A}"
+      if ! zsh -n "$target_file" 2>&1; then
+        print -u2 "\033[31m✖ Syntax error in $target_file — skipping reload to protect shell session.\033[0m"
+        return 1
+      fi
       zcompile -R -- "${real_target}.zwc" "$real_target" 2>/dev/null || true
       source "$target_file"
       echo "✔ Terminal environment updated!"
@@ -366,6 +370,8 @@ _dot() {
           '-p:Also benchmark prompt rendering' '--prompt:Also benchmark prompt rendering'
           '-t:Also benchmark modern CLI tools (rg, fd, eza)' '--tools:Also benchmark modern CLI tools (rg, fd, eza)'
           '-a:Run full benchmark suite (startup + tools + prompt)' '--all:Run full benchmark suite (startup + tools + prompt)'
+          '-s:Save current startup benchmark as baseline' '--save:Save current startup benchmark as baseline'
+          '-c:Compare benchmark against saved baseline' '--compare:Compare benchmark against saved baseline'
           '-j:Output startup benchmark results as JSON' '--json:Output startup benchmark results as JSON'
         )
         ;;
@@ -393,6 +399,8 @@ _dot() {
         flags=(
           '-c:Check for upstream updates without applying'
           '--check:Check for upstream updates without applying'
+          '-d:Preview diff of incoming changes without applying'
+          '--diff:Preview diff of incoming changes without applying'
           '-y:Apply updates without prompting'
           '--yes:Apply updates without prompting'
           '-a:Full upgrade: git + Homebrew + Mise + test'

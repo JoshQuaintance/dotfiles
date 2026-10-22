@@ -10,12 +10,8 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import patch
-
-try:
-    import tomllib  # Python 3.11+
-except ImportError:
-    tomllib = None
 
 from cli.manifest import get_cli_tool_manifest, get_dotfiles_dir, get_symlink_manifest
 from cli.prompt import get_active_prompt, is_mobile_or_proot
@@ -34,6 +30,12 @@ from cli.ui import (
     print_header,
     run_cmd,
 )
+
+tomllib: ModuleType | None
+try:
+    import tomllib  # Python 3.11+
+except ImportError:
+    tomllib = None
 
 JSONC_TOKEN_RE = re.compile(
     r'"(?:\\.|[^"\\])*"'  # Double-quoted string literal
@@ -328,6 +330,8 @@ hashc -h >/dev/null
 ,hash -h >/dev/null
 ,hashc -h >/dev/null
 decode -h >/dev/null
+encode -h >/dev/null
+,encode -h >/dev/null
 snip -h >/dev/null
 fpkg -h >/dev/null
 fsize -h >/dev/null
@@ -546,10 +550,101 @@ def _check_python_scripts_syntax_and_lint(report: TestReport, dotfiles: Path) ->
     libexec_test = dotfiles / "tests" / "test_libexec.py"
     if libexec_test.is_file():
         u_code, _u_out, u_err = run_cmd([sys.executable, "-m", "unittest", str(libexec_test)], cwd=dotfiles, timeout=15)
+        libexec_count = len(list((dotfiles / "libexec").glob("*.py")))
         if u_code == 0:
-            report.ok("Python libexec unit tests", "All 5 libexec/*.py executables pass unit tests")
+            report.ok("Python libexec unit tests", f"All {libexec_count} libexec/*.py executables pass unit tests")
         else:
             report.fail("Python libexec unit tests", (u_err.splitlines()[-1] if u_err else "Unit test failed")[:48])
+
+    _check_python_type_checking(report, dotfiles, py_files)
+
+
+def _check_python_type_checking(report: TestReport, dotfiles: Path, py_files: list[Path]) -> None:
+    """Validate static typing across cli/ and libexec/ via mypy."""
+    tc_cmd = []
+    if shutil.which("uv"):
+        tc_cmd = ["uv", "run", "--with", "mypy", "mypy", "--ignore-missing-imports", "cli", "libexec"]
+    elif shutil.which("mypy"):
+        tc_cmd = ["mypy", "--ignore-missing-imports", "cli", "libexec"]
+
+    if tc_cmd:
+        tc_code, tc_out, tc_err = run_cmd(tc_cmd, cwd=dotfiles, timeout=30)
+        if tc_code == 0:
+            report.ok("Python type checking", f"0 type errors across {len(py_files)} files")
+        else:
+            first = (tc_out or tc_err).splitlines()[0] if (tc_out or tc_err) else "Type error"
+            report.fail("Python type checking", first[:48])
+
+
+def _check_commands_documentation(report: TestReport, dotfiles: Path) -> None:
+    """Verify docs/COMMANDS.md is present and documents all functions and bin utilities (Item 20)."""
+    doc_path = dotfiles / "docs" / "COMMANDS.md"
+    if not doc_path.is_file():
+        report.fail("Command documentation sync", "docs/COMMANDS.md missing (run libexec/gen_docs.py)")
+        return
+
+    doc_text = doc_path.read_text(encoding="utf-8")
+    functions_zsh = (dotfiles / "zsh" / "functions.zsh").read_text(encoding="utf-8")
+    fn_m = re.search(r"typeset\s+-ga\s+DOTFILES_FUNCTIONS=\s*\(([\s\S]*?)\)", functions_zsh)
+    missing: list[str] = []
+    if fn_m:
+        for line in fn_m.group(1).splitlines():
+            clean_line = line.split("#", 1)[0].strip()
+            missing.extend(fn for fn in clean_line.split() if f"`{fn}`" not in doc_text)
+
+    bin_dir = dotfiles / "bin"
+    missing.extend(
+        b.name
+        for b in bin_dir.iterdir()
+        if b.is_file() and not b.name.startswith(".") and f"`{b.name}`" not in doc_text
+    )
+
+    if not missing:
+        report.ok("Command documentation sync", "docs/COMMANDS.md covers all functions and bin/ utilities")
+    else:
+        report.fail("Command documentation sync", f"Missing in docs/COMMANDS.md: {', '.join(missing[:5])}")
+
+
+def _check_function_headers_and_help(report: TestReport, dotfiles: Path) -> None:
+    """Verify all DOTFILES_FUNCTIONS have header doc comments and exit 0 on --help (Item 21)."""
+    check_code = """
+cd "${DOTFILES_DIR:-$HOME/.dotfiles}"
+source "${DOTFILES_DIR:-$HOME/.dotfiles}/zsh/functions.zsh"
+source "${DOTFILES_DIR:-$HOME/.dotfiles}/zsh/functions/comma.zsh"
+local -a fallbacks=() bad_help=()
+while IFS=$'\\t' read -r short canonical desc; do
+    if [[ "$desc" == *"(custom dotfiles function)"* ]]; then
+        fallbacks+=("$canonical")
+    fi
+done < <(_comma_gen_list 2>/dev/null)
+
+if (( ${#fallbacks[@]} > 0 )); then
+    print "FALLBACK:${(j:, :)fallbacks}"
+fi
+
+for fn in "${DOTFILES_FUNCTIONS[@]}"; do
+    [[ "$fn" == "," ]] && continue
+    if ! "$fn" --help >/dev/null 2>&1; then
+        bad_help+=("$fn")
+    fi
+done
+if (( ${#bad_help[@]} > 0 )); then
+    print "BAD_HELP:${(j:, :)bad_help}"
+fi
+"""
+    _code, out, _err = run_cmd(["zsh", "-i", "+m", "-c", check_code], env={"DOTFILES_DIR": str(dotfiles)}, timeout=10)
+    fallbacks = [line.split(":", 1)[1] for line in out.splitlines() if line.startswith("FALLBACK:")]
+    bad_help = [line.split(":", 1)[1] for line in out.splitlines() if line.startswith("BAD_HELP:")]
+
+    if not fallbacks and not bad_help:
+        report.ok("Function documentation & --help", "All custom functions have doc headers & exit 0 on --help")
+    else:
+        errs = []
+        if fallbacks:
+            errs.append(f"No doc comment: {fallbacks[0]}")
+        if bad_help:
+            errs.append(f"--help failed: {bad_help[0]}")
+        report.fail("Function documentation & --help", "; ".join(errs))
 
 
 def test_syntax_and_links(report: TestReport, dotfiles: Path):
@@ -559,6 +654,8 @@ def test_syntax_and_links(report: TestReport, dotfiles: Path):
     _check_zsh_scripts_syntax(report, dotfiles)
     _check_python_scripts_syntax_and_lint(report, dotfiles)
     _check_brewfile_and_symlinks(report, dotfiles)
+    _check_commands_documentation(report, dotfiles)
+    _check_function_headers_and_help(report, dotfiles)
 
 
 def _check_manifest_and_ui_primitives(report: TestReport) -> None:
@@ -689,7 +786,11 @@ def _check_cli_subcommand_smoke(report: TestReport) -> None:
 
     for label, argv, detail, patches in subcommand_specs:
         buf = io.StringIO()
-        ctxs = [patch.object(sys, "argv", argv), contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf)]
+        ctxs: list[contextlib.AbstractContextManager[object]] = [
+            patch.object(sys, "argv", argv),
+            contextlib.redirect_stdout(buf),
+            contextlib.redirect_stderr(buf),
+        ]
         if patches:
             ctxs.extend(patches)
         with contextlib.ExitStack() as stack:

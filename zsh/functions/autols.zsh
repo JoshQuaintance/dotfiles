@@ -30,7 +30,8 @@ _auto_ls() {
 autoload -Uz add-zsh-hook
 add-zsh-hook chpwd _auto_ls
 
-# Toggle function with support for on/off/status/custom threshold
+# Toggle Automatic Directory Listing (toggle-autols)
+# Supports on/off/status/custom threshold
 toggle-autols() {
   case "$1" in
     on|enable|1)

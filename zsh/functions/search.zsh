@@ -385,6 +385,7 @@ _fjq_prepare_json() {
   fi
 }
 
+# Interactive JSON/YAML/TOML Path Explorer (fjq)
 # Powered by jq (+ yq for YAML/TOML) + modal-Vim FZF with live subtree preview
 # Usage:
 #   fjq <file.json|.yaml|.toml> -> Browse all paths & values interactively
@@ -539,8 +540,47 @@ _snip_fill_and_paste() {
 #   snip                     -> Browse command snippets in modal-Vim FZF
 #   snip <query>             -> Open pre-filtered by <query>
 #   snip -a <name> <cmd> [d] -> Save a new custom snippet to ~/.config/dotfiles/snippets.txt
+#   snip -a --last <name> [d]-> Save last executed command from history to snippets.txt
 #   snip -e, --edit          -> Edit ~/.config/dotfiles/snippets.txt in $EDITOR
 #   snip -l, --list          -> Print tab-separated snippets catalog
+_snip_add() {
+  local user_file="$1"
+  shift
+  local title="" cmd="" desc=""
+  if [[ "$1" == "--last" ]]; then
+    shift
+    if (( $# < 1 )); then
+      printf "\033[31m✖ Usage: snip -a --last <category/title> [description]\033[0m\n" >&2
+      return 1
+    fi
+    title="$1"
+    cmd="$(fc -ln -1 2>/dev/null | tail -n 1 | sed 's/^[[:space:]]*//')"
+    [[ -z "$cmd" ]] && cmd="$(tail -n 1 "${HISTFILE:-$HOME/.zsh_history}" 2>/dev/null | sed -E 's/^: [0-9]+:[0-9]+;//')"
+    if [[ -z "$cmd" ]]; then
+      printf "\033[31m✖ Could not retrieve last history command.\033[0m\n" >&2
+      return 1
+    fi
+    desc="${2:-Last command: $cmd}"
+  else
+    if (( $# < 2 )); then
+      printf "\033[31m✖ Usage: snip -a <category/title> <command> [description]\033[0m\n" >&2
+      return 1
+    fi
+    title="$1" cmd="$2" desc="${3:-Custom snippet}"
+  fi
+  mkdir -p "${user_file:h}"
+  printf "%s\t%s\t%s\n" "$title" "$cmd" "$desc" >> "$user_file"
+  printf "\033[32m✔ Added snippet '%s' to %s\033[0m\n" "$title" "${user_file/#$HOME/~}"
+}
+
+# Interactive modal-Vim command bookmark & snippet runner (snip)
+# Usage:
+#   snip                       -> Browse snippets in modal-Vim FZF
+#   snip <query>               -> Open pre-filtered by <query>
+#   snip -a <title> <cmd> [d]  -> Add custom snippet to ~/.config/dotfiles/snippets.txt
+#   snip -a --last <title> [d] -> Add last executed command from history to snippets.txt
+#   snip -e, --edit            -> Edit custom snippets in $EDITOR
+#   snip -l, --list            -> List all snippets
 snip() {
   local user_file="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/snippets.txt"
 
@@ -550,6 +590,7 @@ snip() {
     printf "  snip                       Browse snippets in modal-Vim FZF\n"
     printf "  snip <query>               Open pre-filtered by <query>\n"
     printf "  snip -a <title> <cmd> [d]  Add custom snippet to ~/.config/dotfiles/snippets.txt\n"
+    printf "  snip -a --last <title> [d] Add last executed command from history\n"
     printf "  snip -e, --edit            Edit custom snippets in \$EDITOR\n"
     printf "  snip -l, --list            List all snippets\n"
     printf "  Enter                      Fill <placeholders> & place command on Zsh prompt\n"
@@ -568,15 +609,8 @@ snip() {
 
   if [[ "$1" == "-a" || "$1" == "--add" ]]; then
     shift
-    if (( $# < 2 )); then
-      printf "\033[31m✖ Usage: snip -a <category/title> <command> [description]\033[0m\n" >&2
-      return 1
-    fi
-    local title="$1" cmd="$2" desc="${3:-Custom snippet}"
-    mkdir -p "${user_file:h}"
-    printf "%s\t%s\t%s\n" "$title" "$cmd" "$desc" >> "$user_file"
-    printf "\033[32m✔ Added snippet '%s' to %s\033[0m\n" "$title" "${user_file/#$HOME/~}"
-    return 0
+    _snip_add "$user_file" "$@"
+    return $?
   fi
 
   local list_only=false
@@ -634,8 +668,7 @@ snip() {
     --height=~55% \
     "${fzf_mode_flags[@]}" \
     --color="header:italic:dim,prompt:bold:magenta,pointer:bold:cyan" \
-    --preview='printf "\033[1;38;2;203;166;247m# %s\033[0m\n\033[2m# %s\033[0m\n\n%s\n" {1} {3} {4} | if command -v bat &>/dev/null; then bat -l bash --color=always --style=plain; else cat; fi' \
-    --preview-window='right:50%:wrap')
+    --preview='printf "\033[1;38;2;203;166;247m# %s\033[0m\n\033[2m# %s\033[0m\n\n%s\n" {1} {3} {4} | if command -v bat &>/dev/null; then bat -l bash --color=always --style=plain; else cat; fi')
 
   local key="" selected_lines=""
   _fzf_split_expect "$selection" || return 0

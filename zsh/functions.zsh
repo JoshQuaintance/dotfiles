@@ -19,7 +19,7 @@ typeset -ga DOTFILES_FUNCTIONS=(
   conf dotbranch clone
 
   # System, Process, Network, Package & Diagnostic Tools
-  port fkill fcon fssh dotenv fpkg decode fsize fknown termtest netinfo checksum hashc
+  port fkill fcon fssh dotenv fpkg decode encode fsize fknown termtest netinfo checksum hashc
 
   # Git Worktree Workflow
   wt gwtnew gwtenv gwts gwtdel gwtclean
@@ -38,6 +38,30 @@ typeset -ga DOTFILES_FUNCTIONS=(
 
   # Shell Hooks & Diff Utilities
   toggle-autols toggle-autonotify notify strdiff
+)
+
+# Canonical subcommands and flags for the `dot` CLI.
+# Consumed by `comma.zsh` (suggestions & syntax highlighting) and `config.zsh` (tab completions).
+typeset -ga DOTFILES_DOT_SUBCOMMANDS=(
+  status doctor health test bench sync clean prune update link prompt backup restore env help
+)
+
+typeset -gA DOTFILES_DOT_FLAGS=(
+  status   "--json -j --help"
+  doctor   "--fix -f --json -j --help"
+  health   "--fix -f --json -j --help"
+  link     "--fix -f --help"
+  bench    "--iterations -n --prompt -p --tools -t --all -a --save -s --compare -c --json -j --help"
+  sync     "--message -m --dry-run -n --no-push --help"
+  clean    "--dry-run -n --all -a --builds -b --help"
+  prune    "--dry-run -n --orphans -o --yes -y --help"
+  update   "--check -c --diff -d --yes -y --all -a --tools -t --test --no-prune --help"
+  backup   "--dry-run -n --list -l --output -o --help"
+  restore  "--dry-run -n --list -l --all -a --file -f --force --help"
+  env      "--all -a --json -j --help"
+  test     "--help"
+  prompt   "--help"
+  help     "--help"
 )
 
 # ==========================================
@@ -95,12 +119,18 @@ _fzf_vim_mode() {
   local to_search="enable-search+unbind(${key_list})+change-prompt(🔍 Search > )+change-header(${search_header})+rebind(esc)"
   local to_normal="disable-search+rebind(${key_list})+change-prompt(${normal_prompt})+change-header(${normal_header})+unbind(esc)"
 
+  local prev_win="right:55%:wrap"
+  if [[ "${_IS_MOBILE:-false}" == "true" ]] || (( COLUMNS > 0 && COLUMNS < 80 )); then
+    prev_win="down:40%:wrap"
+  fi
+
   fzf_mode_flags=(
     "--layout=reverse"
     "--border=rounded"
     "--pointer=❯ "
     "--prompt=${normal_prompt}"
     "--header=${normal_header}"
+    "--preview-window=${prev_win}"
     "--bind=ctrl-/:toggle-preview,ctrl-d:preview-page-down,ctrl-u:preview-page-up"
   )
 

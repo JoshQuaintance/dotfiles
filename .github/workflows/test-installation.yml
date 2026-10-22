@@ -88,6 +88,10 @@ jobs:
             | sudo tar -xz -C /usr/local/bin actionlint
           actionlint
 
+      - name: Run Python Libexec & CLI Unit Tests
+        run: |
+          PYTHONPATH=. python3 -m unittest discover -s tests -v
+
       - name: Zsh Function Unit Tests
         run: |
           zsh tests/zsh/run.zsh
@@ -195,3 +199,33 @@ jobs:
       - name: Test Interactive Zsh Boot
         run: |
           zsh -i -c "echo 'Zsh environment booted successfully!'"
+
+  # 4. Multi-Distro Installation & Test Verification (Fedora & Arch Linux)
+  distros:
+    name: Distro Validation (${{ matrix.distro }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [fedora, archlinux]
+        include:
+          - distro: fedora
+            image: fedora:latest
+            setup: dnf install -y zsh git python3
+          - distro: archlinux
+            image: archlinux:latest
+            setup: pacman -Syu --noconfirm zsh git python
+    container:
+      image: ${{ matrix.image }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Install System Prerequisites
+        run: ${{ matrix.setup }}
+
+      - name: Dry-Run Installer
+        run: ./install.sh --dry-run
+
+      - name: Run Zsh Unit Tests
+        run: zsh tests/zsh/run.zsh

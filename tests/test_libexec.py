@@ -128,6 +128,29 @@ class TestClipAndStrdiffAndWslLibexec(unittest.TestCase):
         self.assertEqual(rc_bad, 1)
         self.assertIn("Invalid JSON", err_bad)
 
+    def test_encode_and_clip_transforms(self) -> None:
+        """Verify `encode.py` and new clip transforms (hexe, hexd, htmle, htmld)."""
+        rc, out, _ = run_libexec("encode.py", "Hello World")
+        self.assertEqual(rc, 0)
+        self.assertIn("SGVsbG8gV29ybGQ=", out)
+        self.assertIn("48656c6c6f20576f726c64", out)
+
+        rc_b64, out_b64, _ = run_libexec("encode.py", "-b", "Hello World")
+        self.assertEqual(rc_b64, 0)
+        self.assertEqual(out_b64, "SGVsbG8gV29ybGQ=")
+
+        rc_hx, out_hx, _ = run_libexec("clip_transform.py", "hexe", "test")
+        self.assertEqual(rc_hx, 0)
+        self.assertEqual(out_hx, "74657374")
+
+        rc_hd, out_hd, _ = run_libexec("clip_transform.py", "hexd", "0x74657374")
+        self.assertEqual(rc_hd, 0)
+        self.assertEqual(out_hd, "test")
+
+        rc_ht, out_ht, _ = run_libexec("clip_transform.py", "htmle", "<tag>&'\"")
+        self.assertEqual(rc_ht, 0)
+        self.assertEqual(out_ht, "&lt;tag&gt;&amp;&#x27;&quot;")
+
     def test_strdiff_modes(self) -> None:
         """Verify identical and differing strings in char and word modes."""
         rc_eq, out_eq, _ = run_libexec("strdiff.py", "same", "same", "char")

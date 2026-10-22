@@ -73,6 +73,17 @@ test_clip_transform_pipeline() {
   assert_eq 'test-b64' "$(printf 'dGVzdC1iNjQ=' | clip --b64d -p)"
 }
 
+test_encode_multi_and_single_flags() {
+  local out
+  out="$(encode "hello world")"
+  assert_contains "$out" "aGVsbG8gd29ybGQ="
+  assert_contains "$out" "68656c6c6f20776f726c64"
+
+  assert_eq "aGVsbG8gd29ybGQ=" "$(encode -b "hello world")"
+  assert_eq "hello%20world" "$(encode -u "hello world")"
+  assert_eq "68656c6c6f20776f726c64" "$(encode -x "hello world")"
+}
+
 test_vi_mode_expand_path_and_yank_buffer_widgets() {
   _stub_clipboard
   source <(sed -n '/^_vi_expand_path_under_cursor() {/,/^}/p' "$DOTFILES_DIR/zsh/vi-mode.zsh")

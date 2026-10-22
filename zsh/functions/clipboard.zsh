@@ -9,6 +9,13 @@
 # Remote SSH / headless sessions fall back to OSC-52 escape sequences (with tmux passthrough).
 # The paste side is `clippaste` so coreutils `paste` keeps working.
 copy() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "\033[1;38;2;137;180;250mcopy\033[0m — Cross-platform clipboard copy (macOS, Linux, WSL, SSH/OSC-52)\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  echo <text> | copy   Copy text from stdin to system clipboard\n"
+    printf "  copy <file>          Copy file contents to system clipboard\n"
+    return 0
+  fi
   if command -v pbcopy &>/dev/null; then
     pbcopy "$@"
   elif [[ -n "$WSL_DISTRO_NAME" ]] && command -v win32yank.exe &>/dev/null; then
@@ -48,6 +55,12 @@ copy() {
 
 # Cross-Platform Clipboard Paste Helper (clippaste)
 clippaste() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "\033[1;38;2;137;180;250mclippaste\033[0m — Cross-platform clipboard paste helper\n\n"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  clippaste            Paste current clipboard content to stdout\n"
+    return 0
+  fi
   if command -v pbpaste &>/dev/null; then
     pbpaste "$@"
   elif [[ -n "$WSL_DISTRO_NAME" ]] && command -v win32yank.exe &>/dev/null; then
@@ -96,6 +109,58 @@ decode() {
   fi
 
   "${DOTFILES_DIR:-$HOME/.dotfiles}/libexec/decode.py" "$input"
+}
+
+# Universal Multi-Format Text Encoder (encode)
+# Encodes input into Base64, URL, Hex, HTML, and SHA-256 (or single format via flags)
+encode() {
+  local copy_to_clip=false
+  local -a py_args=()
+
+  while [[ "$1" == -* ]]; do
+    case "$1" in
+      -h|--help)
+        printf "\033[1;38;2;203;166;247mencode\033[0m — Multi-format encoder (Base64, URL, Hex, HTML, SHA-256)\n\n"
+        printf "\033[1mUsage:\033[0m\n"
+        printf "  encode <text>             Print multi-format encoding card\n"
+        printf "  encode -b, --b64 <text>   Print Base64 representation only\n"
+        printf "  encode -u, --url <text>   Print URL-encoded representation only\n"
+        printf "  encode -x, --hex <text>   Print Hex representation only\n"
+        printf "  encode --html <text>      Print HTML-escaped representation only\n"
+        printf "  encode -s, --sha256 <txt> Print SHA-256 hex digest only\n"
+        printf "  encode -c, --copy <text>  Copy encoded result to system clipboard\n"
+        printf "  echo <text> | encode      Encode from piped stdin\n"
+        printf "  encode                    Encode current clipboard text\n"
+        return 0
+        ;;
+      -c|--copy) copy_to_clip=true; shift ;;
+      -b|--b64|-u|--url|-x|--hex|--html|-s|--sha256) py_args+=("$1"); shift ;;
+      *) break ;;
+    esac
+  done
+
+  local input=""
+  if (( $# > 0 )); then
+    input="$*"
+  elif [[ -p /dev/stdin || ( ! -t 0 && -s /dev/stdin ) ]]; then
+    input="$(cat)"
+  fi
+  [[ -z "$input" ]] && input="$(clippaste 2>/dev/null)"
+  input="${input#"${input%%[![:space:]]*}"}"
+  input="${input%"${input##*[![:space:]]}"}"
+
+  if [[ -z "$input" ]]; then
+    printf "\033[31m✖ Provide text to encode, pipe via stdin, or copy to clipboard.\033[0m\n" >&2
+    return 1
+  fi
+
+  local result
+  result="$("${DOTFILES_DIR:-$HOME/.dotfiles}/libexec/encode.py" "${py_args[@]}" "$input")"
+  if [[ "$copy_to_clip" == true ]]; then
+    _copy_or_print "$result" "encoded text"
+  else
+    printf "%s\n" "$result"
+  fi
 }
 
 # Quick Last-Command Output Capture (lastout)

@@ -51,16 +51,16 @@ _comma_register_wrappers() {
   for fn in "${DOTFILES_FUNCTIONS[@]}"; do
     [[ "$fn" == "," ]] && continue
     if (( $+functions[$fn] )); then
-      functions[,$fn]="\"$fn\" \"\$@\""
+      functions[,$fn]="_comma_record_recent \"$fn\"; \"$fn\" \"\$@\""
       short_comma="${DOTFILES_COMMA_SHORTHANDS[$fn]:-}"
       if [[ -n "$short_comma" ]]; then
-        functions[$short_comma]="\"$fn\" \"\$@\""
+        functions[$short_comma]="_comma_record_recent \"$fn\"; \"$fn\" \"\$@\""
       fi
     fi
   done
 
   for alias_comma target_cmd in "${(@kv)DOTFILES_COMMA_ALIASES}"; do
-    functions[$alias_comma]="\"$target_cmd\" \"\$@\""
+    functions[$alias_comma]="_comma_record_recent \"$target_cmd\"; \"$target_cmd\" \"\$@\""
   done
 }
 
@@ -370,26 +370,16 @@ _comma_suggest_arg2() {
 
   if [[ "$canonical" == "dot" ]]; then
     if [[ "$rest" =~ ^[a-z]+$ ]]; then
-      for opt in status doctor test bench clean prune sync update backup env prompt help; do
+      for opt in "${DOTFILES_DOT_SUBCOMMANDS[@]}"; do
         if [[ "$opt" == "${rest}"* && "$opt" != "$rest" ]]; then
           typeset -g suggestion="${cmd_lead}${opt}"
           return 0
         fi
       done
-    elif [[ "$rest" =~ ^(status|doctor|bench|update|clean|prune|sync|backup|env)[[:space:]]+(-[a-z-]*)$ ]]; then
+    elif [[ "$rest" =~ ^([a-z]+)[[:space:]]+(-[a-z-]*)$ ]]; then
       local sub="${match[1]}" flag_part="${match[2]}"
-      local -a sub_flags=(--help)
-      case "$sub" in
-        status) sub_flags=(--json --help) ;;
-        doctor) sub_flags=(--fix --json --help) ;;
-        bench)  sub_flags=(--iterations --prompt --tools --all --json --help) ;;
-        update) sub_flags=(--all --check --tools --no-prune --yes --help) ;;
-        clean)  sub_flags=(--dry-run --all --builds --help) ;;
-        prune)  sub_flags=(--dry-run --orphans --yes --help) ;;
-        sync)   sub_flags=(--dry-run --message --help) ;;
-        backup) sub_flags=(--list --dry-run --help) ;;
-        env)    sub_flags=(--all --json --help) ;;
-      esac
+      local -a sub_flags=(${(s: :)DOTFILES_DOT_FLAGS[$sub]})
+      [[ ${#sub_flags[@]} -eq 0 ]] && sub_flags=(--help)
       for opt in "${sub_flags[@]}"; do
         if [[ "$opt" == "${flag_part}"* && "$opt" != "$flag_part" ]]; then
           typeset -g suggestion="${cmd_lead}${sub} ${opt}"
@@ -560,21 +550,18 @@ _zsh_highlight_highlighter_comma_paint() {
     local tok_len=${#tok}
     local t_start=$(( offset + ws_len ))
     local t_end=$(( t_start + tok_len ))
-    (( arg_idx++ ))
+    (( ++arg_idx ))
 
     if [[ "$tok" == --* ]]; then
       region_highlight+=("$t_start $t_end ${dopt_style}${memo}")
     elif [[ "$tok" == -* ]]; then
       region_highlight+=("$t_start $t_end ${sopt_style}${memo}")
     elif (( arg_idx == 1 )) && [[ "$canonical" == "dot" ]]; then
-      case "$tok" in
-        status|doctor|test|bench|clean|prune|sync|update|backup|env|prompt|help)
-          region_highlight+=("$t_start $t_end ${cmd_style}${memo}")
-          ;;
-        *)
-          region_highlight+=("$t_start $t_end ${err_style}${memo}")
-          ;;
-      esac
+      if (( ${DOTFILES_DOT_SUBCOMMANDS[(Ie)$tok]} )); then
+        region_highlight+=("$t_start $t_end ${cmd_style}${memo}")
+      else
+        region_highlight+=("$t_start $t_end ${err_style}${memo}")
+      fi
     elif [[ -e "${tok/#\~/$HOME}" ]]; then
       region_highlight+=("$t_start $t_end ${path_style}${memo}")
     fi
