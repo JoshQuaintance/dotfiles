@@ -1,13 +1,30 @@
 setopt ALIASES
+source "$DOTFILES_DIR/zsh/functions.zsh"
 source "$DOTFILES_DIR/zsh/.aliases"
 
 test_core_aliases_defined() {
   assert_eq "dottest" "${aliases[.test]}"
   assert_eq "reload" "${aliases[sz]}"
-  assert_eq "exec zsh -l" "${aliases[reload]}"
   assert_eq "toggle-autols" "${aliases[als]}"
   assert_eq "genignore" "${aliases[gi]}"
   assert_eq "trash" "${aliases[del]}"
+}
+
+test_reload_help_and_syntax_guard() {
+  local out
+  out="$(reload --help)" || fail "reload --help failed"
+  assert_contains "$out" "Usage: reload"
+
+  if reload unexpected_arg 2>/dev/null; then
+    fail "reload should reject extra arguments"
+  fi
+
+  local tmp_zdot="$PWD/broken_zdot"
+  mkdir -p "$tmp_zdot"
+  printf 'if (( 1 \n' > "$tmp_zdot/.zshrc"
+  if ZDOTDIR="$tmp_zdot" reload 2>/dev/null; then
+    fail "reload should refuse broken .zshrc"
+  fi
 }
 
 test_pyactivate_in_place_eval_activates_dot_venv() {

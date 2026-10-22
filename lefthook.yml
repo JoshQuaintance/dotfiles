@@ -55,3 +55,14 @@ pre-commit:
       env:
         PATH: "$HOME/.local/share/mise/shims:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
       run: actionlint
+
+pre-push:
+  commands:
+    dot-test:
+      env:
+        PATH: "$HOME/.local/share/mise/shims:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+      run: ./bin/dot test
+    zsh-tests:
+      env:
+        PATH: "$HOME/.local/share/mise/shims:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+      run: zsh tests/zsh/run.zsh

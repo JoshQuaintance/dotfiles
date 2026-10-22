@@ -777,7 +777,16 @@ def _run_all_doctor_checks(report: DoctorReport, dotfiles: Path, fix: bool) -> N
         check_wsl(report, dotfiles, fix=fix)
 
 
-def run_doctor(fix: bool = False, json_output: bool = False) -> int:
+def compute_doctor_exit_code(report: DoctorReport, strict: bool = False) -> int:
+    """Compute distinct exit code (0 = ok, 1 = failed, 2 = warnings when strict)."""
+    if report.failed > 0:
+        return 1
+    if strict and report.warnings > 0:
+        return 2
+    return 0
+
+
+def run_doctor(fix: bool = False, json_output: bool = False, strict: bool = False) -> int:
     """Run all workstation health checks and optionally auto-repair issues when `fix` is True."""
     dotfiles = get_dotfiles_dir()
     report = DoctorReport()
@@ -786,15 +795,17 @@ def run_doctor(fix: bool = False, json_output: bool = False) -> int:
         import io
         with contextlib.redirect_stdout(io.StringIO()):
             _run_all_doctor_checks(report, dotfiles, fix)
+        exit_code = compute_doctor_exit_code(report, strict=strict)
         payload = {
             "passed": report.passed,
             "warnings": report.warnings,
             "failed": report.failed,
             "repaired": report.repaired,
+            "exit_code": exit_code,
             "checks": report.entries,
         }
         print(json.dumps(payload, indent=2))
-        return 1 if report.failed > 0 else 0
+        return exit_code
 
     header_text = "Dotfiles Doctor \u2014 System & Environment Health Check"
     if fix:
@@ -808,15 +819,14 @@ def run_doctor(fix: bool = False, json_output: bool = False) -> int:
         print(f", {C_GREEN}{report.repaired} auto-repaired{C_RESET}", end="")
     print(f", {C_YELLOW}{report.warnings} warnings{C_RESET}, {C_RED}{report.failed} failed{C_RESET}\n")
 
-    if report.failed > 0:
-        if not fix:
-            print(f"{C_YELLOW}💡 Tip: Run 'dot doctor --fix' to automatically repair broken symlinks.{C_RESET}\n")
-        return 1
+    if report.failed > 0 and not fix:
+        print(f"{C_YELLOW}💡 Tip: Run 'dot doctor --fix' to automatically repair broken symlinks.{C_RESET}\n")
 
-    return 0
+    return compute_doctor_exit_code(report, strict=strict)
 
 
 if __name__ == "__main__":
     do_fix = "--fix" in sys.argv or "-f" in sys.argv
     do_json = "--json" in sys.argv or "-j" in sys.argv
-    sys.exit(run_doctor(fix=do_fix, json_output=do_json))
+    do_strict = "--strict" in sys.argv
+    sys.exit(run_doctor(fix=do_fix, json_output=do_json, strict=do_strict))

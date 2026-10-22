@@ -26,7 +26,7 @@
 | Function | Comma Shorthand | Module | Description |
 | :--- | :--- | :--- | :--- |
 | `,` | `,` | `comma.zsh` | Interactive Dotfiles Command Palette & Comma-Prefix Launcher (, / f) |
-| `take` | `,take` | `navigation.zsh` | Create directory or file parent and cd into it (take) |
+| `take` | `,take` | `navigation.zsh` | Create directory or file parent and cd into it, or clone a Git URL (take) |
 | `d` | `,d` | `navigation.zsh` | Interactive Session Directory Stack Jumper (d) |
 | `up` | `,up` | `navigation.zsh` | Smart Ancestor Navigation: 'up' (1 level), 'up 3' (N levels), 'up 3549' or 'up sales' (ancestor name/substring) |
 | `tree` | `,tree` | `navigation.zsh` | Smart Directory Tree: 'tree' (full), 'tree 3' (3 levels), 'tree 2 src/' or 'tree src/ 2', 'tree -L 3' |
@@ -86,6 +86,7 @@
 | `toggle-autonotify` | `,autonotify` | `notify.zsh` | Automatic Desktop Notification for Long-Running Foreground Commands (>15s) |
 | `notify` | `,notify` | `notify.zsh` | Cross-Platform Persistent Desktop & Terminal Notification |
 | `strdiff` | `,strdiff` | `diff.zsh` | String & Snippet Diff Helper (strdiff) |
+| `reload` | `,reload` | `system.zsh` | Reload the shell as a fresh login Zsh process (guards against syntax errors and stray arguments) |
 
 ## 3. Standalone Executables (`bin/*`)
 

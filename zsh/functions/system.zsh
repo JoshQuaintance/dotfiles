@@ -715,3 +715,22 @@ hashc() {
   fi
   _checksum_run "compare" "$@"
 }
+
+# Reload the shell as a fresh login Zsh process (guards against syntax errors and stray arguments)
+reload() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "Usage: reload (alias: sz)\n"
+    printf "  Replace current shell with a fresh login Zsh process after verifying .zshrc syntax\n"
+    return 0
+  fi
+  if (( $# > 0 )); then
+    print -u2 "✖ reload takes no arguments. Usage: reload (or sz)"
+    return 1
+  fi
+  local rc_file="${ZDOTDIR:-$HOME}/.zshrc"
+  if [[ -f "$rc_file" ]] && ! zsh -n "$rc_file"; then
+    print -u2 "\033[31m✖ Syntax error in $rc_file — not reloading.\033[0m"
+    return 1
+  fi
+  exec zsh -l
+}

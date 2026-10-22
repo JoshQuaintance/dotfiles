@@ -88,6 +88,11 @@ jobs:
             | sudo tar -xz -C /usr/local/bin actionlint
           actionlint
 
+      - name: Verify docs/COMMANDS.md is Up-to-Date
+        run: |
+          python3 libexec/gen_docs.py
+          git diff --exit-code docs/COMMANDS.md
+
       - name: Run Python Libexec & CLI Unit Tests
         run: |
           PYTHONPATH=. python3 -m unittest discover -s tests -v

@@ -61,4 +61,7 @@ JSON
   assert_eq 0 $rc
   assert_contains "$out" "Available scripts in"
   assert_contains "$out" "build"
+
+  bunr --help >/dev/null || fail "bunr --help failed"
+  pnpmr --help >/dev/null || fail "pnpmr --help failed"
 }

@@ -647,6 +647,31 @@ fi
         report.fail("Function documentation & --help", "; ".join(errs))
 
 
+def _check_function_test_coverage(report: TestReport, dotfiles: Path) -> None:
+    """Check which DOTFILES_FUNCTIONS are referenced in tests/zsh/*.zsh and warn if any lack coverage (#36)."""
+    functions_zsh = (dotfiles / "zsh" / "functions.zsh").read_text(encoding="utf-8")
+    fn_m = re.search(r"typeset\s+-ga\s+DOTFILES_FUNCTIONS=\s*\(([\s\S]*?)\)", functions_zsh)
+    if not fn_m:
+        return
+    fns: list[str] = []
+    for line in fn_m.group(1).splitlines():
+        fns.extend(line.split("#", 1)[0].split())
+
+    test_dir = dotfiles / "tests" / "zsh"
+    corpus = "\n".join(p.read_text(encoding="utf-8", errors="ignore") for p in test_dir.glob("*.zsh"))
+    uncovered = [
+        fn
+        for fn in fns
+        if fn != "," and not re.search(rf"(?<![A-Za-z0-9_-]){re.escape(fn)}(?![A-Za-z0-9_-])", corpus)
+    ]
+    covered_count = len(fns) - len(uncovered)
+    if not uncovered:
+        report.ok("Zsh function test coverage", f"{covered_count}/{len(fns)} functions covered in tests/zsh/")
+    else:
+        sample = ", ".join(uncovered[:5]) + ("..." if len(uncovered) > 5 else "")
+        report.warn("Zsh function test coverage", f"{len(uncovered)} without unit test ({sample})")
+
+
 def test_syntax_and_links(report: TestReport, dotfiles: Path):
     """Run Bash/Zsh/Python syntax checks, ShellCheck, shfmt, Ruff, Brewfile sync, and symlink checks."""
     print(f"\n{C_BOLD}3. Script Syntax & Link Integrity{C_RESET}")
@@ -656,6 +681,7 @@ def test_syntax_and_links(report: TestReport, dotfiles: Path):
     _check_brewfile_and_symlinks(report, dotfiles)
     _check_commands_documentation(report, dotfiles)
     _check_function_headers_and_help(report, dotfiles)
+    _check_function_test_coverage(report, dotfiles)
 
 
 def _check_manifest_and_ui_primitives(report: TestReport) -> None:

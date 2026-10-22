@@ -614,43 +614,64 @@ gfile() {
 }
 
 
+# Return 0 if <branch> was squash-merged into <base> (via git cherry/commit-tree or gh pr list)
+_gbclean_squash_merged() {
+  local base="$1" branch="$2"
+  local mb tree sq_commit cherry_out
+  mb="$(git merge-base "$base" "$branch" 2>/dev/null)" || return 1
+  [[ "$(git rev-parse "$branch" 2>/dev/null)" == "$mb" ]] && return 1
+  tree="$(git rev-parse "${branch}^{tree}" 2>/dev/null)" || return 1
+  sq_commit="$(git commit-tree "$tree" -p "$mb" -m "squash-probe" 2>/dev/null)" || return 1
+  cherry_out="$(git cherry "$base" "$sq_commit" 2>/dev/null)"
+  [[ "$cherry_out" == -\ * ]] && return 0
+  if command -v gh &>/dev/null; then
+    local pr_count
+    pr_count="$(gh pr list --state merged --head "$branch" --json number -q 'length' 2>/dev/null)"
+    [[ "$pr_count" =~ ^[1-9][0-9]*$ ]] && return 0
+  fi
+  return 1
+}
+
 # Git Local Merged Branch Cleaner (gbclean)
-# Safely deletes local branches that are already merged into develop or main
+# Safely deletes local branches that are already merged (or squash-merged) into develop or main
 gbclean() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     printf "Usage: gbclean\n"
-    printf "  Safely deletes local branches that are already merged into develop or main\n"
+    printf "  Safely deletes local branches that are already merged (or squash-merged) into develop or main\n"
     return 0
   fi
   _require_git_repo || return 1
 
-  local base
+  local base active_branches b="" b_clean=""
   base="$(_git_base_branch)"
-
-  # Active worktree branches should never be deleted
-  local active_branches
   active_branches=$(git worktree list --porcelain 2>/dev/null | sed -n 's/^branch refs\/heads\///p')
 
-  local merged_branches=()
-  local b="" b_clean=""
+  local -a merged_branches=()
+  local -A is_squash=()
   while IFS= read -r b; do
     b_clean="$(echo "$b" | sed 's/^[ *+]*//')"
-    [[ -z "$b_clean" ]] && continue
-    # Protect main, master, develop, qa, stage, staging
-    [[ "$b_clean" =~ ^(main|master|develop|qa|stage|staging|HEAD)$ ]] && continue
-    # Protect branches checked out in any active worktree
-    if echo "$active_branches" | grep -qx "$b_clean"; then
-      continue
-    fi
+    [[ -z "$b_clean" || "$b_clean" =~ ^(main|master|develop|qa|stage|staging|HEAD)$ ]] && continue
+    echo "$active_branches" | grep -qx "$b_clean" && continue
     merged_branches+=("$b_clean")
   done < <(git branch --merged "$base" 2>/dev/null)
+
+  while IFS= read -r b; do
+    b_clean="$(echo "$b" | sed 's/^[ *+]*//')"
+    [[ -z "$b_clean" || "$b_clean" =~ ^(main|master|develop|qa|stage|staging|HEAD)$ ]] && continue
+    echo "$active_branches" | grep -qx "$b_clean" && continue
+    (( ${merged_branches[(Ie)$b_clean]} )) && continue
+    if _gbclean_squash_merged "$base" "$b_clean"; then
+      merged_branches+=("$b_clean (squash-merged)")
+      is_squash[$b_clean]=1
+    fi
+  done < <(git branch --no-merged "$base" 2>/dev/null)
 
   if [ "${#merged_branches[@]}" -eq 0 ]; then
     printf "\033[32m✔ No merged local branches to clean (compared to %s).\033[0m\n" "$base"
     return 0
   fi
 
-  local selected_branches=()
+  local -a selected_branches=()
   if command -v fzf &>/dev/null && [ -t 1 ]; then
     local -a fzf_mode_flags
     _fzf_vim_mode "🗑 Select Merged Branches to Delete > " "  j/k: navigate │ space/tab: toggle │ a: toggle all │ /: search │ enter: delete │ q: abort" "delete" "space,a" "" "space:toggle+down,tab:toggle+down,btab:toggle+up,a:toggle-all"
@@ -662,7 +683,7 @@ gbclean() {
       --marker="✔ " \
       "${fzf_mode_flags[@]}" \
       --color="header:italic:dim,prompt:bold:red,pointer:bold:red,marker:bold:green" \
-      --preview='git log -n 10 --oneline --color=always {} 2>/dev/null' \
+      --preview='git log -n 10 --oneline --color=always {1} 2>/dev/null' \
       --preview-window='right:55%:wrap')
 
     if [ -z "$fzf_output" ]; then
@@ -671,7 +692,7 @@ gbclean() {
     fi
 
     while IFS= read -r b || [ -n "$b" ]; do
-      selected_branches+=("$b")
+      selected_branches+=("${b%" (squash-merged)"}")
     done <<< "$fzf_output"
   else
     printf "\n\033[1;33mFound %d local branch(es) merged into %s:\033[0m\n" "${#merged_branches[@]}" "$base"
@@ -688,14 +709,18 @@ gbclean() {
         return 0
         ;;
       *)
-        selected_branches=("${merged_branches[@]}")
+        for b in "${merged_branches[@]}"; do
+          selected_branches+=("${b%" (squash-merged)"}")
+        done
         ;;
     esac
   fi
 
-  local count=0
+  local count=0 del_flag="-d"
   for b in "${selected_branches[@]}"; do
-    if git branch -d "$b" 2>/dev/null; then
+    del_flag="-d"
+    (( ${+is_squash[$b]} )) && del_flag="-D"
+    if git branch "$del_flag" "$b" 2>/dev/null; then
       printf "  \033[32m✔\033[0m Deleted %s\n" "$b"
       (( ++count ))
     else

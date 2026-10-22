@@ -81,6 +81,20 @@ _comma_record_recent() {
   printf "%s\n" "${kept[@]}" > "$cache_file" 2>/dev/null || true
 }
 
+# Emit `,wt:<name>\twt <name>\tSwitch to worktree ...` rows when inside a multi-worktree repo
+_comma_emit_worktrees() {
+  git rev-parse --is-inside-work-tree &>/dev/null || return 0
+  local -a wt_lines=(${(f)"$(git worktree list 2>/dev/null | awk '$3 != "(bare)"')"})
+  (( ${#wt_lines[@]} > 1 )) || return 0
+  local line wt_path wt_name wt_branch
+  for line in "${wt_lines[@]}"; do
+    wt_path="${line%% *}"
+    wt_name="${wt_path:t}"
+    wt_branch="${line##* }"
+    printf ",wt:%s\twt %s\tSwitch to worktree %s %s\n" "$wt_name" "$wt_name" "${wt_path/#$HOME/~}" "$wt_branch"
+  done
+}
+
 # Internal helper: generate tab-delimited catalog of comma-prefixed commands for `,`
 # Boosts recently executed commands from comma_recent to the top of the list.
 # Output format: <,short>\t<canonical>\t<description>
@@ -150,6 +164,7 @@ _comma_gen_list() {
       printf "%s\n" "${row_by_orig[$fn]}"
     fi
   done
+  _comma_emit_worktrees
 }
 
 # Interactive Dotfiles Command Palette & Comma-Prefix Launcher (, / f)
@@ -260,14 +275,14 @@ _comma_gen_list() {
   [[ -z "$orig_cmd" ]] && return 0
 
   case "$key" in
-    e) _comma_record_recent "$orig_cmd"; print -z "$orig_cmd " ;;
-    h) "$orig_cmd" --help ;;
+    e) _comma_record_recent "${orig_cmd%% *}"; print -z "$orig_cmd " ;;
+    h) "${orig_cmd%% *}" --help ;;
     y) _copy_or_print "$comma_cmd" "command: $comma_cmd" ;;
     *)
-      _comma_record_recent "$orig_cmd"
+      _comma_record_recent "${orig_cmd%% *}"
       case "$orig_cmd" in
         take|clone|wpath|wcd) print -z "$orig_cmd " ;;
-        *) "$orig_cmd" ;;
+        *) ${=orig_cmd} ;;
       esac
       ;;
   esac

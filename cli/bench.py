@@ -28,6 +28,58 @@ from cli.ui import (
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 STEP_RE = re.compile(r"\u2714\s+(.+?)\s+([0-9]+)\s*ms\s*$")
+SPARK_CHARS = "▁▂▃▄▅▆▇█"
+
+
+def render_sparkline(values: list[float]) -> str:
+    """Render a numeric series as an 8-level Unicode sparkline (▁▂▃▄▅▆▇█)."""
+    if not values:
+        return ""
+    lo, hi = min(values), max(values)
+    if hi <= lo:
+        return SPARK_CHARS[3] * len(values)
+    out: list[str] = []
+    for val in values:
+        idx = round((val - lo) / (hi - lo) * (len(SPARK_CHARS) - 1))
+        out.append(SPARK_CHARS[max(0, min(idx, len(SPARK_CHARS) - 1))])
+    return "".join(out)
+
+
+def append_bench_history(history_path: Path, entry: dict, max_entries: int = 50) -> None:
+    """Append a benchmark summary entry to `bench_history.jsonl`, keeping at most `max_entries`."""
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    lines: list[str] = []
+    if history_path.exists():
+        lines = [ln for ln in history_path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    lines.append(json.dumps(entry))
+    lines = lines[-max_entries:]
+    history_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def load_bench_history(history_path: Path) -> list[dict]:
+    """Load saved benchmark entries from `bench_history.jsonl`."""
+    if not history_path.exists():
+        return []
+    entries: list[dict] = []
+    for ln in history_path.read_text(encoding="utf-8").splitlines():
+        if not ln.strip():
+            continue
+        with contextlib.suppress(ValueError):
+            entries.append(json.loads(ln))
+    return entries
+
+
+def evaluate_bench_trend(history: list[dict]) -> tuple[str, bool, float]:
+    """Compute sparkline, >15% regression flag, and delta percentage across saved history."""
+    medians = [float(h["median_ms"]) for h in history if "median_ms" in h]
+    spark = render_sparkline(medians)
+    if len(medians) < 2:
+        return spark, False, 0.0
+    latest = medians[-1]
+    prev_window = medians[max(0, len(medians) - 6) : -1]
+    ref_med = statistics.median(prev_window)
+    diff_pct = round(((latest - ref_med) / ref_med * 100.0), 1) if ref_med > 0 else 0.0
+    return spark, diff_pct > 15.0, diff_pct
 
 
 def benchmark_tools(dotfiles: Path) -> None:
@@ -184,6 +236,16 @@ def _handle_json_output(
     if save_baseline:
         cache_dir.mkdir(parents=True, exist_ok=True)
         baseline_path.write_text(json.dumps(payload, indent=2))
+        append_bench_history(
+            cache_dir / "bench_history.jsonl",
+            {
+                "ts": time.time(),
+                "median_ms": median_ms,
+                "mean_ms": payload["mean_ms"],
+                "min_ms": payload["min_ms"],
+                "max_ms": payload["max_ms"],
+            },
+        )
 
     regression = False
     if compare_baseline and baseline_path.exists():
@@ -230,6 +292,16 @@ def _handle_cli_baseline(
             "phases_ms": {name: round(statistics.mean(step_samples[name]), 2) for name in step_order},
         }
         baseline_path.write_text(json.dumps(baseline_payload, indent=2))
+        append_bench_history(
+            cache_dir / "bench_history.jsonl",
+            {
+                "ts": baseline_payload["timestamp"],
+                "median_ms": baseline_payload["median_ms"],
+                "mean_ms": baseline_payload["mean_ms"],
+                "min_ms": baseline_payload["min_ms"],
+                "max_ms": baseline_payload["max_ms"],
+            },
+        )
         print(f"\n{C_GREEN}✔ Saved benchmark baseline ({median_ms:.1f}ms) to {baseline_path}{C_RESET}")
 
     if not compare_baseline:
@@ -270,16 +342,39 @@ def _handle_cli_baseline(
         return False
 
 
+def _render_trend_section(cache_dir: Path) -> bool:
+    """Render saved benchmark history as a sparkline and flag regressions >15%."""
+    history_path = cache_dir / "bench_history.jsonl"
+    history = load_bench_history(history_path)
+    print(f"\n{C_BOLD}6. Historical Latency Trend{C_RESET}")
+    if not history:
+        print(f"  {C_DIM}No saved history yet. Run 'dot bench --save' to record entries.{C_RESET}")
+        return False
+
+    medians = [float(h["median_ms"]) for h in history if "median_ms" in h]
+    spark, reg, diff_pct = evaluate_bench_trend(history)
+    recent_vals = ", ".join(f"{m:.0f}ms" for m in medians[-8:])
+    status = (
+        f"{C_RED}✖ REGRESSION ({diff_pct:+.1f}% > 15%){C_RESET}"
+        if reg
+        else f"{C_GREEN}✔ STABLE ({diff_pct:+.1f}%){C_RESET}"
+    )
+    print(f"  {C_MAUVE}{spark}{C_RESET}  ({len(medians)} runs; recent: {C_CYAN}{recent_vals}{C_RESET}) │ {status}")
+    return reg
+
+
 def run_bench(
     iterations: int = 5,
     test_prompt: bool = False,
     test_tools: bool = False,
     test_all: bool = False,
     json_output: bool = False,
-    save_baseline: bool = False,
-    compare_baseline: bool = False,
+    **kwargs: bool,
 ) -> int:
     """Run the interactive Zsh startup benchmark and optional tool/prompt suites."""
+    save_baseline = bool(kwargs.get("save_baseline", False))
+    compare_baseline = bool(kwargs.get("compare_baseline", False))
+    show_trend = bool(kwargs.get("show_trend", False))
     dotfiles = get_dotfiles_dir()
 
     if not shutil.which("zsh"):
@@ -313,6 +408,10 @@ def run_bench(
     regression = _handle_cli_baseline(
         cache_dir, baseline_path, run_totals, (step_order, step_samples), iterations, save_baseline, compare_baseline
     )
+
+    if show_trend or test_all:
+        trend_reg = _render_trend_section(cache_dir)
+        regression = regression or trend_reg
 
     print()
     return 1 if regression else 0

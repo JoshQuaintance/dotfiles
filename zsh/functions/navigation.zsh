@@ -1,14 +1,19 @@
-# Create directory or file parent and cd into it (take)
+# Create directory or file parent and cd into it, or clone a Git URL (take)
 take() {
   if [ -z "$1" ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
-    printf "Usage: take <dir/|file|path/to/name>\n"
+    printf "Usage: take <dir/|file|path/to/name|git-url>\n"
     printf "  take path/to/dir/      → Create directory and cd into it\n"
     printf "  take path/to/file.ext  → Create parent directory, cd into it, and touch file\n"
+    printf "  take https://.../r.git → Clone repository via 'clone' and cd into it\n"
     printf "  take my-project        → Create directory and cd into it\n"
     return 0
   fi
 
   local target="$1"
+  if [[ "$target" =~ ^(https?://|git@|ssh://) ]]; then
+    clone "$@"
+    return $?
+  fi
   local base="${target:t}"
 
   # 1. Existing file or directory
@@ -408,30 +413,42 @@ _proj_list_repos() {
   fi
 }
 
-# Sort discovered projects: boost zoxide frecent repos to top when available, then alphabetical
+# Sort discovered projects: boost zoxide frecent repos to top when available, then alphabetical.
+# Pass -r to filter only recently visited/modified repositories (last 7 days).
 _proj_rank_repos() {
+  local recent_only=false
+  [[ "$1" == "-r" ]] && recent_only=true
   local -a in_rows=(${(f)"$(cat)"})
   [[ ${#in_rows[@]} -eq 0 ]] && return 0
-  if ! command -v zoxide &>/dev/null; then
-    printf "%s\n" "${in_rows[@]}" | sort -f -k1,1
-    return 0
-  fi
 
   local -A z_ranks=()
-  local rk=0 zpath
-  while IFS= read -r zpath; do
-    [[ -n "$zpath" ]] || continue
-    (( ++rk ))
-    [[ -z "${z_ranks[$zpath]:-}" ]] && z_ranks[$zpath]=$rk
-  done < <(zoxide query -l 2>/dev/null)
+  if command -v zoxide &>/dev/null; then
+    local rk=0 zpath
+    while IFS= read -r zpath; do
+      [[ -n "$zpath" ]] || continue
+      (( ++rk ))
+      [[ -z "${z_ranks[$zpath]:-}" ]] && z_ranks[$zpath]=$rk
+    done < <(zoxide query -l 2>/dev/null)
+  fi
 
-  local line pth rank
-  local -a ranked=()
+  local any_in_zoxide=false line pth rank
   for line in "${in_rows[@]}"; do
     pth="${line##*$'\t'}"
+    [[ -n "${z_ranks[$pth]:-}" ]] && { any_in_zoxide=true; break; }
+  done
+
+  local -a ranked=() m_recent=()
+  for line in "${in_rows[@]}"; do
+    pth="${line##*$'\t'}"
+    if [[ "$recent_only" == true ]]; then
+      m_recent=("$pth"(Nm-7) "$pth/.git"(Nm-7))
+      (( ${#m_recent[@]} == 0 )) && continue
+      [[ "$any_in_zoxide" == true && -z "${z_ranks[$pth]:-}" ]] && continue
+    fi
     rank="${z_ranks[$pth]:-999999}"
     ranked+=("${(l:6::0:)rank}"$'\t'"${line}")
   done
+  (( ${#ranked[@]} == 0 )) && return 0
   printf "%s\n" "${ranked[@]}" | sort -k1,1n -k2,2f | cut -f2-
 }
 
@@ -487,7 +504,8 @@ proj() {
     printf "  proj / fp          Browse all Git repositories in ~/Codes & ~/.dotfiles\n"
     printf "  proj <name>        Jump directly to <name> (or filter in FZF if multiple match)\n"
     printf "  proj -l, --list    Print tab-separated table of discovered projects\n"
-    printf "  proj -r, --refresh Force re-scan and refresh cached project list\n"
+    printf "  proj -r, --recent  Filter to repositories active/visited in the last 7 days\n"
+    printf "  proj -f, --refresh Force re-scan and refresh cached project list\n"
     printf "  Enter              cd into selected repository\n"
     printf "  e                  Open repository in \$EDITOR (nvim)\n"
     printf "  l                  Open lazygit in selected repository\n"
@@ -496,21 +514,19 @@ proj() {
     return 0
   fi
 
-  local list_only=false force_refresh=false
+  local list_only=false force_refresh=false recent_only=false
+  local -a list_flags=() rank_flags=()
   while [[ "$1" == -* ]]; do
     case "$1" in
       -l|--list) list_only=true; shift ;;
-      -r|--refresh) force_refresh=true; shift ;;
+      -r|--recent) recent_only=true; rank_flags+=("-r"); shift ;;
+      -f|--refresh) force_refresh=true; list_flags+=("-f"); shift ;;
       *) break ;;
     esac
   done
 
   local rows
-  if [[ "$force_refresh" == true ]]; then
-    rows="$(_proj_list_repos -f | _proj_rank_repos)"
-  else
-    rows="$(_proj_list_repos | _proj_rank_repos)"
-  fi
+  rows="$(_proj_list_repos "${list_flags[@]}" | _proj_rank_repos "${rank_flags[@]}")"
   if [[ -z "$rows" ]]; then
     printf "\033[33mNo Git repositories found in %s.\033[0m\n" "${DOTFILES_PROJECTS_DIR:-$HOME/Codes}" >&2
     return 1

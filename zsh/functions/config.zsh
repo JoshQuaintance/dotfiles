@@ -352,14 +352,20 @@ _dot() {
       'backup:Snapshot untracked local machine overrides & state'
       'restore:Restore local machine overrides & state from snapshot'
       'env:Audit environment variables, PATH precedence & shadowed binaries'
+      'profile:Profile Zsh startup functions using zsh/zprof'
+      'new-fn:Scaffold a new Zsh function, registry entry, and unit test stub'
+      'lint-help:Audit Zsh function doc headers, --help exit-0, and <=120 line bounds'
     )
     _describe 'dot command' subcommands
   else
     case "${words[2]}" in
-      status) flags=('-j:Output workstation status as JSON' '--json:Output workstation status as JSON') ;;
+      status|lint-help) flags=('-j:Output as JSON' '--json:Output as JSON') ;;
+      profile) flags=('-n:Number of top functions' '--top:Number of top functions' '-j:Output as JSON' '--json:Output as JSON') ;;
+      new-fn) flags=('-m:Target module name' '--module:Target module name' '-d:Function description' '--desc:Function description') ;;
       doctor|health)
         flags=(
           '--fix:Auto-repair broken or missing symlinks' '-f:Auto-repair broken or missing symlinks'
+          '--strict:Exit 2 when warnings are present'
           '--json:Output health check report as JSON' '-j:Output health check report as JSON'
         )
         ;;
@@ -372,6 +378,7 @@ _dot() {
           '-a:Run full benchmark suite (startup + tools + prompt)' '--all:Run full benchmark suite (startup + tools + prompt)'
           '-s:Save current startup benchmark as baseline' '--save:Save current startup benchmark as baseline'
           '-c:Compare benchmark against saved baseline' '--compare:Compare benchmark against saved baseline'
+          '--trend:Render saved benchmark history as a sparkline'
           '-j:Output startup benchmark results as JSON' '--json:Output startup benchmark results as JSON'
         )
         ;;

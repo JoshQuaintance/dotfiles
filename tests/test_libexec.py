@@ -12,8 +12,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from cli.doctor import orphaned_zsh_bytecode
+from cli.bench import append_bench_history, evaluate_bench_trend, load_bench_history, render_sparkline
+from cli.doctor import DoctorReport, compute_doctor_exit_code, orphaned_zsh_bytecode
 from cli.env_audit import run_env_audit
+from cli.new_fn import scaffold_new_function
+from cli.profile import parse_zprof_output
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LIBEXEC_DIR = REPO_ROOT / "libexec"
@@ -201,6 +204,80 @@ class TestClipAndStrdiffAndWslLibexec(unittest.TestCase):
         self.assertIn("env", data)
         self.assertIn("path_summary", data)
         self.assertIn("binaries", data)
+
+    def test_doctor_strict_exit_codes(self) -> None:
+        """Verify `compute_doctor_exit_code` returns 0, 1, or 2 under normal and strict modes."""
+        rep = DoctorReport()
+        with contextlib.redirect_stdout(io.StringIO()):
+            rep.ok("check", "ok")
+            self.assertEqual(compute_doctor_exit_code(rep, strict=False), 0)
+            self.assertEqual(compute_doctor_exit_code(rep, strict=True), 0)
+
+            rep.warn("warn-check", "minor")
+            self.assertEqual(compute_doctor_exit_code(rep, strict=False), 0)
+            self.assertEqual(compute_doctor_exit_code(rep, strict=True), 2)
+
+            rep.fail("fail-check", "broken")
+            self.assertEqual(compute_doctor_exit_code(rep, strict=False), 1)
+            self.assertEqual(compute_doctor_exit_code(rep, strict=True), 1)
+
+    def test_bench_history_cap_and_sparkline_trend(self) -> None:
+        """Verify `bench_history.jsonl` caps at 50 entries and detects >15% regressions."""
+        with tempfile.TemporaryDirectory() as tmp:
+            hist_path = Path(tmp) / "bench_history.jsonl"
+            for i in range(60):
+                append_bench_history(hist_path, {"ts": float(i), "median_ms": 100.0}, max_entries=50)
+            loaded = load_bench_history(hist_path)
+            self.assertEqual(len(loaded), 50)
+            spark, reg, _ = evaluate_bench_trend(loaded)
+            self.assertEqual(len(spark), 50)
+            self.assertFalse(reg)
+
+            append_bench_history(hist_path, {"ts": 61.0, "median_ms": 135.0}, max_entries=50)
+            spark2, reg2, diff_pct = evaluate_bench_trend(load_bench_history(hist_path))
+            self.assertTrue(reg2)
+            self.assertEqual(diff_pct, 35.0)
+            self.assertTrue(spark2.endswith("█"))
+            self.assertEqual(render_sparkline([10.0, 20.0, 30.0]), "▁▅█")
+
+    def test_parse_zprof_output_and_scaffold_new_fn(self) -> None:
+        """Verify `parse_zprof_output` and `scaffold_new_function`."""
+        fixture = (
+            "num  calls                time                       self            name\n"
+            "-----------------------------------------------------------------------------------\n"
+            " 1)    1          18.50    18.50   46.25%     12.00    12.00   30.00%  compinit\n"
+            " 2)    3           9.00     3.00   22.50%      9.00     3.00   22.50%  _comma_register\n"
+            "\n"
+            "-----------------------------------------------------------------------------------\n"
+        )
+        rows = parse_zprof_output(fixture)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["name"], "compinit")
+        self.assertEqual(rows[0]["total_ms"], 18.5)
+        self.assertEqual(rows[1]["calls"], 3)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "zsh" / "functions").mkdir(parents=True)
+            (root / "tests" / "zsh").mkdir(parents=True)
+            (root / "zsh" / "functions.zsh").write_text(
+                "typeset -ga DOTFILES_FUNCTIONS=(\n  take up\n)\n",
+                encoding="utf-8",
+            )
+            ok, _msg = scaffold_new_function(
+                name="myhelper",
+                module="custom",
+                desc="Sample helper",
+                dotfiles=root,
+                regen_docs=False,
+            )
+            self.assertTrue(ok)
+            self.assertIn("myhelper", (root / "zsh" / "functions.zsh").read_text(encoding="utf-8"))
+            self.assertIn("myhelper() {", (root / "zsh" / "functions" / "custom.zsh").read_text(encoding="utf-8"))
+            self.assertIn("test_myhelper_help_returns_zero", (root / "tests" / "zsh" / "test_custom.zsh").read_text(encoding="utf-8"))
+
+            dup_ok, _ = scaffold_new_function(name="myhelper", module="custom", dotfiles=root, regen_docs=False)
+            self.assertFalse(dup_ok)
 
 
 if __name__ == "__main__":

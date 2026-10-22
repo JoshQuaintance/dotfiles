@@ -8,6 +8,9 @@ from cli.bench import run_bench
 from cli.clean import run_clean
 from cli.doctor import run_doctor
 from cli.env_audit import run_env_audit
+from cli.lint_help import run_lint_help
+from cli.new_fn import run_new_fn
+from cli.profile import run_profile
 from cli.prompt import run_prompt_command
 from cli.prune import run_prune
 from cli.status import run_status
@@ -37,6 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run system health checks and audit symlinks",
     )
     parser_doctor.add_argument("-f", "--fix", action="store_true", help="Automatically repair broken or missing symlinks")
+    parser_doctor.add_argument("--strict", action="store_true", help="Exit 2 when warnings are present (with 0 failures)")
     parser_doctor.add_argument("-j", "--json", action="store_true", help="Output health check report as JSON")
 
     parser_env = subparsers.add_parser(
@@ -61,6 +65,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser_bench.add_argument("-a", "--all", action="store_true", help="Run full benchmark suite (startup + tools + prompt)")
     parser_bench.add_argument("-s", "--save", action="store_true", help="Save benchmark results as performance baseline")
     parser_bench.add_argument("-c", "--compare", action="store_true", help="Compare startup latency against saved baseline")
+    parser_bench.add_argument("--trend", action="store_true", help="Render saved benchmark history as a sparkline and flag regressions")
     parser_bench.add_argument("-j", "--json", action="store_true", help="Output startup benchmark results as JSON")
 
     # 2. Synchronization, Updates & Symlinks (sync, update, link, prompt)
@@ -136,18 +141,50 @@ def _add_maintenance_subparsers(subparsers: argparse._SubParsersAction) -> None:
     parser_restore.add_argument("archive", nargs="?", help="Backup archive path (default: most recent archive)")
     parser_restore.add_argument("-n", "--dry-run", action="store_true", help="Preview files that would be restored without extracting")
 
+    parser_profile = subparsers.add_parser(
+        "profile",
+        help="Profile Zsh startup functions using zsh/zprof",
+    )
+    parser_profile.add_argument("-n", "--top", type=int, default=15, help="Number of top functions to display (default: 15)")
+    parser_profile.add_argument("-j", "--json", action="store_true", help="Output profiler results as JSON")
+
+    parser_new_fn = subparsers.add_parser(
+        "new-fn",
+        help="Scaffold a new Zsh function with header doc, --help guard, and test stub",
+    )
+    parser_new_fn.add_argument("name", help="Name of the new Zsh function")
+    parser_new_fn.add_argument("-m", "--module", default="custom", help="Target module in zsh/functions/<module>.zsh")
+    parser_new_fn.add_argument("-d", "--desc", default="", help="One-line function description")
+
+    parser_lint_help = subparsers.add_parser(
+        "lint-help",
+        help="Audit Zsh function doc headers, --help exit-0, and <=120 line bounds",
+    )
+    parser_lint_help.add_argument("-j", "--json", action="store_true", help="Output audit results as JSON")
+
 
 def _dispatch_command(args: argparse.Namespace) -> int:
     """Dispatch parsed CLI arguments to the corresponding subcommand runner."""
     cmd = args.subcommand or "status"
     handlers = {
         "status": lambda a: run_status(json_output=getattr(a, "json", False)),
-        "doctor": lambda a: run_doctor(fix=a.fix, json_output=getattr(a, "json", False)),
-        "health": lambda a: run_doctor(fix=a.fix, json_output=getattr(a, "json", False)),
+        "doctor": lambda a: run_doctor(
+            fix=a.fix,
+            json_output=getattr(a, "json", False),
+            strict=getattr(a, "strict", False),
+        ),
+        "health": lambda a: run_doctor(
+            fix=a.fix,
+            json_output=getattr(a, "json", False),
+            strict=getattr(a, "strict", False),
+        ),
         "link": lambda a: run_doctor(fix=a.fix),
         "env": lambda a: run_env_audit(show_all_path=a.all, json_output=getattr(a, "json", False)),
         "test": lambda _a: run_tests(),
         "prompt": lambda a: run_prompt_command(subcommand=a.action, value=a.engine),
+        "profile": lambda a: run_profile(top_n=a.top, json_output=getattr(a, "json", False)),
+        "new-fn": lambda a: run_new_fn(name=a.name, module=a.module, desc=a.desc),
+        "lint-help": lambda a: run_lint_help(json_output=getattr(a, "json", False)),
         "bench": lambda a: run_bench(
             iterations=a.iterations,
             test_prompt=a.prompt,
@@ -156,6 +193,7 @@ def _dispatch_command(args: argparse.Namespace) -> int:
             json_output=getattr(a, "json", False),
             save_baseline=getattr(a, "save", False),
             compare_baseline=getattr(a, "compare", False),
+            show_trend=getattr(a, "trend", False),
         ),
         "sync": lambda a: run_sync(
             message=a.message,

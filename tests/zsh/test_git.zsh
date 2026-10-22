@@ -83,3 +83,45 @@ test_gco_outside_git_repo_fails() {
   (( rc != 0 )) || fail "expected non-zero exit code outside git repo"
   assert_contains "$out" "not a git repository"
 }
+
+test_gbclean_detects_and_deletes_squash_merged_branch() {
+  git init -q sq-repo
+  cd sq-repo
+  git branch -M main
+  print "base" > file.txt
+  git add file.txt && git commit -q -m "initial"
+
+  git checkout -q -b feat/squash-me
+  print "step 1" >> file.txt
+  git commit -q -am "feat commit 1"
+  print "step 2" >> file.txt
+  git commit -q -am "feat commit 2"
+
+  git checkout -q main
+  git merge -q --squash feat/squash-me
+  git commit -q -m "feat: squashed"
+
+  local out
+  out="$(printf "y\n" | gbclean | strip_ansi)"
+  assert_contains "$out" "feat/squash-me (squash-merged)"
+  assert_contains "$out" "Deleted feat/squash-me"
+
+  local branches
+  branches="$(git branch --list feat/squash-me)"
+  assert_eq "" "$branches"
+}
+
+test_git_pickers_help_and_gsearch() {
+  git init -q search-repo
+  cd search-repo
+  git commit --allow-empty -q -m "feat: needle-token commit"
+
+  local s_out
+  s_out="$(gsearch needle-token)"
+  assert_contains "$s_out" "needle-token"
+
+  gl --help >/dev/null || fail "gl --help failed"
+  gstash --help >/dev/null || fail "gstash --help failed"
+  ga --help >/dev/null || fail "ga --help failed"
+  gfile --help >/dev/null || fail "gfile --help failed"
+}

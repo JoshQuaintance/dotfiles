@@ -923,20 +923,38 @@ _gwtclean_select_candidates() {
   return 0
 }
 
+# Populate caller's `candidates` array with "path|branch" entries whose remote tracking branch is gone
+_gwtclean_collect_candidates() {
+  local main_worktree="$1" _wt_path="" _wt_branch="" line=""
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      worktree\ *)
+        _gwtclean_is_gone "$_wt_path" "$_wt_branch" "$main_worktree" && candidates+=("${_wt_path}|${_wt_branch}")
+        _wt_path="${line#worktree }"; _wt_branch="" ;;
+      branch\ refs/heads/*) _wt_branch="${line#branch refs/heads/}" ;;
+      "")
+        _gwtclean_is_gone "$_wt_path" "$_wt_branch" "$main_worktree" && candidates+=("${_wt_path}|${_wt_branch}")
+        _wt_path=""; _wt_branch="" ;;
+    esac
+  done <<< "$(git worktree list --porcelain)"
+  _gwtclean_is_gone "$_wt_path" "$_wt_branch" "$main_worktree" && candidates+=("${_wt_path}|${_wt_branch}")
+}
+
 # Git Worktree Clean / Prune (gwtclean / gwtprune / gwtc)
 # Prunes worktrees whose remote upstream branch has been deleted on the remote
 gwtclean() {
-  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    printf "Usage: gwtclean [-f|--force]\n"
-    printf "  Prunes worktrees whose remote upstream branch has been deleted on the remote\n"
-    return 0
-  fi
+  local force=false dry_run=false arg
+  for arg in "$@"; do
+    case "$arg" in
+      -h|--help)
+        printf "Usage: gwtclean [-f|--force] [-n|--dry-run]\n"
+        printf "  Prunes worktrees whose remote upstream branch has been deleted on the remote\n"
+        return 0 ;;
+      -f|--force) force=true ;;
+      -n|--dry-run) dry_run=true ;;
+    esac
+  done
   _require_git_repo || return 1
-
-  local force=false
-  if [[ "$1" == "-f" || "$1" == "--force" ]]; then
-    force=true
-  fi
 
   local main_worktree
   main_worktree="$(_git_main_root)"
@@ -948,36 +966,23 @@ gwtclean() {
   }
 
   local -a candidates=()
-  local _wt_path="" _wt_branch="" line=""
-
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in
-      worktree\ *)
-        if _gwtclean_is_gone "$_wt_path" "$_wt_branch" "$main_worktree"; then
-          candidates+=("${_wt_path}|${_wt_branch}")
-        fi
-        _wt_path="${line#worktree }"
-        _wt_branch=""
-        ;;
-      branch\ refs/heads/*)
-        _wt_branch="${line#branch refs/heads/}"
-        ;;
-      "")
-        if _gwtclean_is_gone "$_wt_path" "$_wt_branch" "$main_worktree"; then
-          candidates+=("${_wt_path}|${_wt_branch}")
-        fi
-        _wt_path=""
-        _wt_branch=""
-        ;;
-    esac
-  done <<< "$(git worktree list --porcelain)"
-  if _gwtclean_is_gone "$_wt_path" "$_wt_branch" "$main_worktree"; then
-    candidates+=("${_wt_path}|${_wt_branch}")
-  fi
+  _gwtclean_collect_candidates "$main_worktree"
 
   if [ "${#candidates[@]}" -eq 0 ]; then
     printf "\033[32m✔ No worktrees with deleted remote branches found.\033[0m\n"
-    git worktree prune
+    [ "$dry_run" = false ] && git worktree prune
+    return 0
+  fi
+
+  if [ "$dry_run" = true ]; then
+    printf "\n\033[1;33m[DRY-RUN] Would prune %d worktree(s):\033[0m\n" "${#candidates[@]}"
+    local c cp cb cdirty
+    for c in "${candidates[@]}"; do
+      cp="${c%%|*}"; cb="${c##*|}"
+      cdirty=""
+      [ -n "$(git -C "$cp" status --porcelain 2>/dev/null)" ] && cdirty=" (dirty)"
+      printf "  • %s [%s]%s\n" "$cp" "$cb" "$cdirty"
+    done
     return 0
   fi
 

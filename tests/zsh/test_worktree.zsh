@@ -205,3 +205,31 @@ test_gwts_aligns_columns_with_long_worktree_names_and_mixed_sync_states() {
   assert_contains "$json_out" '"name":"qa"'
   assert_contains "$json_out" '"branch":"feat/submittal-index-sections"'
 }
+
+test_gwtclean_dry_run_previews_without_removing() {
+  git init -q --bare origin.git
+  git clone -q origin.git main-wt
+  cd main-wt
+  git commit --allow-empty -q -m "root"
+  git branch -M main
+  git push -q -u origin main
+
+  git checkout -q -b feat/gone-branch
+  git commit --allow-empty -q -m "feat work"
+  git push -q -u origin feat/gone-branch
+  git checkout -q main
+
+  git worktree add -q ../gone-wt feat/gone-branch
+  git push -q origin --delete feat/gone-branch
+
+  local out
+  out="$(gwtclean --dry-run | strip_ansi)"
+  assert_contains "$out" "[DRY-RUN] Would prune 1 worktree(s):"
+  assert_contains "$out" "feat/gone-branch"
+  assert_dir_exists "../gone-wt"
+
+  wt --help >/dev/null || fail "wt --help failed"
+  local palette_rows
+  palette_rows="$(_comma_gen_list)"
+  assert_contains "$palette_rows" $',wt:gone-wt\twt gone-wt\t'
+}

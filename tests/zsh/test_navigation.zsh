@@ -293,3 +293,26 @@ test_comma_recent_boosting_path_autosuggest_and_fenv_masking() {
   assert_contains "$revealed_out" "s3cr3t-v4lu3-999"
   unset SUPER_SECRET_API_TOKEN
 }
+
+test_take_git_url_and_proj_recent_mode() {
+  local cloned_arg=""
+  cloned_arg="$(
+    clone() { echo "CLONED:$*"; }
+    take "https://github.com/example/sample.git"
+  )"
+  assert_eq "CLONED:https://github.com/example/sample.git" "$cloned_arg"
+
+  local root="$HOME/Codes_Recent"
+  mkdir -p "$root/fresh-repo"
+  git -C "$root/fresh-repo" init -q -b main
+  local rec_out
+  rec_out="$(DOTFILES_PROJECTS_DIR="$root" proj -l -r)"
+  assert_contains "$rec_out" "fresh-repo"
+
+  conf --help >/dev/null || fail "conf --help failed"
+  dotbranch --help >/dev/null || fail "dotbranch --help failed"
+  fkill --help >/dev/null || fail "fkill --help failed"
+  fcon --help >/dev/null || fail "fcon --help failed"
+  fssh --help >/dev/null || fail "fssh --help failed"
+  cheath --help >/dev/null || fail "cheath --help failed"
+}

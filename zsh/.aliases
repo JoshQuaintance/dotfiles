@@ -81,9 +81,9 @@ alias npmi-clean="rm -rf node_modules package-lock.json && npm install" # Wipe n
 # ------------------------------------------------------------------------------
 # Shell Reload, Notifications & Network Info
 # ------------------------------------------------------------------------------
+unalias reload 2>/dev/null || true
 alias sz="reload"                 # Replace current shell with a fresh login Zsh process
 alias src="source ~/.zshrc && echo '✔ ~/.zshrc sourced!'" # Reload ~/.zshrc in current shell
-alias reload="exec zsh -l"        # Replace current shell with a fresh login Zsh process
 alias alert="notify"              # Send persistent desktop alert notification
 alias myip="curl -s https://icanhazip.com" # Print public external IP address
 alias localip="ipconfig getifaddr \$(route -n get default 2>/dev/null | awk '/interface:/{print \$2}') 2>/dev/null || ipconfig getifaddr en0 2>/dev/null || ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if(\$i==\"src\" && i<NF){print \$(i+1); found=1; exit}} END{if(!found) exit 1}' || hostname -I 2>/dev/null | awk 'NF{print \$1; found=1; exit} END{if(!found) exit 1}'" # Print local LAN IP address

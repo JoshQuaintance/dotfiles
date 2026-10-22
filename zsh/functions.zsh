@@ -37,22 +37,25 @@ typeset -ga DOTFILES_FUNCTIONS=(
   fa fenv cheath fjq snip
 
   # Shell Hooks & Diff Utilities
-  toggle-autols toggle-autonotify notify strdiff
+  toggle-autols toggle-autonotify notify strdiff reload
 )
 
 # Canonical subcommands and flags for the `dot` CLI.
 # Consumed by `comma.zsh` (suggestions & syntax highlighting) and `config.zsh` (tab completions).
 typeset -ga DOTFILES_DOT_SUBCOMMANDS=(
-  status doctor health test bench sync clean prune update link prompt backup restore env help
+  status doctor health test bench profile new-fn lint-help sync clean prune update link prompt backup restore env help
 )
 
 typeset -gA DOTFILES_DOT_FLAGS=(
-  status   "--json -j --help"
-  doctor   "--fix -f --json -j --help"
-  health   "--fix -f --json -j --help"
-  link     "--fix -f --help"
-  bench    "--iterations -n --prompt -p --tools -t --all -a --save -s --compare -c --json -j --help"
-  sync     "--message -m --dry-run -n --no-push --help"
+  status     "--json -j --help"
+  doctor     "--fix -f --strict --json -j --help"
+  health     "--fix -f --strict --json -j --help"
+  link       "--fix -f --help"
+  bench      "--iterations -n --prompt -p --tools -t --all -a --save -s --compare -c --trend --json -j --help"
+  profile    "--top -n --json -j --help"
+  new-fn     "--module -m --desc -d --help"
+  lint-help  "--json -j --help"
+  sync       "--message -m --dry-run -n --no-push --help"
   clean    "--dry-run -n --all -a --builds -b --help"
   prune    "--dry-run -n --orphans -o --yes -y --help"
   update   "--check -c --diff -d --yes -y --all -a --tools -t --test --no-prune --help"

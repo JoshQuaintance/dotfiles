@@ -1,3 +1,6 @@
+# Optional startup profiler hook (activated via ZSH_PROFILE=1 or `dot profile`)
+[[ -n "${ZSH_PROFILE:-}" ]] && zmodload zsh/zprof
+
 # UTF-8 locale setup lives in .zshenv (always sourced first); re-source it only if ~/.zshenv wasn't linked
 if [[ -z "$LANG" || "$LANG" == (C|POSIX) ]]; then
     source "${${(%):-%x}:A:h}/.zshenv"
@@ -403,3 +406,5 @@ unset _dot_cache_dir
 # ==========================================
 [ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
 [ -f "$HOME/.aliases.local" ] && source "$HOME/.aliases.local"
+
+[[ -n "${ZSH_PROFILE:-}" ]] && zprof
