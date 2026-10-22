@@ -1,5 +1,6 @@
 """`dot env`: audit environment variables, `$PATH` precedence, and shadowed binaries."""
 
+import json
 import os
 import shutil
 from pathlib import Path
@@ -113,12 +114,20 @@ def _audit_env_vars() -> None:
         print(format_row("SSH_AUTH_SOCK", "not set (no active SSH agent)", f"{C_BLUE}➜{C_RESET}"))
 
 
+def _broken_local_bin_links() -> list[str]:
+    """Return names of broken symlinks inside ~/.local/bin."""
+    local_bin = Path.home() / ".local" / "bin"
+    if not local_bin.is_dir():
+        return []
+    return [p.name for p in local_bin.iterdir() if p.is_symlink() and not p.exists()]
+
+
 def _audit_local_bin_links() -> None:
     """Check ~/.local/bin for broken symlinks."""
     local_bin = Path.home() / ".local" / "bin"
     if not local_bin.is_dir():
         return
-    broken = [p.name for p in local_bin.iterdir() if p.is_symlink() and not p.exists()]
+    broken = _broken_local_bin_links()
     print(f"\n{C_BOLD}4. Local Binary Directory (~/.local/bin){C_RESET}")
     if broken:
         print(format_row("Broken symlinks in ~/.local/bin", ", ".join(broken[:6]), f"{C_YELLOW}⚠{C_RESET}"))
@@ -126,16 +135,43 @@ def _audit_local_bin_links() -> None:
         print(format_row("~/.local/bin symlinks", "0 broken links", f"{C_GREEN}✔{C_RESET}"))
 
 
-def run_env_audit(show_all_path: bool = False) -> int:
+def run_env_audit(show_all_path: bool = False, json_output: bool = False) -> int:
     """Run a cross-platform environment variable, $PATH, and binary shadowing audit."""
-    print_header("Dotfiles Environment \u2014 $PATH & Binary Shadowing Audit")
-    _audit_env_vars()
-
-    print(f"\n{C_BOLD}2. $PATH Precedence & Hygiene{C_RESET}")
     path_rows = audit_path_entries()
     dups = [r for r in path_rows if r[1] == "duplicate"]
     missing = [r for r in path_rows if r[1] == "missing"]
     active = [r for r in path_rows if r[1] == "ok"]
+
+    if json_output:
+        payload = {
+            "env": {
+                "EDITOR": os.environ.get("EDITOR", "nvim"),
+                "SHELL": os.environ.get("SHELL", "unknown"),
+                "LANG": os.environ.get("LANG") or os.environ.get("LC_ALL") or "unset",
+                "TERM": os.environ.get("TERM", "unknown"),
+                "COLORTERM": os.environ.get("COLORTERM", "none"),
+                "DOTFILES_DIR": str(get_dotfiles_dir()),
+                "SSH_AUTH_SOCK": os.environ.get("SSH_AUTH_SOCK"),
+            },
+            "path_summary": {
+                "active": len(active),
+                "duplicates": len(dups),
+                "missing": len(missing),
+            },
+            "path_entries": [
+                {"entry": label, "status": kind, "detail": detail}
+                for label, kind, detail in path_rows
+            ],
+            "binaries": dict(find_binary_resolutions()),
+            "broken_local_bin_links": _broken_local_bin_links(),
+        }
+        print(json.dumps(payload, indent=2))
+        return 0
+
+    print_header("Dotfiles Environment \u2014 $PATH & Binary Shadowing Audit")
+    _audit_env_vars()
+
+    print(f"\n{C_BOLD}2. $PATH Precedence & Hygiene{C_RESET}")
 
     print(
         format_row(

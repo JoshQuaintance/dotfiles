@@ -1,5 +1,8 @@
 """`dot bench`: benchmark interactive Zsh startup latency and modern CLI tool speedups."""
 
+import contextlib
+import io
+import json
 import os
 import re
 import shutil
@@ -162,15 +165,34 @@ def run_bench(
     test_prompt: bool = False,
     test_tools: bool = False,
     test_all: bool = False,
+    json_output: bool = False,
 ) -> int:
     """Run the interactive Zsh startup benchmark and optional tool/prompt suites."""
     dotfiles = get_dotfiles_dir()
 
     if not shutil.which("zsh"):
-        print(f"{C_RED}{ICON_FAIL} zsh binary not found in PATH.{C_RESET}")
+        if json_output:
+            print(json.dumps({"error": "zsh binary not found in PATH"}))
+        else:
+            print(f"{C_RED}{ICON_FAIL} zsh binary not found in PATH.{C_RESET}")
         return 1
 
     iterations = max(1, min(iterations, 25))
+    if json_output:
+        with contextlib.redirect_stdout(io.StringIO()):
+            run_totals, step_order, step_samples = _measure_boot_runs(dotfiles, iterations)
+        payload = {
+            "iterations": iterations,
+            "median_ms": round(statistics.median(run_totals), 2),
+            "min_ms": round(min(run_totals), 2),
+            "mean_ms": round(statistics.mean(run_totals), 2),
+            "max_ms": round(max(run_totals), 2),
+            "runs_ms": [round(r, 2) for r in run_totals],
+            "phases_ms": {name: round(statistics.mean(step_samples[name]), 2) for name in step_order},
+        }
+        print(json.dumps(payload, indent=2))
+        return 0
+
     print_header("Dotfiles Unified Benchmark Suite — Profiler & Diagnostics")
 
     run_totals, step_order, step_samples = _measure_boot_runs(dotfiles, iterations)

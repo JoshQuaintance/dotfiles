@@ -517,6 +517,28 @@ def check_locale(report: DoctorReport):
             report.warn("Zsh multibyte parsing", "Single-byte mode active; check ~/.zshenv")
 
 
+def _check_ssh_agent_and_keys(report: DoctorReport) -> None:
+    """Audit SSH agent reachability and local `~/.ssh` key pair presence."""
+    # ssh-add exit codes: 0 = keys loaded, 1 = agent running without keys, 2 = no agent
+    code, _, _ = run_cmd(["ssh-add", "-l"])
+    if code == 0:
+        report.ok(LBL_SSH_AGENT, "Running with keys loaded")
+    elif code == 1:
+        report.ok(LBL_SSH_AGENT, "Running (keys load on first use)")
+    else:
+        report.warn(LBL_SSH_AGENT, "Not reachable; open a new shell to start the shared agent")
+
+    ssh_dir = Path.home() / ".ssh"
+    key_candidates = ("id_ed25519", "id_rsa", "id_ecdsa", "id_ed25519_sk")
+    found_key = next((k for k in key_candidates if (ssh_dir / k).is_file() or (ssh_dir / f"{k}.pub").is_file()), None)
+    if found_key:
+        report.ok("SSH key pair", f"~/.ssh/{found_key}")
+    elif code == 0:
+        report.ok("SSH key pair", "Managed by external/hardware SSH agent")
+    else:
+        report.warn("SSH key pair", "No key in ~/.ssh (run 'ssh-keygen -t ed25519')")
+
+
 def check_ssh(report: DoctorReport, dotfiles: Path, fix: bool = False):
     """Audit `~/.ssh/config` shared defaults include, multiplexing sockets, and agent status."""
     print(f"\n{C_BOLD}6. SSH Agent & Defaults{C_RESET}")
@@ -549,14 +571,7 @@ def check_ssh(report: DoctorReport, dotfiles: Path, fix: bool = False):
     else:
         report.warn(LBL_SSH_SOCKETS, "Missing ControlPath socket directory. Run with --fix")
 
-    # ssh-add exit codes: 0 = keys loaded, 1 = agent running without keys, 2 = no agent
-    code, _, _ = run_cmd(["ssh-add", "-l"])
-    if code == 0:
-        report.ok(LBL_SSH_AGENT, "Running with keys loaded")
-    elif code == 1:
-        report.ok(LBL_SSH_AGENT, "Running (keys load on first use)")
-    else:
-        report.warn(LBL_SSH_AGENT, "Not reachable; open a new shell to start the shared agent")
+    _check_ssh_agent_and_keys(report)
 
 
 # gpg-agent forgets passphrases after 10 minutes by default, so signing from editors and TUIs
@@ -591,24 +606,37 @@ def check_gpg_cache(report: DoctorReport, fix: bool = False):
         report.warn(LBL_GPG_CACHE, f"Only {ttl // 60} min; signing outside a terminal fails. Run with --fix")
 
 
+def _check_git_identity_config(report: DoctorReport) -> None:
+    """Audit `~/.gitconfig.local`, `user.name`, and `user.email`."""
+    local_gitconfig = Path.home() / ".gitconfig.local"
+    _, name, _ = run_cmd(["git", "config", "--get", "user.name"])
+    _, email, _ = run_cmd(["git", "config", "--get", "user.email"])
+    if local_gitconfig.is_file():
+        report.ok("~/.gitconfig.local", "Local Git credentials override active")
+    elif name and email:
+        report.ok("~/.gitconfig.local", "Optional (identity set in global config)")
+    else:
+        report.warn("~/.gitconfig.local", "Missing; create to store user.name & user.email")
+
+    if name:
+        report.ok("Git user.name", name)
+    else:
+        report.warn("Git user.name", "Not set (configure in ~/.gitconfig.local)")
+
+    if email:
+        report.ok("Git user.email", email)
+    else:
+        report.warn("Git user.email", "Not set (configure in ~/.gitconfig.local)")
+
+
 def check_git_signing(report: DoctorReport, fix: bool = False):
-    """Audit Git user identity (`user.name`, `user.email`) and commit signing settings."""
+    """Audit Git user identity (`user.name`, `user.email`), `~/.gitconfig.local`, and commit signing."""
     print(f"\n{C_BOLD}5. Git Identity & Commit Signing{C_RESET}")
     if not shutil.which("git"):
         report.warn("Git config", "git binary not installed")
         return
 
-    _, name, _ = run_cmd(["git", "config", "--get", "user.name"])
-    _, email, _ = run_cmd(["git", "config", "--get", "user.email"])
-    if name:
-        report.ok("Git user.name", name)
-    else:
-        report.warn("Git user.name", "Not set in git config")
-
-    if email:
-        report.ok("Git user.email", email)
-    else:
-        report.warn("Git user.email", "Not set in git config")
+    _check_git_identity_config(report)
 
     _, sign, _ = run_cmd(["git", "config", "--get", "commit.gpgsign"])
     _, format_type, _ = run_cmd(["git", "config", "--get", "gpg.format"])
@@ -616,6 +644,11 @@ def check_git_signing(report: DoctorReport, fix: bool = False):
 
     if sign == "true":
         key_desc = f"{format_type or 'gpg'} ({signing_key})" if signing_key else "Enabled"
+        if format_type == "ssh" and signing_key and not signing_key.startswith("ssh-"):
+            key_path = Path(signing_key).expanduser()
+            if not key_path.is_file():
+                report.warn("Commit signing", f"SSH signing key missing: {signing_key}")
+                return
         report.ok("Commit signing", key_desc)
         if format_type in ("", "openpgp") and shutil.which("gpg"):
             check_gpg_cache(report, fix=fix)

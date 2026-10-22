@@ -564,14 +564,15 @@ _checksum_pick_targets() {
 _checksum_run() {
   local mode="$1"
   shift
-  local copy_sha256=false
+  local copy_sha256=false check_manifest=false
   local expected=""
   local expected_source="argument"
   local -a args=()
 
   while (( $# > 0 )); do
     case "$1" in
-      -c|--copy) copy_sha256=true; shift ;;
+      -c|--copy|--clipboard) copy_sha256=true; shift ;;
+      -k|--check) check_manifest=true; shift ;;
       -e|--expect) expected="${2:-}"; shift 2 || shift ;;
       --) shift; args+=("$@"); break ;;
       *) args+=("$1"); shift ;;
@@ -587,15 +588,15 @@ _checksum_run() {
 
   if (( ${#args[@]} == 0 )); then
     if [[ "$mode" == "compare" ]]; then
-      printf "\033[33mUsage: hashc [-c] [-e <expected_hash>] <file_or_dir...> [expected_hash]\033[0m\n" >&2
+      printf "\033[33mUsage: hashc [-c|--copy] [-k|--check] [-e <expected_hash>] <file_or_dir...> [expected_hash]\033[0m\n" >&2
     else
-      printf "\033[33mUsage: checksum [-c] <file_or_dir...> [expected_hash]\033[0m\n" >&2
+      printf "\033[33mUsage: checksum [-c|--copy] [-k|--check] <file_or_dir...> [expected_hash]\033[0m\n" >&2
     fi
     return 1
   fi
 
   # If 2+ positional args and the last arg is not a path on disk but matches a hex digest, treat it as expected_hash
-  if [[ -z "$expected" ]] && (( ${#args[@]} >= 2 )); then
+  if [[ -z "$expected" && "$check_manifest" == false ]] && (( ${#args[@]} >= 2 )); then
     local last_arg="${args[-1]}"
     local stripped_hex="${last_arg#*:}"
     if [[ ! -e "$last_arg" && "$stripped_hex" =~ ^[0-9a-fA-F]{32,128}$ ]]; then
@@ -612,20 +613,29 @@ _checksum_run() {
     fi
   done
 
-  if [[ -z "$expected" ]] && (( ${#args[@]} == 1 )); then
+  # Auto-detect single-arg manifest file (e.g. `hashc release.sha256` or `hashc SHA256SUMS`)
+  if [[ "$check_manifest" == false && -z "$expected" ]] && (( ${#args[@]} == 1 )) && [[ -f "${args[1]}" ]]; then
+    local lower_name="${args[1]:t:l}"
+    if [[ "$lower_name" == *.(sha256|sha512|sha1|md5|sums|checksums) || "$lower_name" == *(sha256sums|sha512sums|md5sums|shasums)* ]]; then
+      check_manifest=true
+    fi
+  fi
+
+  if [[ "$check_manifest" == false && -z "$expected" ]] && (( ${#args[@]} == 1 )); then
     local clip_val
     clip_val="$(clippaste 2>/dev/null | tr -d '[:space:]')"
     if [[ "$clip_val" =~ ^[0-9a-fA-F]{32}$ || "$clip_val" =~ ^[0-9a-fA-F]{40}$ || "$clip_val" =~ ^[0-9a-fA-F]{64}$ || "$clip_val" =~ ^[0-9a-fA-F]{128}$ ]]; then
       expected="$clip_val"
       expected_source="clipboard"
     elif [[ "$mode" == "compare" ]]; then
-      printf "\033[33m✖ hashc requires 2+ files/folders to compare, or an expected hash (via argument, -e, or clipboard)\033[0m\n" >&2
+      printf "\033[33m✖ hashc requires 2+ files/folders to compare, a .sha256 manifest, or an expected hash\033[0m\n" >&2
       return 1
     fi
   fi
 
   local -a py_flags=("-e" "$expected" "-s" "$expected_source")
   [[ "$mode" == "compare" ]] && py_flags+=("--compare")
+  [[ "$check_manifest" == true ]] && py_flags+=("--check")
 
   local out rc=0
   out="$("${DOTFILES_DIR:-$HOME/.dotfiles}/libexec/checksum.py" "${py_flags[@]}" -- "${args[@]}")" || rc=$?
@@ -657,8 +667,9 @@ checksum() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     printf "\033[1;38;2;249;226;175mchecksum\033[0m (aliases: \033[1m,hash\033[0m, \033[1mhashfile\033[0m, \033[1mfhash\033[0m) — Multi-digest file & directory checksum calculator\n\n"
     printf "\033[1mUsage:\033[0m\n"
-    printf "  checksum <file_or_dir...>         Compute MD5, SHA-1, SHA-256 & SHA-512 for files or folders\n"
+    printf "  checksum [file_or_dir...]         Compute MD5, SHA-1, SHA-256 & SHA-512 (opens FZF if 0 args)\n"
     printf "  checksum -c, --copy <path...>     Also copy SHA-256 digest(s) to clipboard\n"
+    printf "  checksum -k, --check <manifest>   Verify all entries in a .sha256/.sha512/SHA256SUMS manifest\n"
     printf "  checksum <path> <expected_hex>    Verify target against expected checksum (or use \033[1mhashc\033[0m)\n"
     return 0
   fi
@@ -669,13 +680,14 @@ checksum() {
 # Usage:
 #   hashc <file_or_dir_1> <file_or_dir_2> [...] -> Compare 2+ files or folders for byte-for-byte identity
 #   hashc <file_or_dir> <expected_hex>          -> Verify against expected hash
-#   hashc -e <expected_hex> <file_or_dir...>    -> Verify multiple files/folders against expected hash
+#   hashc <manifest.sha256>                     -> Batch-verify all entries in a checksum manifest file
 hashc() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     printf "\033[1;38;2;249;226;175mhashc\033[0m (aliases: \033[1m,hashc\033[0m, \033[1m,hashcompare\033[0m, \033[1mhashcompare\033[0m) — Compare file/folder hashes or verify checksum\n\n"
     printf "\033[1mUsage:\033[0m\n"
-    printf "  hashc <path1> <path2> [path3...]  Compare 2+ files or folders for byte-for-byte identity\n"
+    printf "  hashc [path1] [path2...]          Compare 2+ files/folders for byte-for-byte identity (FZF if 0 args)\n"
     printf "  hashc <path> <expected_hex>       Verify file or folder against expected checksum\n"
+    printf "  hashc [-k|--check] <file.sha256>  Batch-verify all entries in a checksum manifest file\n"
     printf "  hashc -e <hex> <path...>          Verify one or more files/folders against expected checksum\n"
     printf "  hashc -c, --copy <path...>        Also copy SHA-256 digest(s) to clipboard\n"
     return 0

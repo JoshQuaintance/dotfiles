@@ -44,6 +44,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Audit environment variables, $PATH precedence, and shadowed binaries",
     )
     parser_env.add_argument("-a", "--all", action="store_true", help="Show all $PATH entries without truncation")
+    parser_env.add_argument("-j", "--json", action="store_true", help="Output environment audit as JSON")
 
     subparsers.add_parser(
         "test",
@@ -58,6 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser_bench.add_argument("-p", "--prompt", action="store_true", help="Also benchmark shell prompt rendering (Native vs Spaceship)")
     parser_bench.add_argument("-t", "--tools", action="store_true", help="Also benchmark modern CLI tools (rg, fd, eza)")
     parser_bench.add_argument("-a", "--all", action="store_true", help="Run full benchmark suite (startup + tools + prompt)")
+    parser_bench.add_argument("-j", "--json", action="store_true", help="Output startup benchmark results as JSON")
 
     # 2. Synchronization, Updates & Symlinks (sync, update, link, prompt)
     parser_sync = subparsers.add_parser(
@@ -135,7 +137,7 @@ def _dispatch_command(args: argparse.Namespace) -> int:
         "doctor": lambda a: run_doctor(fix=a.fix, json_output=getattr(a, "json", False)),
         "health": lambda a: run_doctor(fix=a.fix, json_output=getattr(a, "json", False)),
         "link": lambda a: run_doctor(fix=a.fix),
-        "env": lambda a: run_env_audit(show_all_path=a.all),
+        "env": lambda a: run_env_audit(show_all_path=a.all, json_output=getattr(a, "json", False)),
         "test": lambda _a: run_tests(),
         "prompt": lambda a: run_prompt_command(subcommand=a.action, value=a.engine),
         "bench": lambda a: run_bench(
@@ -143,6 +145,7 @@ def _dispatch_command(args: argparse.Namespace) -> int:
             test_prompt=a.prompt,
             test_tools=a.tools,
             test_all=a.all,
+            json_output=getattr(a, "json", False),
         ),
         "sync": lambda a: run_sync(
             message=a.message,

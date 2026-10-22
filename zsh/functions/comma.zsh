@@ -64,11 +64,30 @@ _comma_register_wrappers() {
   done
 }
 
+# Record a recently executed command in ${XDG_CACHE_HOME:-$HOME/.cache}/zsh/comma_recent (max 20 entries).
+_comma_record_recent() {
+  local cmd="$1"
+  [[ -z "$cmd" || "$cmd" == "," ]] && return 0
+  local cache_file="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/comma_recent"
+  mkdir -p "${cache_file:h}" 2>/dev/null || return 0
+  local -a kept=("$cmd")
+  local line
+  if [[ -f "$cache_file" ]]; then
+    while IFS= read -r line; do
+      [[ -n "$line" && "$line" != "$cmd" ]] && kept+=("$line")
+      (( ${#kept[@]} >= 20 )) && break
+    done < "$cache_file"
+  fi
+  printf "%s\n" "${kept[@]}" > "$cache_file" 2>/dev/null || true
+}
+
 # Internal helper: generate tab-delimited catalog of comma-prefixed commands for `,`
+# Boosts recently executed commands from comma_recent to the top of the list.
 # Output format: <,short>\t<canonical>\t<description>
 _comma_gen_list() {
   local dot_dir="${1:-${DOTFILES_DIR:-$HOME/.dotfiles}}"
-  local -A func_docs
+  local -A func_docs row_by_orig emitted
+  local -a orig_order=()
   local k v
 
   while IFS=$'\t' read -r k v; do
@@ -96,7 +115,8 @@ _comma_gen_list() {
     if (( $+functions[$fn] )); then
       comma_name="${DOTFILES_COMMA_SHORTHANDS[$fn]:-,${fn}}"
       desc="${func_docs[$fn]:-(custom dotfiles function)}"
-      printf "%s\t%s\t%s\n" "$comma_name" "$fn" "$desc"
+      row_by_orig[$fn]="$(printf "%s\t%s\t%s" "$comma_name" "$fn" "$desc")"
+      orig_order+=("$fn")
     fi
   done
 
@@ -107,10 +127,29 @@ _comma_gen_list() {
         bname="${b:t}"
         bdesc=$(awk '/^#[[:space:]]*Description:[[:space:]]*/ { sub(/^#[[:space:]]*Description:[[:space:]]*/, ""); print; exit } NR > 15 { exit }' "$b" 2>/dev/null)
         [[ "$bname" == "dot" && -z "$bdesc" ]] && bdesc="Unified developer workstation CLI (status, doctor, test, env, sync, backup)"
-        printf ",%s\t%s\t%s\n" "$bname" "$bname" "${bdesc:-(CLI utility in ~/.dotfiles/bin)}"
+        row_by_orig[$bname]="$(printf ",%s\t%s\t%s" "$bname" "$bname" "${bdesc:-(CLI utility in ~/.dotfiles/bin)}")"
+        orig_order+=("$bname")
       fi
     done
   fi
+
+  local cache_file="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/comma_recent"
+  if [[ -f "$cache_file" ]]; then
+    local rec
+    while IFS= read -r rec; do
+      if [[ -n "$rec" && -n "${row_by_orig[$rec]:-}" && -z "${emitted[$rec]:-}" ]]; then
+        emitted[$rec]=1
+        printf "%s\n" "${row_by_orig[$rec]}"
+      fi
+    done < "$cache_file"
+  fi
+
+  for fn in "${orig_order[@]}"; do
+    if [[ -z "${emitted[$fn]:-}" ]]; then
+      emitted[$fn]=1
+      printf "%s\n" "${row_by_orig[$fn]}"
+    fi
+  done
 }
 
 # Interactive Dotfiles Command Palette & Comma-Prefix Launcher (, / f)
@@ -152,12 +191,16 @@ _comma_gen_list() {
   # Direct dispatch when called as `, <cmd> [args...]` (with 1+ tokens and a known command)
   if [[ "$list_only" == false && "$search_only" == false ]] && (( $# >= 1 )); then
     local candidate="${1#,}"
+    local resolved_orig
+    resolved_orig="$(_comma_resolve_target "$candidate")"
     if (( $+functions[,$candidate] )); then
       shift
+      _comma_record_recent "$resolved_orig"
       ",$candidate" "$@"
       return $?
     elif (( ${DOTFILES_FUNCTIONS[(I)$candidate]} )) || [[ -x "$dot_dir/bin/$candidate" ]]; then
       shift
+      _comma_record_recent "$candidate"
       "$candidate" "$@"
       return $?
     fi
@@ -217,24 +260,14 @@ _comma_gen_list() {
   [[ -z "$orig_cmd" ]] && return 0
 
   case "$key" in
-    e)
-      print -z "$orig_cmd "
-      ;;
-    h)
-      "$orig_cmd" --help
-      ;;
-    y)
-      _copy_or_print "$comma_cmd" "command: $comma_cmd"
-      ;;
+    e) _comma_record_recent "$orig_cmd"; print -z "$orig_cmd " ;;
+    h) "$orig_cmd" --help ;;
+    y) _copy_or_print "$comma_cmd" "command: $comma_cmd" ;;
     *)
-      # Commands that require a freeform new path/URL argument are placed on the prompt
+      _comma_record_recent "$orig_cmd"
       case "$orig_cmd" in
-        take|clone|wpath|wcd)
-          print -z "$orig_cmd "
-          ;;
-        *)
-          "$orig_cmd"
-          ;;
+        take|clone|wpath|wcd) print -z "$orig_cmd " ;;
+        *) "$orig_cmd" ;;
       esac
       ;;
   esac
@@ -287,7 +320,50 @@ _comma() {
 }
 (( $+functions[compdef] )) && compdef _comma , f || true
 
-# Suggest subcommands, flags, or worktree names for the 2nd+ argument after `, <cmd> <arg...>`.
+# Suggest file/directory paths or Git branches for the trailing argument of `, <cmd> <arg...>`.
+_comma_suggest_path_or_branch() {
+  local cmd_lead="$1" canonical="$2" rest="$3"
+  local arg_lead="" last_tok="$rest"
+  if [[ "$rest" == *[[:space:]]* ]]; then
+    arg_lead="${rest%[[:space:]]*} "
+    last_tok="${rest##*[[:space:]]}"
+  fi
+  [[ -z "$last_tok" || "$last_tok" == -* ]] && return 1
+
+  # Branch suggestions for branch-taking commands
+  if [[ "$canonical" == (gco|gwtnew|gwtn|dotbranch) && "$last_tok" =~ ^[A-Za-z0-9_./-]+$ ]]; then
+    local br
+    while IFS= read -r br; do
+      br="${br#origin/}"
+      [[ "$br" == "HEAD" ]] && continue
+      if [[ "$br" == "${last_tok}"* && "$br" != "$last_tok" ]]; then
+        typeset -g suggestion="${cmd_lead}${arg_lead}${br}"
+        return 0
+      fi
+    done < <(git for-each-ref --sort=-committerdate --format='%(refname:short)' refs/heads/ refs/remotes/origin/ 2>/dev/null)
+  fi
+
+  # File/directory path suggestions (0-fork pure Zsh globbing)
+  case "$canonical" in
+    checksum|hashc|extract|pack|fjq|gfile|fsize|dotenv|tree|lt|conf|wpath|wcd)
+      local expanded="${last_tok/#\~/$HOME}"
+      local -a matches=( ${~expanded}*(N) )
+      local m disp
+      for m in "${matches[@]}"; do
+        [[ -d "$m" ]] && m="${m%/}/"
+        disp="$m"
+        [[ "$last_tok" == "~/"* ]] && disp="~/${m#$HOME/}"
+        if [[ "$disp" == "${last_tok}"* && "$disp" != "$last_tok" ]]; then
+          typeset -g suggestion="${cmd_lead}${arg_lead}${disp}"
+          return 0
+        fi
+      done
+      ;;
+  esac
+  return 1
+}
+
+# Suggest subcommands, flags, worktrees, branches, or paths for the 2nd+ argument after `, <cmd> <arg...>`.
 _comma_suggest_arg2() {
   local cmd_lead="$1" clean_cmd="$2" canonical="$3" rest="$4"
   local opt
@@ -300,17 +376,19 @@ _comma_suggest_arg2() {
           return 0
         fi
       done
-    elif [[ "$rest" =~ ^(doctor|update|clean|prune|sync|backup|env)[[:space:]]+(-[a-z-]*)$ ]]; then
+    elif [[ "$rest" =~ ^(status|doctor|bench|update|clean|prune|sync|backup|env)[[:space:]]+(-[a-z-]*)$ ]]; then
       local sub="${match[1]}" flag_part="${match[2]}"
       local -a sub_flags=(--help)
       case "$sub" in
+        status) sub_flags=(--json --help) ;;
         doctor) sub_flags=(--fix --json --help) ;;
+        bench)  sub_flags=(--iterations --prompt --tools --all --json --help) ;;
         update) sub_flags=(--all --check --tools --no-prune --yes --help) ;;
-        clean)  sub_flags=(--dry-run --all --help) ;;
+        clean)  sub_flags=(--dry-run --all --builds --help) ;;
         prune)  sub_flags=(--dry-run --orphans --yes --help) ;;
         sync)   sub_flags=(--dry-run --message --help) ;;
         backup) sub_flags=(--list --dry-run --help) ;;
-        env)    sub_flags=(--all --help) ;;
+        env)    sub_flags=(--all --json --help) ;;
       esac
       for opt in "${sub_flags[@]}"; do
         if [[ "$opt" == "${flag_part}"* && "$opt" != "$flag_part" ]]; then
@@ -326,8 +404,9 @@ _comma_suggest_arg2() {
     local -a cmd_flags=(--help)
     case "$canonical" in
       gwts)              cmd_flags=(--fetch --json --help) ;;
-      checksum|hashc)    cmd_flags=(--copy --expect --help) ;;
-      netinfo)           cmd_flags=(--no-ping --help) ;;
+      checksum|hashc)    cmd_flags=(--copy --check --expect --help) ;;
+      netinfo)           cmd_flags=(--no-ping --public --help) ;;
+      fenv)              cmd_flags=(--reveal --help) ;;
       gwtclean|gbclean)  cmd_flags=(--dry-run --force --help) ;;
       gwtenv)            cmd_flags=(--force --yes --help) ;;
       fpkg|proj|snip|fknown) cmd_flags=(--list --help) ;;
@@ -353,6 +432,8 @@ _comma_suggest_arg2() {
       fi
     done < <(git worktree list --porcelain 2>/dev/null | awk '/^worktree / {print substr($0, 10)}')
   fi
+
+  _comma_suggest_path_or_branch "$cmd_lead" "$canonical" "$rest" && return 0
   return 1
 }
 
@@ -502,3 +583,31 @@ _zsh_highlight_highlighter_comma_paint() {
     tail="${buf:$offset}"
   done
 }
+
+# Inline help preview card for `, <cmd>`, `,<cmd>`, or any command on the ZLE buffer (bound to Ctrl-/, Alt-h, Ctrl-X h).
+_comma_inline_help() {
+  local buf="${BUFFER:-${LBUFFER}${RBUFFER}}"
+  buf="${buf#"${buf%%[![:space:]]*}"}"
+  [[ -z "$buf" ]] && return 0
+
+  local -a tokens=(${(z)buf})
+  local target="${tokens[1]:-}"
+  if [[ "$target" == (,|f) ]]; then
+    target="${tokens[2]:-,}"
+  fi
+  target="$(_comma_resolve_target "$target")"
+
+  local help_out=""
+  if (( $+functions[$target] )) || [[ -x "${DOTFILES_DIR:-$HOME/.dotfiles}/bin/$target" ]]; then
+    help_out="$("$target" --help 2>/dev/null | sed $'s/\x1b\\[[0-9;]*m//g' | head -n 12)"
+  fi
+  if [[ -z "$help_out" ]]; then
+    help_out="$(whence -v "$target" 2>/dev/null)"
+  fi
+  if [[ -n "$help_out" ]]; then
+    zle -M "$help_out" 2>/dev/null || printf "%s\n" "$help_out"
+  fi
+}
+if (( $+functions[zle] )); then
+  zle -N _comma_inline_help
+fi

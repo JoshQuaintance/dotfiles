@@ -251,3 +251,45 @@ test_fsize_fknown_and_termtest() {
   assert_contains "$tt_out" "Truecolor RGB Gradient"
   assert_contains "$tt_out" "Catppuccin Mocha Swatches"
 }
+
+test_comma_recent_boosting_path_autosuggest_and_fenv_masking() {
+  # 1. Recent `,` command boosting places recorded commands at the top of `_comma_gen_list`
+  _comma_record_recent "strdiff"
+  _comma_record_recent "netinfo"
+  local first_orig
+  first_orig="$(_comma_gen_list | head -n 1 | awk -F'\t' '{print $2}')"
+  assert_eq "netinfo" "$first_orig"
+
+  # 2. Path & branch autosuggestions for `, <cmd> <partial>`
+  mkdir -p "$HOME/autosug_dir/sub_folder"
+  touch "$HOME/autosug_dir/sample_report.json"
+  (
+    cd "$HOME/autosug_dir"
+    local suggestion=""
+    _zsh_autosuggest_strategy_comma ", hash sam"
+    assert_eq ", hash sample_report.json" "$suggestion"
+
+    suggestion=""
+    _zsh_autosuggest_strategy_comma ", extract sub_"
+    assert_eq ", extract sub_folder/" "$suggestion"
+
+    suggestion=""
+    _zsh_autosuggest_strategy_comma ", dot env --j"
+    assert_eq ", dot env --json" "$suggestion"
+  )
+
+  # 3. Inline help preview widget (`_comma_inline_help`)
+  local BUFFER=", hashc"
+  local inline_out
+  inline_out="$(_comma_inline_help)"
+  assert_contains "$inline_out" "hashc"
+
+  # 4. `fenv` masks secret variables by default and reveals with `--reveal`
+  export SUPER_SECRET_API_TOKEN="s3cr3t-v4lu3-999"
+  local masked_out revealed_out
+  masked_out="$(fenv SUPER_SECRET_API_TOKEN | strip_ansi)"
+  assert_contains "$masked_out" "redacted"
+  revealed_out="$(fenv --reveal SUPER_SECRET_API_TOKEN | strip_ansi)"
+  assert_contains "$revealed_out" "s3cr3t-v4lu3-999"
+  unset SUPER_SECRET_API_TOKEN
+}

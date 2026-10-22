@@ -48,17 +48,17 @@ cd ~/.dotfiles
 The repository includes a Python-powered CLI:
 
 ```bash
-dot                   # Quick workstation, repo, symlink, and runtime overview (alias: dot status / .s)
-dot doctor            # Comprehensive health check across symlinks, tools, and locale (.doctor)
-dot doctor --fix      # Auto-heals broken/dangling symlinks (including VS Code configs)
+dot [-j|--json]       # Quick workstation, repo, symlink, and runtime overview (alias: dot status / .s)
+dot doctor [-f] [-j]  # Comprehensive health check across symlinks, tools, bytecode, SSH, and Git (.doctor)
+dot doctor --fix      # Auto-heals broken/dangling symlinks, .zwc bytecode, SSH & GPG agent settings
 dot test              # Deep integration test suite (JSONC, TOML, headless Neovim, Zsh latency, zsh unit tests) (.test)
-dot bench [-n N]      # Profile interactive Zsh startup latency by phase (.bench)
+dot bench [-n N] [-j] # Profile interactive Zsh startup latency by phase (.bench)
 dot clean [-n] [-a]   # Prune stale completion dumps, caches, and old scratch notes (.clean)
 dot prune [REF] [-n]  # Remove links, caches & packages deleted since REF (default: before last pull) (.prune)
 dot prune --orphans   # ...and offer to uninstall brew packages & mise versions the dotfiles don't declare
 dot update --all      # Upstream Git sync + Homebrew & Mise updates + automated test run (.update)
 dot link --fix        # Reconcile all declarative configuration symlinks
-dot env [-a]          # Audit environment variables, $PATH precedence & shadowed binaries (.env)
+dot env [-a] [-j]     # Audit environment variables, $PATH precedence & shadowed binaries (.env)
 dot backup [-l] [-n]  # Snapshot untracked local machine overrides, scratchpads & state (.backup)
 dot restore [ARC]     # Restore untracked local machine overrides & state from snapshot (.restore)
 ```
@@ -73,17 +73,22 @@ dot restore [ARC]     # Restore untracked local machine overrides & state from s
 
 ## Comma Command Palette (`,`) & Interactive Shell Tools
 
-Every custom shell function is accessible via the `,` prefix convention (with Fish-like autosuggestions, live syntax highlighting, and tab completion whether typed as `,<cmd>` or `, <cmd>`):
+Every custom shell function is accessible via the `,` prefix convention (with recent-command boosting, Fish-like autosuggestions for commands/flags/paths/branches, live syntax highlighting, inline `Ctrl-/` / `Alt-h` help preview cards, and zero-arg FZF pickers):
 
 ```bash
-,                     # Open modal-Vim FZF palette of all custom dotfiles commands
-, <cmd> [args...]     # Run any custom command directly (e.g. `, pkg`, `, port`, `, gwts`)
-,hash <path...>       # Compute MD5, SHA-1, SHA-256 & SHA-512 for files or directories (checksum)
-,hashc <p1> <p2>...   # Compare 2+ files/folders for byte-for-byte identity or verify digest (hashc)
-,net                  # Network, DNS, gateway, VPN & latency diagnostic card (netinfo)
+,                     # Open modal-Vim FZF palette of all custom dotfiles commands (recent commands boosted first)
+, <cmd> [args...]     # Run any custom command directly (e.g. `, pkg`, `, port`, `, gwts`, `, hash`)
+Ctrl-/ or Alt-h       # Preview inline --help card beneath the Zsh prompt for the command currently on the line
+,hash [path...]       # Compute MD5, SHA-1, SHA-256 & SHA-512 for files/folders (-c copy, -k verify manifest, FZF if 0 args)
+,hashc [p1] [p2...]   # Compare 2+ files/folders for byte-for-byte identity, verify digest, or check .sha256 manifest (hashc)
+,decode [payload]     # Auto-decode JWTs (with relative expiry countdown), UUIDv7, Epoch (s/ms/us/ns), Hex, HTML, URL & Base64
+,jq [file]            # Interactive FZF path explorer for JSON, YAML & TOML files (fjq)
+,env [-r|--reveal]    # Interactive environment variable inspector with automatic secret masking & PATH audit (fenv)
+,net [-p] [--no-ping] # Network, DNS, gateway, VPN & latency diagnostic card (netinfo)
 ,pkg / ,brew          # Inspect, upgrade, or uninstall Homebrew, Mise & system packages (fpkg)
-,kill / ,ports        # Interactive process & listening TCP port inspector/killer (fkill / port)
-wt / gwts / gwtn      # Interactive Git worktree switcher, fleet status table & creator
+,kill / ,ports        # Interactive process & listening TCP port inspector/killer (fkill / port / killport)
+wt / gwts / gwtn      # Interactive Git worktree switcher, fleet status table (-f/--fetch, -j/--json) & creator
+esdiff [-w] [base]    # Run ESLint only on modified JS/TS files against base branch or working tree
 ```
 
 Helper Python executables invoked by shell functions live in `libexec/` (`checksum.py`, `clip_transform.py`, `decode.py`, `strdiff.py`, `wsl_terminal_settings.py`) and are linted alongside `cli/` via `ruff` and `lefthook`.

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
+import hashlib
+import io
 import json
 import subprocess
 import sys
@@ -10,6 +13,7 @@ import unittest
 from pathlib import Path
 
 from cli.doctor import orphaned_zsh_bytecode
+from cli.env_audit import run_env_audit
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LIBEXEC_DIR = REPO_ROOT / "libexec"
@@ -63,6 +67,31 @@ class TestChecksumLibexec(unittest.TestCase):
             rc_diff, out_diff, _ = run_libexec("checksum.py", "--compare", "--", str(f1), str(f3))
             self.assertEqual(rc_diff, 1)
             self.assertIn("2 distinct SHA-256 digests", out_diff)
+
+    def test_manifest_file_verification(self) -> None:
+        """Verify `--check` parses GNU and BSD checksum manifests and detects mismatches."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            f1 = root / "alpha.txt"
+            f2 = root / "beta.txt"
+            f1.write_bytes(b"alpha-data")
+            f2.write_bytes(b"beta-data")
+            h1 = hashlib.sha256(b"alpha-data").hexdigest()
+            h2 = hashlib.md5(b"beta-data").hexdigest()
+
+            manifest = root / "SHA256SUMS"
+            manifest.write_text(
+                f"# release checksums\n{h1}  alpha.txt\nMD5 (beta.txt) = {h2}\n",
+                encoding="utf-8",
+            )
+            rc_ok, out_ok, _ = run_libexec("checksum.py", "--check", "--", str(manifest))
+            self.assertEqual(rc_ok, 0)
+            self.assertIn("All 2 manifest entry/entries verified", out_ok)
+
+            f2.write_bytes(b"tampered")
+            rc_fail, out_fail, _ = run_libexec("checksum.py", "--check", "--", str(manifest))
+            self.assertEqual(rc_fail, 1)
+            self.assertIn("MISMATCH", out_fail)
 
 
 class TestDecodeLibexec(unittest.TestCase):
@@ -138,6 +167,17 @@ class TestClipAndStrdiffAndWslLibexec(unittest.TestCase):
 
             orphans = orphaned_zsh_bytecode(root)
             self.assertEqual(orphans, [orphan])
+
+    def test_env_audit_json_output(self) -> None:
+        """Verify `run_env_audit(json_output=True)` emits valid JSON with expected keys."""
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = run_env_audit(json_output=True)
+        self.assertEqual(rc, 0)
+        data = json.loads(buf.getvalue())
+        self.assertIn("env", data)
+        self.assertIn("path_summary", data)
+        self.assertIn("binaries", data)
 
 
 if __name__ == "__main__":

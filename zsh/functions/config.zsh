@@ -352,46 +352,41 @@ _dot() {
     _describe 'dot command' subcommands
   else
     case "${words[2]}" in
-      doctor|health|link)
-        flags=('--fix:Auto-repair broken or missing symlinks' '-f:Auto-repair broken or missing symlinks')
+      status) flags=('-j:Output workstation status as JSON' '--json:Output workstation status as JSON') ;;
+      doctor|health)
+        flags=(
+          '--fix:Auto-repair broken or missing symlinks' '-f:Auto-repair broken or missing symlinks'
+          '--json:Output health check report as JSON' '-j:Output health check report as JSON'
+        )
         ;;
+      link) flags=('--fix:Auto-repair broken or missing symlinks' '-f:Auto-repair broken or missing symlinks') ;;
       bench)
         flags=(
-          '-n:Number of benchmark iterations'
-          '--iterations:Number of benchmark iterations'
-          '-p:Also benchmark prompt rendering'
-          '--prompt:Also benchmark prompt rendering'
-          '-t:Also benchmark modern CLI tools (rg, fd, eza)'
-          '--tools:Also benchmark modern CLI tools (rg, fd, eza)'
-          '-a:Run full benchmark suite (startup + tools + prompt)'
-          '--all:Run full benchmark suite (startup + tools + prompt)'
+          '-n:Number of benchmark iterations' '--iterations:Number of benchmark iterations'
+          '-p:Also benchmark prompt rendering' '--prompt:Also benchmark prompt rendering'
+          '-t:Also benchmark modern CLI tools (rg, fd, eza)' '--tools:Also benchmark modern CLI tools (rg, fd, eza)'
+          '-a:Run full benchmark suite (startup + tools + prompt)' '--all:Run full benchmark suite (startup + tools + prompt)'
+          '-j:Output startup benchmark results as JSON' '--json:Output startup benchmark results as JSON'
         )
         ;;
       sync)
         flags=(
-          '-m:Custom Git commit message'
-          '--message:Custom Git commit message'
-          '-n:Preview changes without committing or pushing'
-          '--dry-run:Preview changes without committing or pushing'
+          '-m:Custom Git commit message' '--message:Custom Git commit message'
+          '-n:Preview changes without committing or pushing' '--dry-run:Preview changes without committing or pushing'
           '--no-push:Commit and pull without pushing'
         )
         ;;
       clean)
         flags=(
-          '-n:Preview files to remove without deleting'
-          '--dry-run:Preview files to remove without deleting'
-          '-a:Also remove ~/.oh-my-zsh and prune uv/Homebrew caches'
-          '--all:Also remove ~/.oh-my-zsh and prune uv/Homebrew caches'
-          '-b:Clean stale build directories inactive >30 days'
-          '--builds:Clean stale build directories inactive >30 days'
+          '-n:Preview files to remove without deleting' '--dry-run:Preview files to remove without deleting'
+          '-a:Also remove ~/.oh-my-zsh and prune uv/Homebrew caches' '--all:Also remove ~/.oh-my-zsh and prune uv/Homebrew caches'
+          '-b:Clean stale build directories inactive >30 days' '--builds:Clean stale build directories inactive >30 days'
         )
         ;;
       prune)
         flags=(
-          '-n:Preview what would be removed without deleting'
-          '--dry-run:Preview what would be removed without deleting'
-          '-o:Also offer to uninstall packages the dotfiles do not declare'
-          '--orphans:Also offer to uninstall packages the dotfiles do not declare'
+          '-n:Preview what would be removed without deleting' '--dry-run:Preview what would be removed without deleting'
+          '-o:Also offer to uninstall packages the dotfiles do not declare' '--orphans:Also offer to uninstall packages the dotfiles do not declare'
         )
         ;;
       update)
@@ -435,6 +430,8 @@ _dot() {
         flags=(
           '-a:Show all PATH entries without truncation'
           '--all:Show all PATH entries without truncation'
+          '-j:Output environment audit as JSON'
+          '--json:Output environment audit as JSON'
         )
         ;;
     esac

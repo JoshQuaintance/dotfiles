@@ -111,10 +111,12 @@ clone() {
 
     git -C "$target_dir" worktree add "$target_dir/$def_branch" "$def_branch" || return 1
     printf "\033[32m✔ Bare worktree hub ready! Switching to %s/%s\033[0m\n" "$target_dir" "$def_branch"
+    command -v zoxide &>/dev/null && zoxide add "$target_dir/$def_branch" 2>/dev/null || true
     cd "$target_dir/$def_branch"
   else
     printf "\033[1;34m==>\033[0m Cloning \033[1m%s\033[0m into \033[1;36m%s\033[0m...\n" "$clone_url" "$target_dir"
     if git clone "${clone_extra_opts[@]}" "$clone_url" "$target_dir"; then
+      command -v zoxide &>/dev/null && zoxide add "$target_dir" 2>/dev/null || true
       cd "$target_dir"
     else
       return 1

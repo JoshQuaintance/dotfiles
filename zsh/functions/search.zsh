@@ -140,14 +140,20 @@ fa() {
 # Interactive Environment Variable Inspector (fenv / ,env)
 # ==============================================================================
 
-# Internal helper: format sorted environment variables for `fenv`
+# Internal helper: format sorted environment variables for `fenv` (masks secret values unless $1 == 1)
 _fenv_list_vars() {
-  env | sort | awk -F'=' '
+  local reveal="${1:-0}"
+  env | sort | awk -F'=' -v rev="$reveal" '
     /^[A-Za-z_][A-Za-z0-9_]*=/ {
       name = $1;
       val = substr($0, length(name) + 2);
       gsub(/\n/, " ", val);
-      if (length(val) > 75) val = substr(val, 1, 72) "...";
+      low = tolower(name);
+      if (rev != "1" && name != "SSH_AUTH_SOCK" && low ~ /(token|secret|passw(or)?d|api_?key|private_?key|auth_?key|credential)/) {
+        val = "•••••••• (redacted)";
+      } else if (length(val) > 75) {
+        val = substr(val, 1, 72) "...";
+      }
       n_count++;
       names[n_count] = name;
       vals[n_count] = val;
@@ -167,60 +173,67 @@ _fenv_list_vars() {
 
 # Interactive Environment Variable Inspector (fenv)
 # Usage:
-#   fenv               -> Browse all environment variables in modal-Vim FZF with smart PATH breakdown
+#   fenv               -> Browse all environment variables in modal-Vim FZF (secrets masked by default)
+#   fenv -r, --reveal  -> Show unmasked secret values in list & preview
 #   fenv <query>       -> Open filtered by <query> (e.g. fenv PATH, fenv FZF)
-#   Keys: enter/y = copy value, n = copy NAME=VALUE, e = edit export on prompt
+#   Keys: enter/y = copy value, n = copy NAME=VALUE, r = toggle reveal secrets, e = edit export on prompt
 fenv() {
-  if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
-    printf "\033[1;38;2;203;166;247mfenv\033[0m — Interactive modal-Vim environment variable inspector\n\n"
+  local reveal=0
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    printf "\033[1;38;2;203;166;247mfenv\033[0m (alias: \033[1m,env\033[0m) — Interactive modal-Vim environment variable inspector\n\n"
     printf "\033[1mUsage:\033[0m\n"
-    printf "  fenv               Browse all environment variables\n"
+    printf "  fenv               Browse all environment variables (secrets redacted by default)\n"
+    printf "  fenv -r, --reveal  Show unredacted secret values in list & preview\n"
     printf "  fenv <query>       Open pre-filtered by <query> (e.g. fenv PATH)\n"
     printf "  Enter / y          Copy variable value to clipboard\n"
     printf "  n                  Copy NAME=VALUE to clipboard\n"
+    printf "  r                  Toggle secret value reveal mode\n"
     printf "  e                  Insert 'export NAME=...' onto command line\n"
     return 0
+  fi
+  if [[ "$1" == "-r" || "$1" == "--reveal" ]]; then
+    reveal=1
+    shift
   fi
 
   local query="$*"
 
   if [ ! -t 1 ] || ! command -v fzf &>/dev/null; then
     if [ -n "$query" ]; then
-      _fenv_list_vars | grep -i "$query"
+      _fenv_list_vars "$reveal" | grep -i "$query"
     else
-      _fenv_list_vars
+      _fenv_list_vars "$reveal"
     fi
     return 0
   fi
 
-  local hdr="  j/k: navigate │ /: search │ enter/y: copy value │ n: copy KEY=VAL │ e: edit export │ q: quit"
+  local hdr="  j/k: navigate │ /: search │ enter/y: copy value │ n: copy KEY=VAL │ r: reveal secrets │ e: edit export │ q: quit"
   local -a fzf_mode_flags
-  _fzf_vim_mode "🌎 Environment > " "$hdr" "copy value" "y,n,e" "$query"
+  _fzf_vim_mode "🌎 Environment > " "$hdr" "copy value" "y,n,r,e" "$query"
 
-  local preview_cmd='
-    k=$(printf "%s" {3} | tr -d " ")
-    v=$(printenv "$k" 2>/dev/null)
-    printf "\033[1;38;2;203;166;247m%s\033[0m \033[2m(%d chars)\033[0m\n" "$k" "${#v}"
-    printf "\033[38;2;108;112;134m────────────────────────────────────────────────────────\033[0m\n"
-    if [[ "$k" == *PATH* ]] || [[ "$v" == /*:* ]]; then
-      i=1
-      IFS=":"
-      for entry in $v; do
-        [ -z "$entry" ] && continue
-        if [ -e "$entry" ]; then
-          printf "%2d. \033[32m✔\033[0m %s\n" "$i" "$entry"
-        else
-          printf "%2d. \033[31m✖\033[0m \033[2m%s (missing)\033[0m\n" "$i" "$entry"
-        fi
-        i=$((i + 1))
+  local preview_cmd="
+    k=\$(printf '%s' {3} | tr -d ' ')
+    v=\$(printenv \"\$k\" 2>/dev/null)
+    low=\$(printf '%s' \"\$k\" | tr '[:upper:]' '[:lower:]')
+    printf '\033[1;38;2;203;166;247m%s\033[0m \033[2m(%d chars)\033[0m\n' \"\$k\" \"\${#v}\"
+    printf '\033[38;2;108;112;134m────────────────────────────────────────────────────────\033[0m\n'
+    if [ '$reveal' != '1' ] && [ \"\$k\" != 'SSH_AUTH_SOCK' ] && printf '%s' \"\$low\" | grep -Eq '(token|secret|passw(or)?d|api_?key|private_?key|auth_?key|credential)'; then
+      printf '\033[33m🔒 Value redacted (%d chars). Press r to reveal or Enter/y to copy.\033[0m\n' \"\${#v}\"
+    elif [[ \"\$k\" == *PATH* ]] || [[ \"\$v\" == /*:* ]]; then
+      i=1; IFS=':'
+      for entry in \$v; do
+        [ -z \"\$entry\" ] && continue
+        if [ -e \"\$entry\" ]; then printf '%2d. \033[32m✔\033[0m %s\n' \"\$i\" \"\$entry\"
+        else printf '%2d. \033[31m✖\033[0m \033[2m%s (missing)\033[0m\n' \"\$i\" \"\$entry\"; fi
+        i=\$((i + 1))
       done
     else
-      printf "%s\n" "$v"
+      printf '%s\n' \"\$v\"
     fi
-  '
+  "
 
   local selection
-  selection=$(_fenv_list_vars | fzf \
+  selection=$(_fenv_list_vars "$reveal" | fzf \
     --ansi \
     --delimiter='\t' \
     --with-nth=1,2 \
@@ -240,6 +253,9 @@ fenv() {
   local var_val="${(P)var_name}"
 
   case "$key" in
+    r)
+      if (( reveal )); then fenv "$query"; else fenv --reveal "$query"; fi
+      ;;
     e)
       print -z "export ${var_name}=${(qq)var_val}"
       ;;

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -160,12 +161,74 @@ def _emit_summary(
     return 0
 
 
+def _parse_manifest_entries(manifest_path: Path) -> list[tuple[str, str]]:
+    """Parse `<digest>  <path>` and BSD `ALGO (path) = digest` lines from a manifest file."""
+    bsd_re = re.compile(r"^[A-Za-z0-9-]+\s*\((.+)\)\s*=\s*([0-9a-fA-F]{32,128})$")
+    gnu_re = re.compile(r"^([0-9a-fA-F]{32,128})\s+[\s*?]?(.+)$")
+    entries: list[tuple[str, str]] = []
+    for raw_line in manifest_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if m_bsd := bsd_re.match(line):
+            entries.append((m_bsd.group(2).lower(), m_bsd.group(1).strip()))
+        elif m_gnu := gnu_re.match(line):
+            entries.append((m_gnu.group(1).lower(), m_gnu.group(2).strip()))
+    return entries
+
+
+def _verify_manifest_file(manifest_str: str) -> int:
+    """Verify all `<digest>  <path>` or BSD `ALGO (path) = digest` entries in a checksum manifest."""
+    manifest_path = Path(manifest_str)
+    base_dir = manifest_path.parent
+    entries = _parse_manifest_entries(manifest_path)
+    if not entries:
+        print(f"{C_RED}✖ No valid checksum entries found in {manifest_str}{C_RST}")
+        return 1
+
+    print(f"{C_MAUVE}📋 Manifest:{C_RST} {manifest_path.name} {C_DIM}({len(entries)} entries){C_RST}")
+    failed = 0
+    for expected_hex, rel_target in entries:
+        candidate = Path(rel_target)
+        if not candidate.exists() and (base_dir / rel_target).exists():
+            candidate = base_dir / rel_target
+        if not candidate.exists():
+            print(f"  {C_RED}✖ {rel_target:<32} MISSING{C_RST}")
+            failed += 1
+            continue
+        digests, _, _ = _hash_directory(str(candidate)) if candidate.is_dir() else _hash_file(str(candidate))
+        matched_algo = next((algo for algo, d in digests if d == expected_hex), None)
+        if matched_algo:
+            print(f"  {C_GREEN}✔ {rel_target:<32} OK ({matched_algo}){C_RST}")
+        else:
+            print(f"  {C_RED}✖ {rel_target:<32} MISMATCH{C_RST}")
+            failed += 1
+
+    if failed == 0:
+        print(f"\n{C_GREEN}✔ All {len(entries)} manifest entry/entries verified{C_RST}")
+        return 0
+    print(f"\n{C_RED}✖ {failed} of {len(entries)} manifest entry/entries failed verification{C_RST}")
+    return 1
+
+
+def _run_manifest_checks(paths: list[str]) -> int:
+    """Verify one or more checksum manifest files."""
+    rc = 0
+    for idx, mpath in enumerate(paths):
+        if idx > 0:
+            print()
+        if _verify_manifest_file(mpath) != 0:
+            rc = 1
+    return rc
+
+
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     """Parse CLI arguments while staying resilient to legacy positional calls."""
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("-e", "--expect", default="")
     parser.add_argument("-s", "--source", default="argument")
     parser.add_argument("--compare", action="store_true")
+    parser.add_argument("-k", "--check", action="store_true")
     parser.add_argument("paths", nargs="*")
     ns = parser.parse_args(argv)
 
@@ -186,6 +249,9 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
 def main() -> int:
     """Compute digests for files/folders and optionally verify or compare them."""
     ns = _parse_args(sys.argv[1:])
+    if ns.check:
+        return _run_manifest_checks(ns.paths)
+
     expected = ns.expect.strip().lower()
     if ":" in expected:
         expected = expected.split(":", 1)[1].strip()

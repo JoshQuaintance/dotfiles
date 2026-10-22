@@ -412,7 +412,7 @@ gwtnew() {
     if git worktree add "$target_wt_path" "$target_branch"; then
       _copy_worktree_env "$src_wt" "$target_wt_path" "$main_root" "$base_branch" "$auto_env" || true
       printf "\033[32m✔ Worktree created successfully!\033[0m\n"
-      cd "$target_wt_path" || return 1
+      command -v zoxide &>/dev/null && zoxide add "$target_wt_path" 2>/dev/null || true; cd "$target_wt_path" || return 1
       return 0
     else
       printf "\033[31m✖ Failed to create worktree.\033[0m\n" >&2
@@ -433,7 +433,7 @@ gwtnew() {
         if git worktree add -b "$target_branch" "$target_wt_path" "$base_branch"; then
           _copy_worktree_env "$src_wt" "$target_wt_path" "$main_root" "$base_branch" "$auto_env" || true
           printf "\033[32m✔ Worktree created successfully with new branch '%s'!\033[0m\n" "$target_branch"
-          cd "$target_wt_path" || return 1
+          command -v zoxide &>/dev/null && zoxide add "$target_wt_path" 2>/dev/null || true; cd "$target_wt_path" || return 1
           return 0
         else
           printf "\033[31m✖ Failed to create worktree.\033[0m\n" >&2

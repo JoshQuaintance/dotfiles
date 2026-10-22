@@ -161,6 +161,16 @@ zle -N _vi_yank_buffer_to_clipboard
 bindkey -M viins '^Y' _vi_yank_buffer_to_clipboard
 bindkey -M vicmd 'Y'  _vi_yank_buffer_to_clipboard
 
+# Inline `, <cmd>` / command help preview card underneath prompt (Ctrl-/, Alt-h, Ctrl-X h)
+if (( $+widgets[_comma_inline_help] )); then
+  bindkey -M viins '^_'  _comma_inline_help
+  bindkey -M vicmd '^_'  _comma_inline_help
+  bindkey -M viins '^[h' _comma_inline_help
+  bindkey -M vicmd '^[h' _comma_inline_help
+  bindkey -M viins '^Xh' _comma_inline_help
+  bindkey -M vicmd '^Xh' _comma_inline_help
+fi
+
 # ------------------------------------------------------------------------------
 # 8. Atuin / FZF Interactive History Search Bindings
 # ------------------------------------------------------------------------------
