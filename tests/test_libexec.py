@@ -6,6 +6,7 @@ import contextlib
 import hashlib
 import io
 import json
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -278,6 +279,130 @@ class TestClipAndStrdiffAndWslLibexec(unittest.TestCase):
 
             dup_ok, _ = scaffold_new_function(name="myhelper", module="custom", dotfiles=root, regen_docs=False)
             self.assertFalse(dup_ok)
+
+
+def _seed_mock_antigravity_dir(app_dir: Path) -> tuple[str, str, str]:
+    """Create a synthetic `~/.gemini/antigravity` directory with parallel subagents and a swarm worker."""
+    root_id = "11111111-1111-4111-8111-111111111111"
+    sub1_id = "22222222-2222-4222-8222-222222222222"
+    sub2_id = "33333333-3333-4333-8333-333333333333"
+    swarm_id = "44444444-4444-4444-8444-444444444444"
+
+    (app_dir / "conversations").mkdir(parents=True)
+    conn = sqlite3.connect(str(app_dir / "conversation_summaries.db"))
+    conn.execute(
+        """
+        CREATE TABLE conversation_summaries (
+            conversation_id TEXT PRIMARY KEY,
+            title TEXT,
+            step_count INTEGER,
+            last_modified_time TEXT,
+            status TEXT,
+            agent_name TEXT,
+            parent_conversation_id TEXT,
+            nesting_depth INTEGER,
+            not_fully_idle INTEGER,
+            killed INTEGER
+        );
+        """
+    )
+    rows = [
+        (root_id, "PR Review Root", 40, "2026-04-19T19:00:00Z", "CASCADE_RUN_STATUS_IDLE", "", "", 0, 0, 0),
+        (sub1_id, "", 20, "2026-04-19T18:58:00Z", "CASCADE_RUN_STATUS_IDLE", "", root_id, 1, 0, 0),
+        (sub2_id, "", 5, "0001-01-01T00:00:00Z", "CASCADE_RUN_STATUS_RUNNING", "", root_id, 1, 1, 0),
+        (swarm_id, "", 9, "2026-04-19T18:55:00Z", "CASCADE_RUN_STATUS_IDLE", "verifier", root_id, 1, 0, 1),
+    ]
+    conn.executemany("INSERT INTO conversation_summaries VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);", rows)
+    conn.commit()
+    conn.close()
+
+    # Seed `<sub1_id>.db` with tool-schema decoy before `sessionID` and real runtime model after `sessionID`
+    sub1_db = sqlite3.connect(str(app_dir / "conversations" / f"{sub1_id}.db"))
+    sub1_db.execute("CREATE TABLE gen_metadata (idx INTEGER, key TEXT, data BLOB);")
+    blob = (
+        b"schema decoy gemini-3.5-flash-lite before marker "
+        b"sessionID\x12$abc parent_cascade_id\x12$" + root_id.encode()
+        + b" model\x12\x0fgemini-4-carbon\x1a\x18Gemini 4 Carbon (Medium)"
+    )
+    sub1_db.execute("INSERT INTO gen_metadata VALUES (1, 'meta', ?);", (blob,))
+    sub1_db.commit()
+    sub1_db.close()
+
+    # Seed root transcript with 2 parallel `invoke_subagent` calls in one step + 1 swarm add
+    root_log = app_dir / "brain" / root_id / ".system_generated" / "logs" / "transcript.jsonl"
+    root_log.parent.mkdir(parents=True)
+    root_steps = [
+        {
+            "step_index": 1,
+            "type": "PLANNER_RESPONSE",
+            "tool_calls": [
+                {"name": "invoke_subagent", "args": {"Role": '"Finder A"', "Model": '"flash"', "TypeName": '"research"'}},
+                {"name": "invoke_subagent", "args": {"Role": '"Finder B"', "Model": '"pro"', "TypeName": '"self"'}},
+            ],
+        },
+        {"step_index": 2, "type": "GENERIC", "content": f'Created the following subagent: {{"conversationId": "{sub1_id}"}}'},
+        {"step_index": 3, "type": "GENERIC", "content": f'Created the following subagent: {{"conversationId": "{sub2_id}"}}'},
+        {"step_index": 4, "type": "GENERIC", "content": '{"status":"added","name":"verifier","model":"gemini-4-argon"}'},
+    ]
+    root_log.write_text("\n".join(json.dumps(s) for s in root_steps) + "\n", encoding="utf-8")
+
+    # Seed sub1 transcript (completed via send_message) and sub2 transcript (running at step 12)
+    sub1_log = app_dir / "brain" / sub1_id / ".system_generated" / "logs" / "transcript.jsonl"
+    sub1_log.parent.mkdir(parents=True)
+    sub1_log.write_text(
+        json.dumps({"step_index": 19, "source": "MODEL", "type": "PLANNER_RESPONSE", "tool_calls": [{"name": "send_message", "args": {}}]}) + "\n",
+        encoding="utf-8",
+    )
+
+    sub2_log = app_dir / "brain" / sub2_id / ".system_generated" / "logs" / "transcript.jsonl"
+    sub2_log.parent.mkdir(parents=True)
+    sub2_log.write_text(
+        "\n".join(
+            json.dumps({"step_index": i, "type": "PLANNER_RESPONSE", "tool_calls": [{"name": "read_file", "args": {"Path": "/tmp/app.ts"}}]})
+            for i in range(1, 13)
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return root_id, sub1_id, sub2_id
+
+
+class TestCheckSubagentsLibexec(unittest.TestCase):
+    """Test `libexec/check_subagents.py` parallel spawns, swarm workers, model tail parsing, and JSON output."""
+
+    def test_parallel_spawns_swarm_and_tail_model_resolution(self) -> None:
+        """Verify parallel `invoke_subagent` FIFO matching, swarm workers, and tail-anchored model parsing."""
+        with tempfile.TemporaryDirectory() as tmp:
+            app_dir = Path(tmp)
+            root_id, sub1_id, _sub2_id = _seed_mock_antigravity_dir(app_dir)
+
+            rc, out, err = run_libexec("check_subagents.py", "--app-dir", str(app_dir), "--json", root_id[:8])
+            self.assertEqual(rc, 0, err)
+            data = json.loads(out)
+            self.assertEqual(data["target_id"], root_id)
+            self.assertFalse(data["is_subagent"])
+            self.assertEqual(len(data["subagents"]), 3)
+
+            by_role = {s["role"]: s for s in data["subagents"]}
+            self.assertEqual(by_role["Finder A"]["status"], "COMPLETED")
+            self.assertEqual(by_role["Finder A"]["runtime_model_id"], "gemini-4-carbon")
+            self.assertEqual(by_role["Finder A"]["runtime_model_label"], "Gemini 4 Carbon (Medium)")
+            self.assertEqual(by_role["Finder A"]["configured_model"], "flash")
+
+            self.assertEqual(by_role["Finder B"]["status"], "RUNNING")
+            self.assertEqual(by_role["Finder B"]["step_count"], 12)
+            self.assertIn("read_file: app.ts", by_role["Finder B"]["latest_activity"])
+
+            self.assertEqual(by_role["Swarm Worker (@verifier)"]["status"], "KILLED")
+            self.assertEqual(by_role["Swarm Worker (@verifier)"]["configured_model"], "gemini-4-argon")
+
+            # Direct leaf subagent inspection by prefix
+            rc_sub, out_sub, _ = run_libexec("check_subagents.py", "--app-dir", str(app_dir), "--json", sub1_id[:8])
+            self.assertEqual(rc_sub, 0)
+            sub_data = json.loads(out_sub)
+            self.assertTrue(sub_data["is_subagent"])
+            self.assertEqual(sub_data["parent_id"], root_id)
+            self.assertEqual(sub_data["runtime_model_id"], "gemini-4-carbon")
 
 
 if __name__ == "__main__":

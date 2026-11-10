@@ -92,6 +92,7 @@
 
 | Utility | Description |
 | :--- | :--- |
+| `check-subagents` | Inspect Antigravity conversations, subagents, models, and live status |
 | `dot` | Unified developer workstation CLI (status, doctor, test, bench, clean, prune, sync, update) |
 | `dotcheck` | Check if dotfiles repository has upstream updates without applying |
 | `dotdoctor` | Run full dotfiles system health check and symlink audit |

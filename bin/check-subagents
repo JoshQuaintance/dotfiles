@@ -1,0 +1,16 @@
+#!/bin/sh
+# Description: Inspect Antigravity conversations, subagents, models, and live status
+set -e
+
+SOURCE="$0"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  case "$SOURCE" in
+    /*) ;;
+    *) SOURCE="$DIR/$SOURCE" ;;
+  esac
+done
+DOTFILES_DIR="$(cd -P "$(dirname "$SOURCE")/.." >/dev/null 2>&1 && pwd)"
+
+exec python3 "$DOTFILES_DIR/libexec/check_subagents.py" "$@"
